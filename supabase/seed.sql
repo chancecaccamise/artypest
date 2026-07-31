@@ -1,0 +1,8 @@
+-- Seed data for local development. Runs after every `supabase db reset`.
+--
+-- Phase 1 fills this with:
+--   1. one demo org
+--   2. the ten relation types from docs/BUILD-PLAN.md
+--   3. reference data for zoning, property use, association type, record type
+--
+-- Empty for now. The schema migrations do not exist yet.

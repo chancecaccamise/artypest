@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(supabase link:*)",
+      "Bash(supabase db push:*)",
+      "Bash(supabase db remote:*)",
+      "Bash(vercel deploy:*)",
+      "Bash(vercel --prod:*)",
+      "Bash(rm -rf /:*)",
+      "Read(./.env.local)",
+      "Read(./.env.production)"
+    ],
+    "allow": [
+      "Bash(pnpm:*)",
+      "Bash(npx:*)",
+      "Bash(supabase start)",
+      "Bash(supabase stop)",
+      "Bash(supabase status)",
+      "Bash(supabase db reset)",
+      "Bash(supabase migration new:*)",
+      "Bash(supabase gen types:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); cmd=$(echo \"$input\" | jq -r '.tool_input.command // empty'); if echo \"$cmd\" | grep -Eq 'db push|supabase link|push --force|push -f|reset --hard|DROP DATABASE|TRUNCATE'; then echo '{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Blocked: destructive or remote operation. Local Docker only. Log this in docs/BLOCKERS.md and continue.\"}'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
