@@ -212,51 +212,60 @@ function OrganizationTab() {
 /* --------------------------------------------------------- integrations -- */
 
 function IntegrationsTab() {
+  const live = parcelService.kind === 'sagis'
+
   return (
     <Panel>
       <PanelHeader
         title="SAGIS parcel data"
-        action={<StatusBadge tone="amber">Not connected</StatusBadge>}
+        action={
+          <StatusBadge tone={live ? 'moss' : 'amber'}>
+            {live ? 'Reading live county data' : 'Using the local sample'}
+          </StatusBadge>
+        }
       />
       <PanelBody className="flex flex-col gap-4">
         <p className="text-ink-muted max-w-2xl text-13">
-          Parcel data currently comes from a local sample file. Parcel number validation,
-          jurisdiction, and the outbound viewer link all work today because none of them need an
-          API. Lookups against the live county service do not.
+          SAGIS is a public county service. There is no account, no API key, and nothing to
+          authorize: it allows browser requests directly, so parcel lookups, the zoning district,
+          and address geocoding all work without credentials.
         </p>
 
-        <Field
-          label="SAGIS endpoint"
-          className="max-w-2xl"
-          hint="Set once the county service and its credentials are available."
-        >
-          <Input
-            disabled
-            className="font-mono text-13"
-            placeholder="https://services.sagis.org/arcgis/rest/services/..."
-            value=""
-            readOnly
-          />
-        </Field>
+        <p className="text-ink-muted max-w-2xl text-13">
+          {live
+            ? 'Parcel lookups read the county service. Zoning is resolved by locating each parcel inside the county zoning map, which covers the city, the unincorporated county, and the other municipalities.'
+            : 'Parcel data is being read from a local sample of 60 real county records, so the app works with no network. Turn on live reading by setting VITE_SAGIS_LIVE in the environment file.'}
+        </p>
 
         <dl className="grid max-w-2xl gap-x-8 gap-y-2 sm:grid-cols-2">
           <div className="flex items-center justify-between gap-3">
             <dt className="text-ink-muted text-13">Active source</dt>
             <dd className="font-mono text-xs">
-              {parcelService.kind === 'fixture' ? 'local sample file' : 'SAGIS'}
+              {live ? 'SAGIS, live' : 'local sample of county records'}
             </dd>
           </div>
           <div className="flex items-center justify-between gap-3">
-            <dt className="text-ink-muted text-13">Last checked</dt>
-            <dd className="text-ink-faint font-mono text-xs">Not connected</dd>
+            <dt className="text-ink-muted text-13">Zoning district</dt>
+            <dd className="font-mono text-xs">county wide, by location</dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-ink-muted text-13">Address lookup</dt>
+            <dd className="font-mono text-xs">
+              {live ? 'county address locator' : 'local sample'}
+            </dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-ink-muted text-13">Whole-county download</dt>
+            {/* 125,326 parcels behind a page limit. Not an operation. */}
+            <dd className="text-ink-faint font-mono text-xs">Not offered</dd>
           </div>
         </dl>
 
         <div className="text-ink-faint flex items-center gap-2 text-13">
           <Plug className="size-4" aria-hidden="true" />
           <span>
-            There is no Connect button here on purpose. One that did nothing would be worse than
-            none at all.
+            There is no Connect button here on purpose. There is nothing to connect: the county
+            service is open, and which source is read is an environment setting.
           </span>
         </div>
       </PanelBody>

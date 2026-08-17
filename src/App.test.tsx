@@ -153,12 +153,19 @@ describe('settings', () => {
     expect(preview).toHaveAttribute('href', expect.stringContaining('20032%2063001'))
   })
 
-  it('shows SAGIS as not connected, with a disabled endpoint field', async () => {
+  it('says which parcel source is active and that SAGIS needs no credentials', async () => {
     renderWithProviders(<App />, { route: '/settings/integrations' })
 
-    // Once as the status badge, once as the "Last checked" value.
-    expect(await screen.findAllByText('Not connected')).toHaveLength(2)
-    expect(screen.getByLabelText('SAGIS endpoint')).toBeDisabled()
+    /*
+      There is no endpoint field and no Connect button any more. SAGIS is a
+      public service with no key, so the only real question is which source is
+      being read, and that is an environment setting. The tests run offline, so
+      the answer here is the committed sample.
+    */
+    expect(await screen.findByText('Using the local sample')).toBeInTheDocument()
+    expect(screen.getByText('local sample of county records')).toBeInTheDocument()
+    expect(screen.queryByLabelText('SAGIS endpoint')).not.toBeInTheDocument()
+    expect(screen.getByText(/no API key/)).toBeInTheDocument()
   })
 
   it('lists the ten relation types read only, with both directions', async () => {

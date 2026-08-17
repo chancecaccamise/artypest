@@ -134,14 +134,44 @@ point -81.102716,32.050046  ->  ZONE "RSF-6"
                                 ZONING_DISTRICT "Residential Single-family-6"
 ```
 
-Two consequences. The real code is `RSF-6`, the post-NewZO format, so the `R-6`
-values in the current fixture are in a format the county no longer publishes.
-And that layer is City of Savannah only, so unincorporated county parcels have
-no zoning polygon and must render as "not available" rather than blank.
-
 This matters more than it looks. `CLAUDE.md` calls "commercial use in a
 residential district" a core use case. It is a join across two services, not a
 comparison of two columns on one record.
+
+### The layer covers the whole county, not just the city
+
+The path says `Savannah/ZoningDevelopment_Map`, and the first reading of this
+document said the layer was City of Savannah only, so unincorporated parcels
+would have no zoning. That is wrong, and a live smoke test against a real county
+parcel is what caught it.
+
+The layer holds **1,846 polygons with 285 distinct `ZONE` values**, covering
+unincorporated Chatham County and the other municipalities as well. Checked
+across 24 parcels, 12 with a city PIN and 12 with a county PIN: all 24 resolved
+to a zoning district, none came back empty.
+
+```
+20074 45001  City of Savannah        ->  RSF-6
+10011 02012C Unincorporated county   ->  R-1, "One Family Residential"
+```
+
+Two vintages of code live in the same column, which is the thing to design for:
+
+- **Post-NewZO city codes**: `RSF-5`, `RSF-6`, `TN-1`, `TN-2`, `TR-1`, `TC-1`,
+  `RMF-2-10`
+- **Older county and municipal codes**: `R-1`, `R-A`, `R-3-A`, `A-1`, `B-C`,
+  `PUD`, `PUD-IS-B/TC*`, and a literal `VERNONBURG`
+
+So the `R-6` values the invented fixture carried were not simply outdated, they
+were a format that appears nowhere in the real column at all.
+
+**Do not try to enumerate these in reference data.** 285 values, some carrying
+overlay suffixes (`/EO`, `/TC`, `-S`, `*`), is not a hand-maintained list. Treat
+the code as free text, keep a short lookup for the common ones to get a readable
+label, and render anything unmapped literally.
+
+Null is still a possible answer for a parcel outside every polygon, and the code
+handles it, but it is the rare case rather than the normal one for county land.
 
 ## Field inventory, Parcel Digest 2025
 

@@ -195,3 +195,88 @@ prints for a board packet.
 `MapView` header. Everything else in `src/features/map`, plus all of
 `src/lib/locations` and `src/lib/geo`, is renderer-independent and carries over
 untouched.
+
+## 2026-08-17: SAGIS investigated, and connected
+
+**Did.** Investigated the SAGIS API properly, which had never been done, then
+corrected the parcel layer against what it actually serves and wrote the live
+implementation. Full findings are in the new `docs/SAGIS-API.md`.
+
+*The service.* SAGIS is a public ArcGIS Server 11.5 at `pub.sagis.org`. No
+account, no API key, no quota, and it reflects the request origin in its CORS
+headers, so the browser calls it directly with no proxy and no Edge Function.
+Parcel attributes, parcel geometry, county-wide zoning, an authoritative address
+locator, and historic parcels back to 1998 are all free. The blocker saying
+"nothing calls SAGIS, by design" is resolved.
+
+*Three assumptions the fixture had wrong.* Owner names are not `SURNAME, FIRST`:
+that shape is 9,844 records against 115,312 without a comma, so `owner.ts` was
+built for 7.9% of the county, and its "three or more words means an
+organisation" rule called `BRUEN GARRETT JOHN` a business. There is a third PIN
+format, 12 characters with both a space and a trailing letter, which validation
+rejected and which is a real parcel at 106 San Marco Dr. And zoning is not a
+field on the parcel at all, so the `R-6` values in the fixture were in a format
+that appears nowhere in the real column.
+
+*Two that went the other way.* Geometry comes back RFC 7946 compliant, checked
+across 35 parcels, so the winding-order fix in `projection.ts` needed no change.
+And the county's own locator removes any reason to add Mapbox geocoding:
+`MapboxGeocodingService.ts` is off the roadmap, while Mapbox stays wanted for a
+satellite basemap, which is a different job.
+
+*Owner parsing rewritten.* `parseOwner` reads the real grammar: a shared surname
+across two given names, two surnames interleaved with two given names, the
+trailing record marker, generational suffixes wherever the county puts them,
+`ET AL`, organisation and government tokens, and `Owner` together with `Owner2`.
+It reports low confidence instead of guessing when a name was truncated upstream
+at 40 characters or has no resolvable surname boundary, and the import's Match
+step carries that per row. A confident wrong match attaches a property to the
+wrong resident, which is the worst thing this application can do.
+
+*Fixtures rebuilt from real data.* `scripts/fetch-sagis-fixture.mjs` replaces the
+three synthetic generators and writes all four fixtures from the live service:
+60 real parcels on E 49th St in Ardsley Park, their real polygons, real street
+centrelines, and real geocoded addresses. Committed, so it stays reviewable in a
+diff. `ParcelRecord` widened to what the county publishes, with the one
+ambiguous `assessedValue` split into `fairMarketValue` and `totalAssessment`,
+which is 40% of it under Georgia's assessment ratio, and `assessedYear` dropped
+because the parcel roll has no such field.
+
+*Live services.* `SagisParcelService` and `SagisGeocodingService` behind the
+existing interfaces, so no call site changed. Zoning by spatial join, one request
+per batch rather than per parcel. `listAll` refuses and says why: 125,326 parcels
+behind a page limit is not an operation. Both are opt-in behind
+`VITE_SAGIS_LIVE`, so the demo and the test suite stay offline and deterministic.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 336 tests, and a
+production build. 53 of those tests are new. Every owner and PIN case in them is
+a real value from the live service rather than an invented one.
+
+Separately, and not part of `pnpm verify`, a live smoke test runs against the
+real service with `VITE_SAGIS_SMOKE=1`. Six checks, all passing.
+
+That smoke test immediately earned its place. It asserted that an unincorporated
+county parcel has no zoning, on the reading that the zoning layer is City of
+Savannah only, and it failed: `10011 02012C` is `R-1`. The layer sits under a
+Savannah path but holds 1,846 polygons and 285 distinct codes covering the whole
+county. 24 of 24 sampled parcels resolved, 12 city and 12 county. The
+documentation, the blocker, and the code that acted on the wrong reading are all
+corrected. Every other test here runs against a recorded payload, and a
+recording cannot tell you a reading was wrong.
+
+**Not done, and why.** Still no Supabase, no migrations, and no RLS: Docker is
+not installed and the schema still needs `docs/BUILD-PLAN.md`. The provisional
+relation types and per-type entity field lists were left as they are, ratified
+as placeholders rather than corrected. No satellite basemap, since that is the
+one thing needing a Mapbox token.
+
+The `Property_Use` and `Municipality` code tables are not published on the
+layer, so unmapped codes render literally rather than being given invented
+labels. Zoning is treated as free text with a short lookup for readable labels,
+because 285 codes with overlay suffixes is not a hand-maintained list.
+
+**Next.** Install Docker, write the migrations, and swap `src/lib/data/index.ts`
+to the Supabase provider. The parcel and geocoding seams are already swapped and
+tested, so nothing in that work touches SAGIS. Ask the Board of Assessors for the
+property class code table, and ask SAGIS whether the zoning layer's two code
+vintages are documented anywhere.

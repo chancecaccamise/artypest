@@ -1265,10 +1265,15 @@ export function buildDemoData(reference: Date = new Date()): DemoData {
   }
 
   /*
-    The codes the city actually publishes, taken from the zoning layer at
-    Savannah/ZoningDevelopment_Map/MapServer/6. These are the post-NewZO codes:
-    the old R-6 and R-B format the county no longer uses was what the invented
-    fixture carried, so a real zoning value matched nothing in this list.
+    Real codes from the zoning layer at
+    Savannah/ZoningDevelopment_Map/MapServer/6. The invented fixture carried an
+    R-6 and R-B format that appears nowhere in the real column, so a real zoning
+    value matched nothing in this list.
+
+    This is a convenience list for readable labels and the filter, not a closed
+    set. The layer holds 285 distinct codes, mixing post-NewZO city codes with
+    older county ones, so an unmapped code renders literally rather than being
+    forced into this list. See docs/SAGIS-API.md.
   */
   referenceItem('zoning', 'RSF-5', 'RSF-5, Residential single-family, 5')
   referenceItem('zoning', 'RSF-6', 'RSF-6, Residential single-family, 6')
@@ -1279,6 +1284,11 @@ export function buildDemoData(reference: Date = new Date()): DemoData {
   referenceItem('zoning', 'TR-1', 'TR-1, Traditional residential, 1')
   referenceItem('zoning', 'TC-1', 'TC-1, Traditional commercial, 1')
   referenceItem('zoning', 'B-C', 'B-C, Community business')
+  // Older county codes, which is what unincorporated land carries.
+  referenceItem('zoning', 'R-1', 'R-1, One family residential')
+  referenceItem('zoning', 'R-A', 'R-A, Residential agricultural')
+  referenceItem('zoning', 'A-1', 'A-1, Agricultural')
+  referenceItem('zoning', 'PUD', 'PUD, Planned unit development')
   referenceItem('zoning', 'P-B', 'P-B, Planned business', false)
 
   referenceItem('property_use', 'single_family', 'Single family')

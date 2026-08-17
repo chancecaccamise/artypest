@@ -98,18 +98,13 @@ export function ParcelRecordCard({ property, org, onAddParcelRecord }: ParcelRec
           </Row>
           <Row label="Situs address">{value(property, 'situsAddress') || <NotSet />}</Row>
           <Row label="Acreage">{acreage === null ? <NotSet /> : formatAcreage(acreage)}</Row>
-          <Row label="Zoning district">
-            {value(property, 'zoning') || (
-              /*
-                The county publishes no zoning on the parcel. It is a spatial
-                join against a City of Savannah layer, so an unincorporated
-                county lot genuinely has none and must not read as blank.
-              */
-              <span className="text-ink-faint">
-                {jurisdiction === 'Unincorporated Chatham County' ? 'Not available' : <NotSet />}
-              </span>
-            )}
-          </Row>
+          {/*
+            The county publishes no zoning on the parcel. It is resolved by
+            locating the parcel inside the zoning map, which covers the whole
+            county, so a blank here means the lot fell outside every district
+            rather than that its jurisdiction is unmapped.
+          */}
+          <Row label="Zoning district">{value(property, 'zoning') || <NotSet />}</Row>
           {/* Property use sits next to zoning on purpose: a commercial use
               inside a residential district is the mismatch this card exists
               to make obvious. */}

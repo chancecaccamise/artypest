@@ -31,8 +31,14 @@ assumed.
 does, which is probably where the assumption came from. This means
 `property.zoning` and `property.property_use` come from two different services,
 which makes the distinction `CLAUDE.md` insists on a data-sourcing concern and
-not just a naming one. Unincorporated county parcels fall outside the layer and
-resolve to null, rendered as "not available" so absence is not read as unzoned.
+not just a naming one.
+
+**Corrected 2026-08-17.** This entry first said the layer was City of Savannah
+only and that unincorporated parcels would resolve to null. That was wrong. The
+layer carries 1,846 polygons and 285 distinct codes covering the whole county,
+and 24 of 24 sampled parcels resolved, city and county alike. The null path is
+kept because a parcel outside every polygon is still possible, but it is the
+rare case. The live smoke test found this, which is the reason it exists.
 
 ### Parcel polygons are the plat geometry source, not DPLAT
 

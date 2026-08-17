@@ -2,8 +2,13 @@
   The geocoding seam.
 
   Geocoding is a data operation, so the usual pattern applies: an interface, a
-  fixture implementation, and a single swap point. MapboxGeocodingService.ts
-  does not exist yet. Do not create it.
+  fixture implementation, and a single swap point.
+
+  The real implementation is SagisGeocodingService, against the county's own
+  address locator. There is no MapboxGeocodingService and there should not be:
+  for Chatham County addresses the county's locator is the authoritative source
+  rather than an approximation of one, and it needs no token. Mapbox is still
+  wanted for a satellite basemap, which is a different job.
 */
 
 /** Longitude first, as GeoJSON requires. */
@@ -16,8 +21,8 @@ export interface GeocodeResult {
 }
 
 export interface GeocodingService {
-  /** `fixture` while a lookup table answers, `mapbox` once a real one does. */
-  readonly kind: 'fixture' | 'mapbox'
+  /** `fixture` while a lookup table answers, `sagis` once the locator does. */
+  readonly kind: 'fixture' | 'sagis'
 
   /**
    * A point for an address, or null when the service does not know it.

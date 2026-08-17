@@ -118,23 +118,28 @@ wrong label on a property class is worse than a code the reader can ask about.
 **To unblock.** Request the class code table from the Chatham County Board of
 Assessors, then fill in the lookup. It is one file.
 
-### Unincorporated Chatham County has no zoning service
-
-**Impact.** Medium, and permanent unless the county publishes one.
-
-Zoning comes from `Savannah/ZoningDevelopment_Map/MapServer/6`, which covers the
-City of Savannah only. Parcels with a PIN starting `1` are unincorporated county
-and fall outside it. No equivalent county zoning layer was found anywhere in the
-service directory.
-
-**What was done instead.** Zoning resolves to null for those parcels and the
-user interface says "not available" rather than rendering blank, so an absent
-value is not read as an unzoned parcel. City parcels get real zoning.
-
-**To unblock.** Ask SAGIS whether county zoning is published anywhere. If it is
-not, the field stays association-entered for county parcels.
-
 ## Resolved
+
+### Unincorporated county zoning was thought to be unavailable, and is not
+
+**Was.** Recorded as a blocker on the grounds that
+`Savannah/ZoningDevelopment_Map/MapServer/6` is a City of Savannah layer, so
+parcels with a PIN starting `1` would have no zoning and the field would have to
+stay association-entered for them.
+
+**Now.** The folder name is misleading. The layer holds 1,846 polygons with 285
+distinct codes and covers unincorporated Chatham County and the other
+municipalities too. 24 of 24 sampled parcels resolved, 12 city and 12 county.
+`10011 02012C`, an unincorporated parcel, is `R-1`, "One Family Residential".
+
+Found by the live smoke test in `src/lib/parcels/SagisParcelService.live.test.ts`,
+which asserted the wrong thing and failed. Every other test in the repo runs
+against a recorded payload, and a recording cannot tell you a reading was wrong.
+
+What remains is smaller and is not a blocker: the column mixes post-NewZO city
+codes (`RSF-6`, `TN-2`) with older county codes (`R-1`, `A-1`, `PUD`), so zoning
+has to be treated as free text with a lookup for the common labels rather than
+as a closed reference list.
 
 ### SAGIS was assumed to require credentials, and does not
 
