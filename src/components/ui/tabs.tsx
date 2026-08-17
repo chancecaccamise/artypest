@@ -5,6 +5,12 @@ import { cn } from '@/lib/utils'
 export interface TabDefinition {
   value: string
   label: string
+  /**
+   * How many items the tab holds. Shown beside the label so a reader can see
+   * there are two properties and no documents without opening either.
+   * A zero is still shown: "nothing here" is an answer.
+   */
+  count?: number
 }
 
 export interface TabsProps {
@@ -88,6 +94,20 @@ export function Tabs({ tabs, value, onChange, className, action }: TabsProps) {
               )}
             >
               {tab.label}
+              {tab.count === undefined ? null : (
+                <span
+                  className={cn(
+                    'rounded-full px-1.5 font-mono text-[0.6875rem]',
+                    tab.count === 0
+                      ? 'text-ink-faint'
+                      : selected
+                        ? 'bg-moss/15 text-moss'
+                        : 'bg-paper-sunken text-ink-muted'
+                  )}
+                >
+                  {tab.count}
+                </span>
+              )}
             </button>
           )
         })}

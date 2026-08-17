@@ -15,6 +15,7 @@ import { ConnectionsTab } from '@/features/directory/ConnectionsTab'
 import { DetailsTab } from '@/features/directory/DetailsTab'
 import { EntityFormDialog } from '@/features/directory/EntityFormDialog'
 import { FilesTab } from '@/features/directory/FilesTab'
+import { ImagesTab, imagesOf } from '@/features/directory/ImagesTab'
 import { HistoryTab } from '@/features/directory/HistoryTab'
 import { NotesTab } from '@/features/directory/NotesTab'
 import { RecordsTab } from '@/features/directory/RecordsTab'
@@ -23,6 +24,7 @@ import {
   useArchiveEntity,
   useDeleteEntity,
   useEntity,
+  useRelations,
   useOrg,
   useRestoreEntity,
 } from '@/hooks/use-data'
@@ -32,6 +34,7 @@ import { useRole } from '@/lib/role'
 
 const TABS: TabDefinition[] = [
   { value: 'details', label: 'Details' },
+  { value: 'images', label: 'Images' },
   { value: 'connections', label: 'Connections' },
   { value: 'records', label: 'Records' },
   { value: 'files', label: 'Files' },
@@ -46,6 +49,8 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
   const { canEdit, canSeeNotes } = useRole()
 
   const entityQuery = useEntity(id)
+  /** For the connection count on the tab strip. */
+  const relationsQuery = useRelations(id)
   const org = useOrg()
 
   const archiveEntity = useArchiveEntity()
@@ -62,10 +67,29 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
   const requested = params.get('tab') ?? 'details'
   const tab = TABS.some((candidate) => candidate.value === requested) ? requested : 'details'
 
-  const tabs = useMemo(
-    () => (canSeeNotes ? TABS : TABS.filter((candidate) => candidate.value !== 'notes')),
-    [canSeeNotes]
-  )
+  /*
+    Counts on the tabs, so a reader can see there are two connections and no
+    images without opening either. A zero is shown rather than hidden: "nothing
+    here" is an answer to the question they were about to ask.
+  */
+  const tabs = useMemo(() => {
+    const current = entityQuery.data
+    const connections = (relationsQuery.data ?? []).filter(
+      (relation) => relation.deletedAt === null
+    ).length
+
+    const withCounts = TABS.map((definition) => {
+      if (definition.value === 'images') {
+        return { ...definition, count: current ? imagesOf(current).length : undefined }
+      }
+      if (definition.value === 'connections') {
+        return { ...definition, count: relationsQuery.data ? connections : undefined }
+      }
+      return definition
+    })
+
+    return canSeeNotes ? withCounts : withCounts.filter((item) => item.value !== 'notes')
+  }, [canSeeNotes, entityQuery.data, relationsQuery.data])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -251,6 +275,10 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
           }}
         />
       </TabPanel>
+      <TabPanel value="images" active={tab === 'images'}>
+        {entity ? <ImagesTab entity={entity} /> : null}
+      </TabPanel>
+
       <TabPanel value="connections" active={tab === 'connections'}>
         <ConnectionsTab entity={entity} />
       </TabPanel>

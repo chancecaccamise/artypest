@@ -35,6 +35,21 @@ export function Dialog({
   const panelRef = useRef<HTMLDivElement>(null)
   const previouslyFocused = useRef<HTMLElement | null>(null)
 
+  /*
+    The latest onClose, held in a ref so the effect below can depend on `open`
+    alone.
+
+    Depending on `onClose` directly meant that a caller passing an inline
+    handler, which is most of them, re-ran this effect on every render. The
+    cleanup returns focus to whatever opened the dialog, so typing into a field
+    inside a dialog that re-renders as you type lost focus after the first
+    character, and with it every character after that.
+  */
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
   useEffect(() => {
     if (!open) return
 
@@ -49,7 +64,7 @@ export function Dialog({
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.stopPropagation()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (event.key !== 'Tab' || !panelRef.current) return
@@ -76,7 +91,7 @@ export function Dialog({
       document.body.style.overflow = overflow
       previouslyFocused.current?.focus()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 

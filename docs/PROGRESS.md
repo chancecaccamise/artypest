@@ -464,3 +464,46 @@ through.
 records, which the Connections tab already shows; file upload still waits on
 Supabase Storage. Saved work lives in one browser on one machine and is not
 backed up, which the Settings panel says plainly. Cards are People only.
+
+## 2026-08-17: editing a record from its own profile
+
+**Did.** Made the record's tabs a place to work rather than only to read.
+
+*Connections are editable.* This was labelled "arrives in Phase 2" and now
+exists. `AddConnectionDialog` picks the kind of connection, the direction, the
+record to connect to (searched with the same ranking the header search uses), and
+an optional start date. Direction is chosen in the reader's own words using the
+relation type's own labels, and the dialog shows the sentence the connection will
+read as before it is saved, because a relation is stored once and read from both
+ends: `owns` the wrong way round says a lot owns a person.
+
+Removal asks first, and says that if the connection simply ended, giving it an
+end date keeps the history instead. Relation changes are audited already, which
+is what makes "Unit 42 changed hands" appear in the log.
+
+*Images.* A tab per record holding up to twelve, through the same pipeline as the
+profile photograph: chosen from the computer, downscaled to 320 pixels, kept on
+the record. Any one of them can be made the profile photograph, and removing the
+one that currently is does not leave the card pointing at something gone.
+
+*Counts on the tabs.* Connections and Images carry theirs, so a reader can see
+there are two connections and no images without opening either. A zero is shown
+rather than hidden, because "nothing here" is an answer.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 430 tests, and a
+production build. 17 of those are new, covering the direction sentence, the
+refusal to save without a target, the audit trail, the image count, and the
+profile-photograph edge case.
+
+**A real bug this surfaced, in the shared dialog.** Its focus effect depended on
+`onClose`. Most callers pass an inline handler, so the effect re-ran on every
+render, and its cleanup returns focus to whatever opened the dialog. Typing into
+any field in a dialog that re-renders as you type therefore lost focus after the
+first character, and every character after it. The connection search made it
+obvious because it re-renders on each keystroke. The handler is held in a ref
+now and the effect depends on `open` alone.
+
+**Not done, and why.** Connection attributes beyond the start date, such as a
+board role or a term, are not editable here yet; the seeded data has them and the
+editor does not write them. File upload still waits on Supabase Storage: images
+are not files.

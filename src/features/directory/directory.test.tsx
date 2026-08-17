@@ -32,12 +32,27 @@ beforeAll(async () => {
 })
 
 describe('detail view', () => {
-  it('shows the six tabs and lands on Details', async () => {
+  it('shows every tab and lands on Details', async () => {
     renderWithProviders(<App />, { route: `/properties/${property.id}` })
 
     const tablist = await screen.findByRole('tablist')
-    for (const label of ['Details', 'Connections', 'Records', 'Files', 'Notes', 'History']) {
-      expect(within(tablist).getByRole('tab', { name: label })).toBeInTheDocument()
+    /*
+      Connections and Images carry their count in the tab name, so a reader can
+      see there are two connections and no images without opening either. The
+      name is matched loosely for that reason.
+    */
+    for (const label of [
+      'Details',
+      'Images',
+      'Connections',
+      'Records',
+      'Files',
+      'Notes',
+      'History',
+    ]) {
+      expect(
+        within(tablist).getByRole('tab', { name: new RegExp(`^${label}`) })
+      ).toBeInTheDocument()
     }
 
     expect(within(tablist).getByRole('tab', { name: 'Details', selected: true })).toBeInTheDocument()
@@ -124,15 +139,15 @@ describe('detail view', () => {
     renderWithProviders(<App />, { route: `/properties/${property.id}` })
 
     const tablist = await screen.findByRole('tablist')
-    await user.click(within(tablist).getByRole('tab', { name: 'Connections' }))
+    await user.click(within(tablist).getByRole('tab', { name: /^Connections/ }))
 
     const panel = await screen.findByRole('tabpanel')
     await waitFor(() => {
       expect(within(panel).getByText('Connections')).toBeInTheDocument()
     })
 
-    // Adding a connection is deliberately unavailable and labelled.
-    expect(within(panel).getByRole('button', { name: /Add connection/ })).toBeDisabled()
+    // Connections are editable now, so this opens rather than being disabled.
+    expect(within(panel).getByRole('button', { name: /Add connection/ })).toBeEnabled()
   })
 
   it('links a connection through to the Connection Map', async () => {
@@ -140,7 +155,7 @@ describe('detail view', () => {
     renderWithProviders(<App />, { route: `/properties/${property.id}` })
 
     const tablist = await screen.findByRole('tablist')
-    await user.click(within(tablist).getByRole('tab', { name: 'Connections' }))
+    await user.click(within(tablist).getByRole('tab', { name: /^Connections/ }))
 
     const panel = await screen.findByRole('tabpanel')
     expect(within(panel).getByRole('link', { name: /Open in map/ })).toHaveAttribute(
