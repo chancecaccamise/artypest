@@ -21,6 +21,7 @@ import { entityTypeColor } from '@/components/ui/badge'
 import type { Entity, ResolvedLocation } from '@/lib/data/types'
 import type { Point } from '@/lib/geocoding/types'
 import { readString } from '@/lib/format'
+import { normalizePin } from '@/lib/parcels/pin'
 import { cn } from '@/lib/utils'
 
 /*
@@ -37,7 +38,25 @@ import { cn } from '@/lib/utils'
 */
 
 const MIN_ZOOM = 0.5
-const MAX_ZOOM = 20
+
+/*
+  The corridor is six and a half kilometres of city. Framed whole, a typical lot
+  is about two pixels across, so the old ceiling of 20 could only ever get one up
+  to roughly fifty pixels: visible, but not a drawing anybody could read. This
+  allows a single lot to fill the view, which is what "show me this address"
+  means.
+*/
+const MAX_ZOOM = 250
+
+/*
+  A lot narrower than this on screen is too small to read, so arriving at one
+  counts as not having arrived. Used to decide whether a selection needs the
+  view moved.
+*/
+const READABLE_LOT_PX = 40
+
+/** How much of the viewport a lot fills when the plat navigates to it. */
+const FOCUS_FILL = 0.45
 
 /*
   The most lots drawn at once. Above roughly this many an SVG plat stops panning
@@ -116,6 +135,16 @@ export function PlatView({
   */
   const sizeRef = useRef(size)
   const [transform, setTransform] = useState(() => zoomIdentity)
+  /*
+    The same value as `transform`, readable without subscribing to it. The
+    navigation effect below needs to know where the view currently is, but must
+    not re-run every time it moves, or panning away from a selected lot would
+    snap straight back to it.
+  */
+  const transformRef = useRef(transform)
+  useEffect(() => {
+    transformRef.current = transform
+  }, [transform])
   const [hoveredPin, setHoveredPin] = useState<string | null>(null)
 
   useLayoutEffect(() => {
@@ -249,6 +278,81 @@ export function PlatView({
       zoomRef.current = null
     }
   }, [])
+
+  /*
+    Take the reader to the selected lot.
+
+    Selecting a record elsewhere in the app routes to /plat/:id, which until now
+    highlighted the lot without moving the view. At corridor scale that meant
+    landing on a two pixel mark somewhere in six kilometres of city, which reads
+    exactly like nothing having happened.
+
+    The view only moves when it needs to. A lot already on screen at a readable
+    size is left alone, so clicking around the plat does not yank the viewport
+    out from under the reader: that case is arriving at something already
+    visible. It is the off-screen or too-small case that is a navigation.
+
+    Applied instantly rather than tweened, for the same reason the zoom buttons
+    are: d3-transition is a dependency bought for an effect that
+    prefers-reduced-motion would turn off anyway.
+  */
+  useEffect(() => {
+    if (!selectedPin) return
+
+    const svg = svgRef.current
+    const behaviour = zoomRef.current
+    if (!svg || !behaviour) return
+
+    const parcel = projection.parcelByPin.get(normalizePin(selectedPin))
+    if (!parcel) return
+
+    const [minX, minY, maxX, maxY] = parcel.bounds
+    const lotWidth = Math.max(maxX - minX, 1)
+    const lotHeight = Math.max(maxY - minY, 1)
+
+    const { k, x, y } = transformRef.current
+    const onScreen = {
+      left: minX * k + x,
+      top: minY * k + y,
+      right: maxX * k + x,
+      bottom: maxY * k + y,
+    }
+
+    const visible =
+      onScreen.left >= 0 &&
+      onScreen.top >= 0 &&
+      onScreen.right <= size.width &&
+      onScreen.bottom <= size.height
+    const readable =
+      lotWidth * k >= READABLE_LOT_PX || lotHeight * k >= READABLE_LOT_PX
+
+    if (visible && readable) return
+
+    const scale = Math.min(
+      Math.max(
+        (FOCUS_FILL * Math.min(size.width, size.height)) / Math.max(lotWidth, lotHeight),
+        MIN_ZOOM
+      ),
+      MAX_ZOOM
+    )
+    const centreX = (minX + maxX) / 2
+    const centreY = (minY + maxY) / 2
+
+    const next = zoomIdentity
+      .translate(size.width / 2, size.height / 2)
+      .scale(scale)
+      .translate(-centreX, -centreY)
+
+    // Through the behaviour, so d3 keeps its own internal transform in step and
+    // the next wheel or drag continues from here rather than snapping back.
+    select(svg).call((selection) => behaviour.transform(selection, next))
+    /*
+      Deliberately not depending on `transform`. This fires when the selection
+      changes, when the harvested geometry arrives and the lot first exists, or
+      when the viewport resizes. Panning and zooming afterwards is the reader's,
+      and is left alone.
+    */
+  }, [selectedPin, projection, size.width, size.height])
 
   const zoomBy = useCallback((factor: number) => {
     const svg = svgRef.current

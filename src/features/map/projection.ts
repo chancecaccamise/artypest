@@ -1,7 +1,13 @@
 import { geoMercator, geoPath, type GeoProjection } from 'd3-geo'
 import type { FeatureCollection, LineString, MultiPolygon, Polygon, Position } from 'geojson'
 
-import { PARCELS, STREETS, type ParcelProperties, type StreetProperties } from '@/lib/geo'
+import {
+  PARCELS,
+  STREETS,
+  type ParcelFeature,
+  type ParcelProperties,
+  type StreetProperties,
+} from '@/lib/geo'
 import type { Point } from '@/lib/geocoding/types'
 import { normalizePin } from '@/lib/parcels/pin'
 
@@ -123,6 +129,18 @@ const reversedCache = new WeakMap<
   FeatureCollection<Polygon | MultiPolygon, ParcelProperties>
 >()
 
+/**
+ * The committed fixture merged with the harvested corridor, keyed on PIN.
+ *
+ * Merged rather than replaced, because the two do not contain each other. The
+ * corridor runs MLK Jr Blvd to E Broad Street, and E 49th Street carries on east
+ * past that edge, so 29 of the association's own 40 platted lots sit outside it.
+ * Replacing the fixture dropped them off the drawing entirely, which is the
+ * worst possible thing to lose: they are the lots this application exists for.
+ *
+ * Where both have a lot the harvested geometry wins, being the current county
+ * record.
+ */
 function d3Parcels(
   collection?: FeatureCollection<Polygon | MultiPolygon, ParcelProperties>
 ): FeatureCollection<Polygon | MultiPolygon, ParcelProperties> {
@@ -131,9 +149,20 @@ function d3Parcels(
   const cached = reversedCache.get(collection)
   if (cached) return cached
 
-  const reversed = reverseWinding(collection)
-  reversedCache.set(collection, reversed)
-  return reversed
+  const byPin = new Map<string, ParcelFeature>()
+  for (const feature of PARCELS.features) {
+    byPin.set(normalizePin(feature.properties.pin), feature)
+  }
+  for (const feature of collection.features) {
+    byPin.set(normalizePin(feature.properties.pin), feature)
+  }
+
+  const merged = reverseWinding({
+    type: 'FeatureCollection',
+    features: [...byPin.values()],
+  })
+  reversedCache.set(collection, merged)
+  return merged
 }
 
 export function buildProjection(

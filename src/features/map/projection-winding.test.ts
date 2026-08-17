@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 
 import type { ParcelProperties } from '@/lib/geo'
 
+import { PARCELS, platPins } from '@/lib/geo'
+
 import { buildProjection } from './projection'
 
 /*
@@ -95,5 +97,48 @@ describe('winding order', () => {
 
     // The same square either way, so it must frame to the same size.
     expect(withMulti.parcels[0]?.area).toBeCloseTo(withPlain.parcels[0]?.area ?? 0, 0)
+  })
+})
+
+describe('merging the harvest with the committed fixture', () => {
+  it('keeps every association lot drawable', () => {
+    /*
+      The corridor runs MLK Jr Blvd to E Broad Street, and E 49th Street carries
+      on east past that edge, so 29 of the association's own 40 platted lots sit
+      outside the harvest. Replacing the fixture rather than merging dropped them
+      off the drawing, which is the worst thing here to lose.
+    */
+    const harvestOnly = collection([
+      {
+        type: 'Feature',
+        properties: { pin: '20003 15001' },
+        geometry: { type: 'Polygon', coordinates: [ccw(0.01)] },
+      },
+    ])
+
+    const projection = buildProjection(400, 400, harvestOnly)
+
+    for (const pin of platPins()) {
+      expect(projection.parcelByPin.has(pin), pin).toBe(true)
+    }
+    // Both sets are present, not one or the other.
+    expect(projection.parcels.length).toBe(PARCELS.features.length + 1)
+    expect(projection.parcelByPin.has('20003 15001')).toBe(true)
+  })
+
+  it('prefers the harvested geometry where both have a lot', () => {
+    const existing = platPins()[0] ?? ''
+    const shared = collection([
+      {
+        type: 'Feature',
+        properties: { pin: existing },
+        geometry: { type: 'Polygon', coordinates: [ccw(0.05)] },
+      },
+    ])
+
+    const projection = buildProjection(400, 400, shared)
+    // One entry for that PIN, not two, and the count did not grow.
+    expect(projection.parcels.filter((p) => p.pin === existing)).toHaveLength(1)
+    expect(projection.parcels.length).toBe(PARCELS.features.length)
   })
 })

@@ -1,5 +1,5 @@
 import centroidOf from '@turf/centroid'
-import type { Feature, FeatureCollection, LineString, Polygon } from 'geojson'
+import type { Feature, FeatureCollection, LineString, MultiPolygon, Polygon } from 'geojson'
 
 import parcelData from './fixtures/ardsley-parcels.json'
 import streetData from './fixtures/ardsley-streets.json'
@@ -24,7 +24,11 @@ export interface ParcelProperties {
   commonArea?: string
 }
 
-export type ParcelFeature = Feature<Polygon, ParcelProperties>
+/*
+  Both shapes occur in county data. 21 of the harvested corridor's 10,399 lots
+  are MultiPolygons: a lot split by a lane, or one wrapping a corner.
+*/
+export type ParcelFeature = Feature<Polygon | MultiPolygon, ParcelProperties>
 
 export interface StreetProperties {
   name: string
