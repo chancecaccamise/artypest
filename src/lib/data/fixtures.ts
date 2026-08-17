@@ -1,5 +1,7 @@
 import { RAW_PARCEL_FIXTURE } from '@/lib/parcels/FixtureParcelService'
 import { parseOwner } from '@/lib/parcels/owner'
+import { normalizePin } from '@/lib/parcels/pin'
+import type { ParcelLayerRecord } from '@/lib/parcels/parcel-layer'
 import { formatMailingAddress } from '@/lib/parcels/types'
 
 import type {
@@ -87,7 +89,15 @@ export const RECORD_TYPES = [
   'assessment',
 ] as const
 
-export function buildDemoData(reference: Date = new Date()): DemoData {
+export function buildDemoData(
+  reference: Date = new Date(),
+  /*
+    The harvested parcel layer, when one has been fetched. Empty by default, so
+    tests and any code path that does not want 10,000 lots keeps the small
+    demo. See src/lib/parcels/parcel-layer.ts.
+  */
+  parcelLayer: readonly ParcelLayerRecord[] = []
+): DemoData {
   const random = makeRandom(31405)
   const pick = <T>(list: readonly T[]): T => at(list, Math.floor(random() * list.length))
   const between = (min: number, max: number) => min + random() * (max - min)
@@ -398,6 +408,27 @@ export function buildDemoData(reference: Date = new Date()): DemoData {
         intBetween(200, 700),
         intBetween(5, 190)
       )
+    )
+  })
+
+  /*
+    Everything above is a lot the association actually tracks: the 40 reconciled
+    against the parcel roll and the 8 entered by hand. That membership is what
+    the dashboard reports on, so it is recorded as a member_of relation to the
+    association rather than as a field, which is the same shape CLAUDE.md uses
+    for board seats. Adding a lot to the association is then one relation, and
+    it shows up in the Connection Map for free.
+  */
+  const associationProperties = [...properties]
+
+  associationProperties.forEach((property, index) => {
+    // relation() appends to `relations` itself, so this must not push again.
+    relation(
+      `rel-hoa-member-${String(index + 1).padStart(4, '0')}`,
+      'rt-member-of',
+      property.id,
+      hoa.id,
+      { attributes: { role: 'member' }, createdDaysAgo: 300 }
     )
   })
 
@@ -1364,6 +1395,78 @@ export function buildDemoData(reference: Date = new Date()): DemoData {
       lastActiveAt: stamp(-30, 19),
     },
   ]
+
+  /*
+    The harvested county parcels are appended right at the end, deliberately.
+
+    `at()` wraps with modulo, so every fixed index into `properties` above, and
+    there are a dozen of them, silently addresses a different lot the moment the
+    array grows from 48 to 10,447. Adding these earlier re-pointed residents and
+    managers at county parcels and moved the occupancy figures, which is a good
+    demonstration of why the association's own data is built first and in
+    isolation.
+  */
+  /*
+    The harvested parcel layer, which is every lot between MLK Jr Blvd and
+    E Broad Street from the river down to DeRenne. These are county records, not
+    association members: they carry no member_of relation, so they are listed
+    and searchable and mappable without changing what the dashboard means.
+
+    Lots already seeded above are skipped, because the association's own record
+    of a lot it manages is better than the roll's.
+  */
+  const seededPins = new Set(
+    properties
+      .map((property) => (typeof property.data.pin === 'string' ? normalizePin(property.data.pin) : ''))
+      .filter((pin) => pin !== '')
+  )
+
+  parcelLayer.forEach((parcel, index) => {
+    const pin = normalizePin(parcel.pin)
+    if (pin === '' || seededPins.has(pin)) return
+    seededPins.add(pin)
+
+    const owner = parseOwner(parcel.ownerName, parcel.ownerName2)
+
+    properties.push(
+      entity(
+        `ent-parcel-${String(index + 1).padStart(6, '0')}`,
+        'property',
+        // A parcel with no street number is real: 363 of them are city land.
+        parcel.situsAddress === '' ? pin : parcel.situsAddress,
+        {
+          pin,
+          lotNumber: null,
+          situsAddress: parcel.situsAddress,
+          zoning: parcel.zoningDistrict,
+          // The county's class code. The association's own reading of the use
+          // is deliberately absent: nobody has looked at this lot.
+          propertyUse: null,
+          propertyUseCode: parcel.propertyUseCode,
+          acreage: parcel.acreage,
+          fairMarketValue: parcel.fairMarketValue,
+          assessedValue: parcel.totalAssessment,
+          parcelUpdatedAt: parcel.dateUpdated,
+          parcelSource: 'imported',
+          yearBuilt: parcel.yearBuilt,
+          squareFeet: null,
+          neighborhood: parcel.neighborhood,
+          legalDescription: parcel.legalDescription,
+          // Kept so the owner is searchable without creating an entity for
+          // every owner in the corridor. The parcel import is what creates
+          // owner records, deliberately and one screen at a time.
+          countyOwnerName: owner.display,
+          countyOwnerRaw: parcel.ownerName,
+          notes: '',
+        },
+        // Fixed ages: these are reference data, not activity, and a random age
+        // would put thousands of meaningless entries in the audit feed.
+        720,
+        720
+      )
+    )
+  })
+
 
   return { org, relationTypes, entities, relations, auditEntries, referenceItems, users }
 }

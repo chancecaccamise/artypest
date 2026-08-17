@@ -74,12 +74,58 @@ export interface DashboardStats {
   openItems: number
 }
 
+/*
+  Which lots the association actually tracks.
+
+  Since the parcel layer landed, most property records in the system are county
+  parcels: land inside the corridor that the association has no relationship to.
+  They belong in the directory and on the map, but not in a figure that claims to
+  describe the association. A dashboard reading "10,399 lots, 3% owner occupied"
+  is worse than no dashboard, because it is confidently wrong.
+
+  Membership is a `member_of` relation to an association, the same shape
+  CLAUDE.md specifies for board seats, so this reads it rather than inventing a
+  field. When no membership has been recorded at all, every property counts:
+  that is the state the demo was in before the harvest, and every existing
+  figure has to keep its old meaning.
+*/
+export function associationProperties(
+  graph: ResolvedGraph,
+  today: Date = new Date()
+): Entity[] {
+  const properties = graph.entities.filter(
+    (entity) =>
+      entity.type === 'property' && entity.deletedAt === null && entity.archivedAt === null
+  )
+
+  const memberType = graph.typeByKey.get('member_of')
+  if (!memberType) return properties
+
+  const members = new Set<string>()
+  for (const relation of graph.relations) {
+    if (relation.relationTypeId !== memberType.id) continue
+    if (relation.deletedAt !== null) continue
+    if (!isCurrent(relation, today)) continue
+
+    const from = graph.byId.get(relation.fromEntityId)
+    const to = graph.byId.get(relation.toEntityId)
+    if (from?.type === 'property' && to?.type === 'association') members.add(from.id)
+    if (to?.type === 'property' && from?.type === 'association') members.add(to.id)
+  }
+
+  // No membership recorded anywhere means nobody has drawn the line yet.
+  if (members.size === 0) return properties
+
+  return properties.filter((property) => members.has(property.id))
+}
+
 export function computeStats(graph: ResolvedGraph, today: Date = new Date()): DashboardStats {
   const active = graph.entities.filter(
     (entity) => entity.deletedAt === null && entity.archivedAt === null
   )
 
-  const properties = active.filter((entity) => entity.type === 'property')
+  // The association's lots, not every parcel in the corridor.
+  const properties = associationProperties(graph, today)
   const propertyIds = new Set(properties.map((entity) => entity.id))
 
   const residentIds = new Set<string>()
@@ -473,10 +519,9 @@ export function computeOccupancy(
   graph: ResolvedGraph,
   today: Date = new Date()
 ): { total: number; counts: OccupancyBreakdown } {
-  const properties = graph.entities.filter(
-    (entity) =>
-      entity.type === 'property' && entity.deletedAt === null && entity.archivedAt === null
-  )
+  // Occupancy describes the association's lots. A county parcel nobody has
+  // looked at is not a vacancy.
+  const properties = associationProperties(graph, today)
 
   const counts: OccupancyBreakdown = {
     owner_occupied: 0,

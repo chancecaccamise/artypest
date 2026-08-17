@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "db:reset": "supabase db reset",
-    "db:types": "supabase gen types typescript --local > src/types/database.ts"
+    "db:types": "supabase gen types typescript --local > src/types/database.ts",
+    "sagis:harvest": "node scripts/sagis/harvest.mjs"
   },
   "dependencies": {
     "@fontsource/bricolage-grotesque": "^5.3.0",

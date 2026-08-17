@@ -1,0 +1,184 @@
+{
+  "harvestedAt": "2026-08-17",
+  "corridor": {
+    "xmin": -81.099,
+    "ymin": 32.023,
+    "xmax": -81.0837,
+    "ymax": 32.082
+  },
+  "bounds": {
+    "west": "MLK Jr Blvd",
+    "east": "E Broad St",
+    "north": "Savannah River",
+    "south": "DeRenne Ave"
+  },
+  "excludedNeighborhoods": [
+    "Hutchinson Island"
+  ],
+  "parcels": 10399,
+  "neighborhoods": 27,
+  "coverage": [
+    {
+      "neighborhood": "North Historic District",
+      "harvested": 1708,
+      "inNeighborhood": 1740,
+      "partial": true
+    },
+    {
+      "neighborhood": "Midtown",
+      "harvested": 1414,
+      "inNeighborhood": 1495,
+      "partial": true
+    },
+    {
+      "neighborhood": "South Historic District",
+      "harvested": 1238,
+      "inNeighborhood": 1378,
+      "partial": true
+    },
+    {
+      "neighborhood": "Ardsley Park/Chatham Crescent",
+      "harvested": 879,
+      "inNeighborhood": 1087,
+      "partial": true
+    },
+    {
+      "neighborhood": "Ardmore/Gould Estates/Olin Heights",
+      "harvested": 734,
+      "inNeighborhood": 1151,
+      "partial": true
+    },
+    {
+      "neighborhood": "Thomas Square",
+      "harvested": 660,
+      "inNeighborhood": 783,
+      "partial": true
+    },
+    {
+      "neighborhood": "Eastside",
+      "harvested": 564,
+      "inNeighborhood": 767,
+      "partial": true
+    },
+    {
+      "neighborhood": "Beach Institute",
+      "harvested": 440,
+      "inNeighborhood": 440,
+      "partial": false
+    },
+    {
+      "neighborhood": "Baldwin Park",
+      "harvested": 371,
+      "inNeighborhood": 411,
+      "partial": true
+    },
+    {
+      "neighborhood": "East Victorian District",
+      "harvested": 321,
+      "inNeighborhood": 321,
+      "partial": false
+    },
+    {
+      "neighborhood": "Sackville",
+      "harvested": 310,
+      "inNeighborhood": 335,
+      "partial": true
+    },
+    {
+      "neighborhood": "South Garden",
+      "harvested": 283,
+      "inNeighborhood": 291,
+      "partial": true
+    },
+    {
+      "neighborhood": "Dixon Park",
+      "harvested": 268,
+      "inNeighborhood": 268,
+      "partial": false
+    },
+    {
+      "neighborhood": "Abercorn Heights/Lamara Heights/Ridgewood/Poplar Heights",
+      "harvested": 232,
+      "inNeighborhood": 715,
+      "partial": true
+    },
+    {
+      "neighborhood": "Parkside",
+      "harvested": 185,
+      "inNeighborhood": 427,
+      "partial": true
+    },
+    {
+      "neighborhood": "Edgemere",
+      "harvested": 146,
+      "inNeighborhood": 282,
+      "partial": true
+    },
+    {
+      "neighborhood": "Medical Arts",
+      "harvested": 145,
+      "inNeighborhood": 145,
+      "partial": false
+    },
+    {
+      "neighborhood": "West Victorian District",
+      "harvested": 125,
+      "inNeighborhood": 432,
+      "partial": true
+    },
+    {
+      "neighborhood": "Live Oak",
+      "harvested": 106,
+      "inNeighborhood": 1224,
+      "partial": true
+    },
+    {
+      "neighborhood": "Groveland/Kensington Park",
+      "harvested": 76,
+      "inNeighborhood": 463,
+      "partial": true
+    },
+    {
+      "neighborhood": "Memorial Hospital/Fairfield",
+      "harvested": 72,
+      "inNeighborhood": 76,
+      "partial": true
+    },
+    {
+      "neighborhood": "Hitch Village/Fred Wessels Homes",
+      "harvested": 43,
+      "inNeighborhood": 221,
+      "partial": true
+    },
+    {
+      "neighborhood": "Yamacraw Village",
+      "harvested": 30,
+      "inNeighborhood": 83,
+      "partial": true
+    },
+    {
+      "neighborhood": "Fairway Oaks",
+      "harvested": 28,
+      "inNeighborhood": 177,
+      "partial": true
+    },
+    {
+      "neighborhood": "Metropolitan",
+      "harvested": 9,
+      "inNeighborhood": 811,
+      "partial": true
+    },
+    {
+      "neighborhood": "Forest Park",
+      "harvested": 8,
+      "inNeighborhood": 326,
+      "partial": true
+    },
+    {
+      "neighborhood": "LaRoche Park/Springhill/Daffin Heights/Wilemere/Shirley Park",
+      "harvested": 4,
+      "inNeighborhood": 1024,
+      "partial": true
+    }
+  ]
+}
