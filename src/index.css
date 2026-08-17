@@ -1,117 +1,267 @@
 @import 'tailwindcss';
-@import 'tw-animate-css';
+
+/*
+  Faces are bundled, not fetched. @fontsource ships the woff2 files locally so
+  there is no runtime CDN dependency and no layout shift on a slow network.
+*/
+@import '@fontsource/bricolage-grotesque/600.css';
+@import '@fontsource/bricolage-grotesque/700.css';
+@import '@fontsource/bricolage-grotesque/800.css';
+@import '@fontsource/public-sans/400.css';
+@import '@fontsource/public-sans/500.css';
+@import '@fontsource/public-sans/600.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
 
 @custom-variant dark (&:is(.dark *));
 
 /*
-  shadcn/ui design tokens. Light values live on :root, dark on .dark.
-  The theme toggle swaps the .dark class on <html>.
+  The palette. Surveyor's plat vernacular: cool gray-green paper stock, plat
+  ink, hairline rules. Every color in the app comes from this list. Components
+  never carry arbitrary hex values.
 */
 :root {
-  --radius: 0.625rem;
+  /* Surfaces: cool gray-green paper, not cream, not white */
+  --paper: #f1f3f0;
+  --paper-raised: #fafbf9;
+  --paper-sunken: #e6eae5;
 
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* Ink */
+  --ink: #1c2b31;
+  --ink-muted: #5b6b70;
+  --ink-faint: #8fa0a3;
 
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* Structure */
+  --rule: #c9d2cc;
+  --rule-strong: #9aa8a0;
+
+  /* Accents */
+  --moss: #3f5a4c;
+  --moss-hover: #33493e;
+  --survey: #2e5c7a;
+  --oxblood: #8c3a32;
+  --amber: #9a6e24;
+
+  /* Text that sits on a filled accent */
+  --on-accent: #fafbf9;
+
+  /* Entity type colors: badges now, Connection Map too */
+  --type-person: #2e5c7a;
+  --type-property: #3f5a4c;
+  --type-business: #8a5a2b;
+  --type-association: #6b4a7a;
+  --type-asset: #4a6b6b;
+  --type-record: #7a5a5a;
+  --type-document: #5b6b70;
+
+  /* Tint of a type color used behind badges and map cards */
+  --type-tint-opacity: 0.1;
+
+  color-scheme: light;
 }
 
+/*
+  Dark mode: deep slate-teal surfaces, same accent hues lightened enough to
+  hold WCAG AA against them. No pure black, no pure white, either theme.
+*/
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --paper: #141c1f;
+  --paper-raised: #1c2831;
+  --paper-sunken: #243139;
 
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --ink: #e4ebe8;
+  --ink-muted: #9fb0b3;
+  --ink-faint: #6f8286;
+
+  --rule: #33454a;
+  --rule-strong: #4d646b;
+
+  --moss: #7fae95;
+  --moss-hover: #96c1aa;
+  --survey: #79b0d4;
+  --oxblood: #d98177;
+  --amber: #d5a44e;
+
+  --on-accent: #101a1d;
+
+  --type-person: #79b0d4;
+  --type-property: #7fae95;
+  --type-business: #cd9a63;
+  --type-association: #b294c2;
+  --type-asset: #86b3b3;
+  --type-record: #c39a9a;
+  --type-document: #9fb0b3;
+
+  --type-tint-opacity: 0.16;
+
+  color-scheme: dark;
 }
 
+/*
+  Tailwind v4 is CSS-first: @theme is where the design tokens become utility
+  classes. This is the v4 equivalent of the tailwind.config.ts mapping.
+*/
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-paper-sunken: var(--paper-sunken);
 
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
 
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+
+  --color-moss: var(--moss);
+  --color-moss-hover: var(--moss-hover);
+  --color-survey: var(--survey);
+  --color-oxblood: var(--oxblood);
+  --color-amber: var(--amber);
+  --color-on-accent: var(--on-accent);
+
+  --color-type-person: var(--type-person);
+  --color-type-property: var(--type-property);
+  --color-type-business: var(--type-business);
+  --color-type-association: var(--type-association);
+  --color-type-asset: var(--type-asset);
+  --color-type-record: var(--type-record);
+  --color-type-document: var(--type-document);
+
+  --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Public Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* Scale: 12 / 13 / 14 / 16 / 20 / 26 / 34 / 44 */
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-13: 0.8125rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.625rem;
+  --text-2xl: 2.125rem;
+  --text-3xl: 2.75rem;
+
+  /* 3px on chips and inputs, 6px on cards. Never pill, never square. */
+  --radius-chip: 3px;
+  --radius-card: 6px;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    border-color: var(--rule);
   }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    /* Tabular figures everywhere: this product is mostly codes and dates. */
+    font-variant-numeric: tabular-nums;
   }
+
+  /*
+    One focus treatment for the whole app, in --survey. Keyboard users get a
+    visible ring on every interactive element without each component
+    re-declaring it.
+  */
+  :focus-visible {
+    outline: 2px solid var(--survey);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Motion is 120ms color/border and 180ms panel entry. Nothing else. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /*
+    The signature element. Every entity carries a machine identifier and it
+    always renders the same way: mono, 12px, muted, hairline border.
+  */
+  .id-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 2px 6px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-chip);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.25;
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+
+  /* Labels are 12px uppercase, 0.06em tracking, muted. */
+  .label-caps {
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    font-weight: 600;
+  }
+
+  .panel {
+    background-color: var(--paper-raised);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-card);
+  }
+
+  /* 180ms panel entry, the one piece of motion beyond color transitions. */
+  .panel-enter {
+    animation: panel-enter 180ms ease-out;
+  }
+}
+
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Scrollbars in the paper family rather than the OS default gray. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--paper);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--rule);
+  border-radius: 5px;
+  border: 2px solid var(--paper);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--rule-strong);
 }
