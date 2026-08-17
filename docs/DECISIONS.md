@@ -3,6 +3,77 @@
 Assumptions made without the user present. Each entry states what was chosen,
 what was rejected, and why.
 
+## 2026-08-17, SAGIS investigation
+
+Findings are in `docs/SAGIS-API.md`. These are the choices that came out of it.
+
+### SAGIS is called directly from the browser, with no proxy
+
+**Chosen.** `fetch` against `https://pub.sagis.org/arcgis/rest/services/` from
+the client.
+
+**Rejected.** A Supabase Edge Function relay, and a Vite dev proxy.
+
+**Why.** The service sets `access-control-allow-origin` to the request origin
+and there is no credential to hide. A relay would add a failure point, a
+deployment dependency, and a place for parcel data to be cached without anyone
+deciding it should be, in exchange for nothing.
+
+### Zoning is resolved by spatial join, not read from the parcel
+
+**Chosen.** Intersect the parcel centroid against
+`Savannah/ZoningDevelopment_Map/MapServer/6` as a separate lookup.
+
+**Rejected.** Reading a zoning field on the parcel, which is what the fixture
+assumed.
+
+**Why.** `Parcel Digest 2025` has no zoning field. Only the historic 1998 layer
+does, which is probably where the assumption came from. This means
+`property.zoning` and `property.property_use` come from two different services,
+which makes the distinction `CLAUDE.md` insists on a data-sourcing concern and
+not just a naming one. Unincorporated county parcels fall outside the layer and
+resolve to null, rendered as "not available" so absence is not read as unzoned.
+
+### Parcel polygons are the plat geometry source, not DPLAT
+
+**Chosen.** Real parcel polygons from the parcel layers as the plat base, with
+DPLAT layers as an enhancement where they exist.
+
+**Rejected.** DPLAT as the base, which is what its layer list invites.
+
+**Why.** DPLAT has 1,637 subdivisions across its city and county services and
+none of them is Ardsley Park. It covers modern recorded subdivisions and the
+client's neighborhood is a 1920s plat. Parcel polygons cover the whole county.
+
+### The SAGIS geocoder replaces Mapbox geocoding
+
+**Chosen.** `Locators/MAD_PointAddress_Centerlines/GeocodeServer`.
+
+**Rejected.** `MapboxGeocodingService.ts`, which the plat view specification
+puts on the roadmap.
+
+**Why.** It is the county's own address database, so for Chatham County
+addresses it is the authoritative source rather than an approximation of one. It
+scores 98.89 on a real test address, returns WGS84 directly with `outSR=4326`,
+needs no token, and supports `Suggest` for address autocomplete later. Mapbox is
+still wanted for a satellite basemap, which is a different job.
+
+### Owner name parsing is rewritten, and allowed to say it does not know
+
+**Chosen.** Parse the real grammar, and mark a name low confidence rather than
+guessing when it cannot be resolved.
+
+**Rejected.** Extending the existing `SURNAME, FIRST` normaliser.
+
+**Why.** The comma format is 9,844 records against 115,312 without, so the
+existing function is built for 7.9% of the county. Beyond that, some values are
+genuinely unparseable: `WILSON C V VAN` has no reliable surname boundary, and
+names are truncated at 40 characters upstream, so `KAYE & FORESTER-PY COURTNEY
+FORESTER &` is not a complete name and no rule can recover it. The import
+already has a per-row override, which is the right place to send these. A
+confident wrong match silently attaches a property to the wrong resident, which
+is the worst failure this application can produce.
+
 ## 2026-08-01, plat view
 
 ### `docs/MAP-SPEC.md` was written, not found

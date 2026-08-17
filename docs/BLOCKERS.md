@@ -101,6 +101,54 @@ devDependency, since Homebrew is not on this machine. The documented commands
 work with `pnpm exec` in front, and `pnpm db:reset` and `pnpm db:types` are
 wired up in `package.json` as shortcuts.
 
+### The SAGIS `Property_Use` and `Municipality` code tables are not published
+
+**Impact.** Low, cosmetic, but visible to a board member.
+
+`Property_Use` has 34 distinct values on the live service (`R3`, `E1`, `C4`, and
+so on) and `Municipality` is a zero-padded numeric code (`020`). Neither field
+carries an ArcGIS coded-value domain, so the service publishes the codes without
+the labels.
+
+**What was done instead.** Lookups cover the codes that can be confirmed from
+the data and from Georgia Department of Revenue class conventions. Anything
+unmapped renders as the literal code rather than an invented label, because a
+wrong label on a property class is worse than a code the reader can ask about.
+
+**To unblock.** Request the class code table from the Chatham County Board of
+Assessors, then fill in the lookup. It is one file.
+
+### Unincorporated Chatham County has no zoning service
+
+**Impact.** Medium, and permanent unless the county publishes one.
+
+Zoning comes from `Savannah/ZoningDevelopment_Map/MapServer/6`, which covers the
+City of Savannah only. Parcels with a PIN starting `1` are unincorporated county
+and fall outside it. No equivalent county zoning layer was found anywhere in the
+service directory.
+
+**What was done instead.** Zoning resolves to null for those parcels and the
+user interface says "not available" rather than rendering blank, so an absent
+value is not read as an unzoned parcel. City parcels get real zoning.
+
+**To unblock.** Ask SAGIS whether county zoning is published anywhere. If it is
+not, the field stays association-entered for county parcels.
+
 ## Resolved
 
-Nothing yet.
+### SAGIS was assumed to require credentials, and does not
+
+**Was.** All parcel work was built against a local fixture behind
+`ParcelService` because no SAGIS endpoint had been investigated and the
+integration was expected to need a key. `src/lib/parcels/types.ts` said "there
+is no SAGIS endpoint, no network call, and no credentials in this phase".
+
+**Now.** SAGIS runs a public ArcGIS Server 11.5 at
+`https://pub.sagis.org/arcgis/rest/services/`. No authentication, no API key,
+and CORS reflects the request origin, so the browser calls it directly with no
+proxy. Parcel attributes, parcel geometry, city zoning, an authoritative address
+geocoder, and historic parcels back to 1998 are all free.
+
+See `docs/SAGIS-API.md`. The investigation also found that the fixture's owner
+name format describes 7.9% of real records, that a third PIN format exists, and
+that zoning is not a field on the parcel at all.
