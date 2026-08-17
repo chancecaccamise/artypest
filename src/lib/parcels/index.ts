@@ -13,9 +13,10 @@ export const parcelService: ParcelService = createFixtureParcelService()
 export type { ParcelRecord, ParcelService } from './types'
 export {
   buildParcelViewerUrl,
+  checkJurisdiction,
   deriveJurisdiction,
   isValidPin,
   normalizePin,
   validatePin,
 } from './pin'
-export type { Jurisdiction, PinFormat, PinValidation } from './pin'
+export type { Jurisdiction, JurisdictionCheck, PinFormat, PinValidation } from './pin'

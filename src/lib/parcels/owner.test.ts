@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { classifyOwner, findOwnerMatch, normalizeOwnerName, toDisplayName } from './owner'
+import {
+  classifyOwner,
+  findOwnerMatch,
+  normalizeOwnerName,
+  parseOwner,
+  toDisplayName,
+} from './owner'
 
 describe('normalizeOwnerName', () => {
   it('reduces county order and human order to the same key', () => {
@@ -98,5 +104,112 @@ describe('findOwnerMatch', () => {
 
   it('returns null for an empty name rather than matching everything', () => {
     expect(findOwnerMatch('   ', people)).toBeNull()
+  })
+})
+
+/*
+  Everything below is a real value from the live SAGIS service, not an invented
+  one. See docs/SAGIS-API.md. These are the cases the previous implementation
+  got wrong, and they are the majority of Chatham County rather than the edges.
+*/
+describe('real SAGIS owner strings', () => {
+  it('no longer calls a three-word person a business', () => {
+    // The old rule was "three or more words with no comma reads as an
+    // organisation", which covered most of the county.
+    expect(classifyOwner('BRUEN GARRETT JOHN')).toBe('person')
+    expect(classifyOwner('WILSON C V VAN')).toBe('person')
+    expect(classifyOwner('KENNEDY MARY CLAYTON & AUSTIN O')).toBe('person')
+  })
+
+  it('does not read the ampersand in an organisation name as a co-owner', () => {
+    const parsed = parseOwner('MAYOR & ALDERMEN OF SAVANNAH')
+    expect(parsed.kind).toBe('business')
+    expect(parsed.government).toBe(true)
+    expect(parsed.people).toEqual([])
+  })
+
+  it.each([
+    ['RANDALL ZOE', 'Zoe Randall'],
+    ['BRUEN GARRETT JOHN', 'Garrett John Bruen'],
+    ['SASEEN JOSEPH O.', 'Joseph O. Saseen'],
+    ['KEENER-MACKENZIE JANE', 'Jane Keener-Mackenzie'],
+    ['GRANT SAVANNAH', 'Savannah Grant'],
+  ])('reads %j as %j', (raw, expected) => {
+    const parsed = parseOwner(raw)
+    expect(parsed.kind).toBe('person')
+    expect(parsed.display).toBe(expected)
+    expect(parsed.confidence).toBe('high')
+  })
+
+  it('shares one surname across two given names', () => {
+    const parsed = parseOwner('BELZER NATHAN C & ALLISON S')
+    expect(parsed.people.map((person) => person.display)).toEqual([
+      'Nathan C. Belzer',
+      'Allison S. Belzer',
+    ])
+    expect(parsed.confidence).toBe('high')
+  })
+
+  it('interleaves two surnames with two given names, and says it is unsure', () => {
+    const parsed = parseOwner('LEVIN & WHITEHURST DARIA & SCOTT*')
+    expect(parsed.people.map((person) => person.display)).toEqual([
+      'Daria Levin',
+      'Scott Whitehurst',
+    ])
+    // The convention is inferred from the data, not stated by it.
+    expect(parsed.confidence).toBe('low')
+    expect(parsed.marked).toBe(true)
+  })
+
+  it('strips the trailing record marker', () => {
+    expect(parseOwner('MCRAE COLIN A & LINDSAY M*').marked).toBe(true)
+    expect(parseOwner('MCRAE COLIN A & LINDSAY M*').raw).toContain('*')
+    expect(parseOwner('MCRAE COLIN A & LINDSAY M*').people[0]?.display).toBe('Colin A. McRae')
+  })
+
+  it('detects a name truncated upstream and refuses to be confident about it', () => {
+    const parsed = parseOwner('KAYE & FORESTER-PY COURTNEY FORESTER &')
+    expect(parsed.truncated).toBe(true)
+    expect(parsed.confidence).toBe('low')
+  })
+
+  it('reads Owner and Owner2 together', () => {
+    const parsed = parseOwner('ACUFF DAVID STEPHEN', 'ACUFF AMANTE SMITH')
+    expect(parsed.people.map((person) => person.display)).toEqual([
+      'David Stephen Acuff',
+      'Amante Smith Acuff',
+    ])
+  })
+
+  it('continues a dangling ampersand into Owner2 without repeating the surname', () => {
+    const parsed = parseOwner('ANDRESEN ROBERT A. &', 'ANDRESEN BARBARA F.*')
+    expect(parsed.people.map((person) => person.display)).toEqual([
+      'Robert A. Andresen',
+      'Barbara F. Andresen',
+    ])
+    expect(parsed.truncated).toBe(true)
+  })
+
+  it('flags a name with no resolvable surname boundary', () => {
+    const parsed = parseOwner('WILSON C V VAN')
+    expect(parsed.confidence).toBe('low')
+  })
+
+  it('leaves an organisation name as filed', () => {
+    const parsed = parseOwner('LIBERTY COMMERCIAL RENTALS LLC')
+    expect(parsed.kind).toBe('business')
+    expect(parsed.display).toBe('LIBERTY COMMERCIAL RENTALS LLC')
+    expect(parsed.government).toBe(false)
+  })
+
+  it('finds one owner inside a joint-owner string', () => {
+    const people = [{ name: 'Allison S. Belzer' }, { name: 'Unrelated Person' }]
+    const match = findOwnerMatch('BELZER NATHAN C & ALLISON S', people)
+    expect(match?.candidate.name).toBe('Allison S. Belzer')
+  })
+
+  it('normalises the space-separated form onto a stored readable name', () => {
+    expect(normalizeOwnerName('RANDALL ZOE')).toBe(normalizeOwnerName('Zoe Randall'))
+    expect(normalizeOwnerName('BRUEN GARRETT JOHN')).toBe(normalizeOwnerName('Garrett John Bruen'))
   })
 })
