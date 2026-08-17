@@ -1,5 +1,6 @@
 import { RAW_PARCEL_FIXTURE } from '@/lib/parcels/FixtureParcelService'
-import { toDisplayName } from '@/lib/parcels/owner'
+import { parseOwner } from '@/lib/parcels/owner'
+import { formatMailingAddress } from '@/lib/parcels/types'
 
 import type {
   AuditEntry,
@@ -60,20 +61,7 @@ function at<T>(list: readonly T[], index: number): T {
   return value
 }
 
-interface SeedParcel {
-  pin: string
-  situsAddress: string
-  ownerName: string
-  ownerMailingAddress: string
-  acreage: number
-  zoningDistrict: string
-  assessedValue: number
-  assessedYear: number
-  _seedReadableName?: string
-  _seedOwnerKind?: string
-}
-
-const PARCELS = RAW_PARCEL_FIXTURE as SeedParcel[]
+const PARCELS = RAW_PARCEL_FIXTURE
 
 /** Parcels 0 to 39 get a property in the system. 40 to 59 stay unimported. */
 const MATCHED_PARCEL_COUNT = 40
@@ -343,8 +331,13 @@ export function buildDemoData(reference: Date = new Date()): DemoData {
       zoning: stale && index % 3 === 0 ? null : parcel.zoningDistrict,
       propertyUse,
       acreage: stale ? Number((parcel.acreage - 0.02).toFixed(3)) : parcel.acreage,
-      assessedValue: stale ? Math.round(parcel.assessedValue * 0.91) : parcel.assessedValue,
-      assessedYear: stale ? parcel.assessedYear - 1 : parcel.assessedYear,
+      propertyUseCode: parcel.propertyUseCode,
+      // Georgia assesses at 40% of fair market value, so the two move together.
+      fairMarketValue: stale ? Math.round(parcel.fairMarketValue * 0.91) : parcel.fairMarketValue,
+      assessedValue: stale
+        ? Math.round(parcel.totalAssessment * 0.91)
+        : parcel.totalAssessment,
+      parcelUpdatedAt: stale ? null : parcel.dateUpdated,
       parcelSource: 'imported',
       yearBuilt: intBetween(1908, 1968),
       squareFeet: intBetween(1180, 4200),
@@ -390,11 +383,13 @@ export function buildDemoData(reference: Date = new Date()): DemoData {
           pin: manual.pin,
           lotNumber: `L-${String(index + 1).padStart(3, '0')}`,
           situsAddress: manual.address,
-          zoning: manual.pin ? pick(['R-6', 'R-B', 'RIP-A', 'TC-1']) : null,
+          zoning: manual.pin ? pick(['RSF-6', 'RSF-5', 'TN-2', 'TC-1']) : null,
           propertyUse: pick(PROPERTY_USES),
+          propertyUseCode: null,
           acreage: manual.pin ? Number(between(0.09, 0.4).toFixed(3)) : null,
-          assessedValue: manual.pin ? Math.round(between(190000, 640000) / 500) * 500 : null,
-          assessedYear: manual.pin ? 2025 : null,
+          fairMarketValue: manual.pin ? Math.round(between(190000, 640000) / 500) * 500 : null,
+          assessedValue: manual.pin ? Math.round(between(76000, 256000) / 500) * 500 : null,
+          parcelUpdatedAt: null,
           parcelSource: 'manual',
           yearBuilt: intBetween(1912, 1972),
           squareFeet: intBetween(1100, 3800),
@@ -424,8 +419,11 @@ export function buildDemoData(reference: Date = new Date()): DemoData {
 
   for (let index = 0; index < SEEDED_OWNER_COUNT; index += 1) {
     const parcel = at(PARCELS, index)
-    const kind = parcel._seedOwnerKind === 'business' ? 'business' : 'person'
-    const displayName = parcel._seedReadableName ?? toDisplayName(parcel.ownerName, kind)
+    // The demo owners are parsed from the real county strings by the same code
+    // the import uses, so the seeded data and the import agree by construction.
+    const parsed = parseOwner(parcel.ownerName, parcel.ownerName2)
+    const kind = parsed.kind
+    const displayName = parsed.display
 
     const existing = seenOwnerNames.get(displayName)
     if (existing) {
@@ -441,7 +439,7 @@ export function buildDemoData(reference: Date = new Date()): DemoData {
         {
           businessCategory: 'property_owner',
           stateFilingNumber: `K${intBetween(100000, 999999)}`,
-          mailingAddress: parcel.ownerMailingAddress,
+          mailingAddress: formatMailingAddress(parcel.ownerMailingAddress),
           phone: null,
           email: null,
           contactName: null,
@@ -468,7 +466,7 @@ export function buildDemoData(reference: Date = new Date()): DemoData {
       {
         email: contactable ? `${slug}@example.com` : null,
         phone: contactable ? `912-555-${String(intBetween(100, 999)).padStart(4, '0')}` : null,
-        mailingAddress: parcel.ownerMailingAddress,
+        mailingAddress: formatMailingAddress(parcel.ownerMailingAddress),
         memberSince: intBetween(1998, 2025),
         householdRole: 'owner',
         notes: '',
@@ -1266,13 +1264,20 @@ export function buildDemoData(reference: Date = new Date()): DemoData {
     })
   }
 
-  referenceItem('zoning', 'R-6', 'R-6, One-family residential')
-  referenceItem('zoning', 'R-B', 'R-B, Residential business')
-  referenceItem('zoning', 'RIP-A', 'RIP-A, Residential infill, type A')
-  referenceItem('zoning', 'RSF-6', 'RSF-6, Residential single family')
-  referenceItem('zoning', 'RM-25', 'RM-25, Residential multifamily')
-  referenceItem('zoning', 'TC-1', 'TC-1, Traditional commercial')
-  referenceItem('zoning', 'TN-1', 'TN-1, Traditional neighborhood')
+  /*
+    The codes the city actually publishes, taken from the zoning layer at
+    Savannah/ZoningDevelopment_Map/MapServer/6. These are the post-NewZO codes:
+    the old R-6 and R-B format the county no longer uses was what the invented
+    fixture carried, so a real zoning value matched nothing in this list.
+  */
+  referenceItem('zoning', 'RSF-5', 'RSF-5, Residential single-family, 5')
+  referenceItem('zoning', 'RSF-6', 'RSF-6, Residential single-family, 6')
+  referenceItem('zoning', 'RSF-A', 'RSF-A, Residential single-family, attached')
+  referenceItem('zoning', 'RMF-10', 'RMF-10, Residential multi-family, 10')
+  referenceItem('zoning', 'TN-1', 'TN-1, Traditional neighborhood, 1')
+  referenceItem('zoning', 'TN-2', 'TN-2, Traditional neighborhood, 2')
+  referenceItem('zoning', 'TR-1', 'TR-1, Traditional residential, 1')
+  referenceItem('zoning', 'TC-1', 'TC-1, Traditional commercial, 1')
   referenceItem('zoning', 'B-C', 'B-C, Community business')
   referenceItem('zoning', 'P-B', 'P-B, Planned business', false)
 

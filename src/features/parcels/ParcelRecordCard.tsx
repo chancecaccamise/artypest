@@ -57,7 +57,9 @@ export function ParcelRecordCard({ property, org, onAddParcelRecord }: ParcelRec
 
   const acreage = numberValue(property, 'acreage')
   const assessedValue = numberValue(property, 'assessedValue')
-  const assessedYear = numberValue(property, 'assessedYear')
+  const fairMarketValue = numberValue(property, 'fairMarketValue')
+  const countyUpdatedAt = value(property, 'parcelUpdatedAt')
+  const propertyUseCode = value(property, 'propertyUseCode')
 
   return (
     <Panel>
@@ -96,7 +98,18 @@ export function ParcelRecordCard({ property, org, onAddParcelRecord }: ParcelRec
           </Row>
           <Row label="Situs address">{value(property, 'situsAddress') || <NotSet />}</Row>
           <Row label="Acreage">{acreage === null ? <NotSet /> : formatAcreage(acreage)}</Row>
-          <Row label="Zoning district">{value(property, 'zoning') || <NotSet />}</Row>
+          <Row label="Zoning district">
+            {value(property, 'zoning') || (
+              /*
+                The county publishes no zoning on the parcel. It is a spatial
+                join against a City of Savannah layer, so an unincorporated
+                county lot genuinely has none and must not read as blank.
+              */
+              <span className="text-ink-faint">
+                {jurisdiction === 'Unincorporated Chatham County' ? 'Not available' : <NotSet />}
+              </span>
+            )}
+          </Row>
           {/* Property use sits next to zoning on purpose: a commercial use
               inside a residential district is the mismatch this card exists
               to make obvious. */}
@@ -107,10 +120,18 @@ export function ParcelRecordCard({ property, org, onAddParcelRecord }: ParcelRec
               <NotSet />
             )}
           </Row>
+          {/* The county's own class code, next to the association's own reading
+              of the use. R3 against RSF-6 is the pair a board looks at. */}
+          <Row label="County class code">
+            {propertyUseCode === '' ? <NotSet /> : <IdChip>{propertyUseCode}</IdChip>}
+          </Row>
+          <Row label="Fair market value">
+            {fairMarketValue === null ? <NotSet /> : formatCurrency(fairMarketValue)}
+          </Row>
+          {/* 40% of fair market value, which is Georgia's assessment ratio. */}
           <Row label="Assessed value">
             {assessedValue === null ? <NotSet /> : formatCurrency(assessedValue)}
           </Row>
-          <Row label="Assessed year">{assessedYear === null ? <NotSet /> : assessedYear}</Row>
         </dl>
       </PanelBody>
 
@@ -123,7 +144,10 @@ export function ParcelRecordCard({ property, org, onAddParcelRecord }: ParcelRec
             </span>
           </span>
           <span>
-            Last checked: <span className="text-ink-faint font-mono">Not connected</span>
+            County last updated:{' '}
+            <span className="text-ink-faint font-mono">
+              {countyUpdatedAt === '' ? 'Unknown' : countyUpdatedAt}
+            </span>
           </span>
         </div>
 

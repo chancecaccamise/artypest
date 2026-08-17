@@ -1,8 +1,13 @@
 import type { DataProvider, Entity, Relation, RelationType } from '@/lib/data/types'
-import { classifyOwner, findOwnerMatch, toDisplayName, type OwnerKind } from '@/lib/parcels/owner'
+import {
+  findOwnerMatch,
+  parseOwner,
+  type OwnerConfidence,
+  type OwnerKind,
+} from '@/lib/parcels/owner'
 import { readString } from '@/lib/format'
 import { normalizePin } from '@/lib/parcels/pin'
-import type { ParcelRecord } from '@/lib/parcels/types'
+import { formatMailingAddress, type ParcelRecord } from '@/lib/parcels/types'
 
 /*
   The import plan.
@@ -43,6 +48,12 @@ export interface PlanRow {
   ownerMatchConfidence: 'exact' | 'normalized' | null
   ownerKind: OwnerKind
   ownerDisplayName: string
+  /**
+   * `low` when the county string could not be read with confidence: truncated
+   * upstream, no resolvable surname boundary, or unnamed co-owners. The row
+   * still imports, but it is the one a reader should check.
+   */
+  ownerNameConfidence: OwnerConfidence
   /** True when the owner is already recorded as owning this exact lot. */
   ownershipAlreadyRecorded: boolean
 }
@@ -50,12 +61,21 @@ export interface PlanRow {
 /** Parcel field to property `data` key, with the label the diff shows. */
 const FIELD_MAP: { source: keyof ParcelRecord; field: string; label: string }[] = [
   { source: 'situsAddress', field: 'situsAddress', label: 'Situs address' },
-  // Zoning district only. Property use is what is actually there and the
-  // county roll does not know it, so the import must never touch it.
+  /*
+    Zoning district, which is the regulatory district and comes from a spatial
+    join against the city zoning layer. The association's own `propertyUse` is
+    never touched: that is what is actually there, and it is the comparison
+    against zoning that makes a commercial use in a residential district
+    visible. The county's own class code is imported alongside it, under its
+    own key, so the two sit next to each other without overwriting anything.
+  */
   { source: 'zoningDistrict', field: 'zoning', label: 'Zoning district' },
+  { source: 'propertyUseCode', field: 'propertyUseCode', label: 'County class code' },
   { source: 'acreage', field: 'acreage', label: 'Acreage' },
-  { source: 'assessedValue', field: 'assessedValue', label: 'Assessed value' },
-  { source: 'assessedYear', field: 'assessedYear', label: 'Assessed year' },
+  { source: 'fairMarketValue', field: 'fairMarketValue', label: 'Fair market value' },
+  // Georgia assesses at 40% of fair market value. This is the assessed figure.
+  { source: 'totalAssessment', field: 'assessedValue', label: 'Assessed value' },
+  { source: 'dateUpdated', field: 'parcelUpdatedAt', label: 'County last updated' },
 ]
 
 function asComparable(value: unknown): string | null {
@@ -145,8 +165,9 @@ export function buildImportPlan({
 
     const changes = existingProperty ? diffParcelAgainstProperty(parcel, existingProperty) : []
 
-    const ownerKind = classifyOwner(parcel.ownerName)
-    const ownerDisplayName = toDisplayName(parcel.ownerName, ownerKind)
+    const parsedOwner = parseOwner(parcel.ownerName, parcel.ownerName2)
+    const ownerKind = parsedOwner.kind
+    const ownerDisplayName = parsedOwner.display
     const match = findOwnerMatch(parcel.ownerName, ownerCandidates)
 
     // If this owner is already recorded as owning this lot, the row still
@@ -167,6 +188,7 @@ export function buildImportPlan({
       ownerMatchConfidence: match?.confidence ?? null,
       ownerKind,
       ownerDisplayName,
+      ownerNameConfidence: parsedOwner.confidence,
       ownershipAlreadyRecorded,
     }
   })
@@ -310,7 +332,7 @@ export async function applyImportPlan({
             type: row.ownerKind,
             name: row.ownerDisplayName,
             data: {
-              mailingAddress: row.parcel.ownerMailingAddress,
+              mailingAddress: formatMailingAddress(row.parcel.ownerMailingAddress),
               // Recorded so it is obvious where this record came from.
               parcelSource: 'imported',
               ...(row.ownerKind === 'person'

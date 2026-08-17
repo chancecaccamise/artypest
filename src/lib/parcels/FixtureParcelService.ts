@@ -3,33 +3,16 @@ import { normalizePin } from './pin'
 import type { ParcelRecord, ParcelService } from './types'
 
 /*
-  Reads src/lib/parcels/fixtures/chatham-sample.json. No network, no
-  credentials, no endpoint.
+  Reads src/lib/parcels/fixtures/chatham-sample.json, which is 60 real parcels
+  on E 49th St in Ardsley Park, pulled from the live service by
+  scripts/fetch-sagis-fixture.mjs. No network, no credentials, no endpoint.
 
-  The fixture carries underscore-prefixed keys used to seed the demo people and
-  businesses. Those are generation metadata, not parcel data, so they are
-  stripped here and never reach the rest of the app.
+  The fixture is exactly the ParcelRecord shape, including the owner names as
+  the county writes them. That is the point: the import's Match step has to face
+  the real grammar rather than a tidied-up version of it.
 */
 
-interface RawParcel extends ParcelRecord {
-  _seedReadableName?: string
-  _seedOwnerKind?: string
-}
-
-function toParcelRecord(raw: RawParcel): ParcelRecord {
-  return {
-    pin: raw.pin,
-    situsAddress: raw.situsAddress,
-    ownerName: raw.ownerName,
-    ownerMailingAddress: raw.ownerMailingAddress,
-    acreage: raw.acreage,
-    zoningDistrict: raw.zoningDistrict,
-    assessedValue: raw.assessedValue,
-    assessedYear: raw.assessedYear,
-  }
-}
-
-const RECORDS: ParcelRecord[] = (sample as RawParcel[]).map(toParcelRecord)
+const RECORDS: ParcelRecord[] = sample
 
 const BY_PIN = new Map(RECORDS.map((record) => [normalizePin(record.pin), record]))
 
@@ -83,4 +66,4 @@ export function createFixtureParcelService(): ParcelService {
 }
 
 /** The raw fixture, for seeding the demo data only. Not for app code. */
-export const RAW_PARCEL_FIXTURE = sample as RawParcel[]
+export const RAW_PARCEL_FIXTURE: ParcelRecord[] = sample

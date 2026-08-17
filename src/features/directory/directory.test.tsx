@@ -92,7 +92,9 @@ describe('detail view', () => {
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
 
     expect(screen.getByRole('button', { name: /Refresh/ })).toBeDisabled()
-    expect(screen.getByText('Not connected')).toBeInTheDocument()
+    // The card reports when the county last touched the record, taken from the
+    // parcel roll's Date_Updated. There is no assessment-year field to show.
+    expect(screen.getByText(/County last updated/)).toBeInTheDocument()
   })
 
   it('derives the jurisdiction from the PIN instead of storing it', async () => {
@@ -202,7 +204,7 @@ describe('creating a record', () => {
     await user.click(within(dialog).getByRole('button', { name: /Add property/ }))
 
     // The bad PIN is rejected with an explanation, and the dialog stays open.
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/11 characters/)
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/11 or 12 characters/)
 
     await user.clear(pinField)
     await user.type(pinField, '20032 63099')

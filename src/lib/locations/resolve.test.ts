@@ -140,7 +140,7 @@ describe('property', () => {
   it('falls back to geocoding the situs address when there is no parcel', () => {
     const lot = entity('lot', 'property', 'Unplatted', {
       pin: '29999 99999',
-      situsAddress: '2412 Waters Ave, Savannah, GA 31404',
+      situsAddress: '3135 Robertson Ave, Savannah, GA 31404',
     })
     const resolved = resolveLocation(lot, context([lot]))
 
@@ -214,7 +214,7 @@ describe('business', () => {
   it('is at its office address, not at a lot it holds title to', () => {
     const lot = entity('lot', 'property', 'A lot', { pin: PLATTED_PIN })
     const vendor = entity('biz', 'business', 'A Vendor LLC', {
-      mailingAddress: '2412 Waters Ave, Savannah, GA 31404',
+      mailingAddress: '3135 Robertson Ave, Savannah, GA 31404',
     })
     const ctx = context([vendor, lot], [relation('r', 'rt-owns', 'biz', 'lot')])
     const resolved = resolveLocation(vendor, ctx)

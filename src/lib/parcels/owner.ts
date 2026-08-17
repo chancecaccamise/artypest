@@ -39,6 +39,13 @@ export const OWNER_TRUNCATION_LENGTH = 40
 const NAME_SUFFIXES = new Set(['JR', 'SR', 'II', 'III', 'IV', 'V'])
 
 /**
+ * `V` is both a generational suffix and a middle initial, and `WILSON C V VAN`
+ * is a real owner where it is the initial. Only treat these as a suffix in the
+ * one position where that reading is the natural one: last.
+ */
+const POSITIONAL_SUFFIXES = new Set(['V'])
+
+/**
  * Tokens that mean the owner is an organisation. Matched against whole words,
  * so `TRUSTMAN` is not a trust and `LPGA` is not a limited partnership.
  */
@@ -194,13 +201,36 @@ export function classifyOwner(name: string): OwnerKind {
 
 /* -------------------------------------------------------------- parsing -- */
 
-function personFrom(surname: string, given: string): PersonName {
+/**
+ * Pulls generational suffixes out of a token run, wherever the county put them.
+ * `LYNCH LAWRENCE J JR` and `NORCIA, III MATTHEW M.` both carry one in the
+ * middle, so they cannot be treated as a trailing token.
+ */
+function extractSuffixes(tokens: string[]): { tokens: string[]; suffixes: string[] } {
+  const suffixes: string[] = []
+  const rest: string[] = []
+
+  tokens.forEach((token, index) => {
+    const bare = token.toUpperCase().replace(/\./g, '')
+    const isLast = index === tokens.length - 1
+    if (NAME_SUFFIXES.has(bare) && (!POSITIONAL_SUFFIXES.has(bare) || isLast)) {
+      suffixes.push(token)
+    } else {
+      rest.push(token)
+    }
+  })
+
+  return { tokens: rest, suffixes }
+}
+
+function personFrom(surname: string, given: string, suffixes: string[] = []): PersonName {
   const cleanSurname = surname.trim()
   const cleanGiven = given.trim()
-  const display = [cleanGiven, cleanSurname]
+  const display = [cleanGiven, cleanSurname, ...suffixes]
     .filter((part) => part !== '')
     .join(' ')
     .split(' ')
+    .filter((token) => token !== '')
     .map(formatNameToken)
     .join(' ')
 
@@ -215,28 +245,44 @@ function personFrom(surname: string, given: string): PersonName {
  * `WILSON C V VAN` has four tokens and no comma, and no rule resolves it.
  */
 function parseSingleName(segment: string): { person: PersonName; confidence: OwnerConfidence } {
-  const commaIndex = segment.indexOf(',')
+  // `ET AL` means there are owners the county did not name, so whatever is read
+  // here is incomplete by definition.
+  const etAl = /\bET\s+AL\b/i.test(segment)
+  const withoutEtAl = segment.replace(/\bET\s+AL\b/gi, ' ').replace(/\s+/g, ' ').trim()
+
+  const commaIndex = withoutEtAl.indexOf(',')
   if (commaIndex !== -1) {
-    const surname = segment.slice(0, commaIndex)
-    const given = segment.slice(commaIndex + 1)
-    return { person: personFrom(surname, given), confidence: 'high' }
+    const surnameTokens = withoutEtAl.slice(0, commaIndex).split(' ').filter((t) => t !== '')
+    const givenTokens = withoutEtAl.slice(commaIndex + 1).split(' ').filter((t) => t !== '')
+    const surname = extractSuffixes(surnameTokens)
+    const given = extractSuffixes(givenTokens)
+    return {
+      person: personFrom(surname.tokens.join(' '), given.tokens.join(' '), [
+        ...surname.suffixes,
+        ...given.suffixes,
+      ]),
+      confidence: etAl ? 'low' : 'high',
+    }
   }
 
-  const tokens = segment.split(' ').filter((token) => token !== '')
+  const { tokens, suffixes } = extractSuffixes(
+    withoutEtAl.split(' ').filter((token) => token !== '')
+  )
+
   if (tokens.length === 0) {
-    return { person: personFrom('', ''), confidence: 'low' }
+    return { person: personFrom('', '', suffixes), confidence: 'low' }
   }
   if (tokens.length === 1) {
     // A surname with no given name, or a given name with no surname. Unknowable.
-    return { person: personFrom(tokens[0] ?? '', ''), confidence: 'low' }
+    return { person: personFrom(tokens[0] ?? '', '', suffixes), confidence: 'low' }
   }
 
   const [surname, ...given] = tokens
   // Surname plus up to two given tokens reads cleanly. More than that and the
   // boundary is a guess, so say so.
-  const confidence: OwnerConfidence = given.length <= 2 ? 'high' : 'low'
+  const confidence: OwnerConfidence = given.length <= 2 && !etAl ? 'high' : 'low'
 
-  return { person: personFrom(surname ?? '', given.join(' ')), confidence }
+  return { person: personFrom(surname ?? '', given.join(' '), suffixes), confidence }
 }
 
 /**
@@ -266,17 +312,19 @@ function parsePersonField(text: string): { people: PersonName[]; confidence: Own
     const right = segments[1] ?? ''
 
     if (leftTokens.length >= 2) {
-      const [surname, ...given] = leftTokens
+      const left = extractSuffixes(leftTokens)
+      const [surname, ...given] = left.tokens
       const rightTokens = right.split(' ').filter((token) => token !== '')
 
       // `ANDRESEN ROBERT A. & ANDRESEN BARBARA F.` repeats the surname, so the
       // right side is a whole name rather than a bare given name.
       const rightRepeatsSurname = rightTokens.length >= 2 && rightTokens[0] === surname
+      const rightParts = extractSuffixes(rightTokens)
       const second = rightRepeatsSurname
-        ? personFrom(rightTokens[0] ?? '', rightTokens.slice(1).join(' '))
-        : personFrom(surname ?? '', right)
+        ? personFrom(rightParts.tokens[0] ?? '', rightParts.tokens.slice(1).join(' '), rightParts.suffixes)
+        : personFrom(surname ?? '', rightParts.tokens.join(' '), rightParts.suffixes)
 
-      const first = personFrom(surname ?? '', given.join(' '))
+      const first = personFrom(surname ?? '', given.join(' '), left.suffixes)
       return { people: [first, second], confidence: given.length <= 2 ? 'high' : 'low' }
     }
 

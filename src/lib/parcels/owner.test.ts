@@ -75,7 +75,8 @@ describe('toDisplayName', () => {
   })
 
   it('keeps a roman numeral suffix in capitals', () => {
-    expect(toDisplayName('RUTLEDGE, HAROLD III')).toBe('Harold III Rutledge')
+    // The suffix moves to the end, where a person would write it.
+    expect(toDisplayName('RUTLEDGE, HAROLD III')).toBe('Harold Rutledge III')
   })
 })
 
@@ -211,5 +212,59 @@ describe('real SAGIS owner strings', () => {
   it('normalises the space-separated form onto a stored readable name', () => {
     expect(normalizeOwnerName('RANDALL ZOE')).toBe(normalizeOwnerName('Zoe Randall'))
     expect(normalizeOwnerName('BRUEN GARRETT JOHN')).toBe(normalizeOwnerName('Garrett John Bruen'))
+  })
+})
+
+/*
+  Cases found only after the fixture was rebuilt from real E 49th St records.
+  Each one is a live value.
+*/
+describe('owner strings from the Ardsley Park fixture', () => {
+  it('moves a generational suffix out of the middle of the name', () => {
+    const parsed = parseOwner('LYNCH LAWRENCE J JR & SHARON COOPER*')
+    expect(parsed.people[0]?.display).toBe('Lawrence J. Lynch Jr')
+    expect(parsed.confidence).toBe('high')
+  })
+
+  it('reads a suffix that sits before the given name', () => {
+    // NORCIA, III MATTHEW M. puts the suffix first, after the comma.
+    expect(parseOwner('NORCIA, III MATTHEW M.').people[0]?.display).toBe('Matthew M. Norcia III')
+  })
+
+  it('does not mistake a middle initial V for a generational suffix', () => {
+    expect(parseOwner('WILSON C V VAN').confidence).toBe('low')
+    expect(parseOwner('RUTLEDGE HAROLD V').people[0]?.display).toBe('Harold Rutledge V')
+  })
+
+  it('treats ET AL as owners the county did not name', () => {
+    const parsed = parseOwner('GREEN DAVID DARNELL ET AL*')
+    expect(parsed.people[0]?.display).toBe('David Darnell Green')
+    // There are other owners, so this reading is incomplete by definition.
+    expect(parsed.confidence).toBe('low')
+  })
+
+  it('interleaves two surnames with two given names', () => {
+    const parsed = parseOwner('CANTWELL & PRZYBYL MEREDITH & NICHOLAS*')
+    expect(parsed.people.map((person) => person.display)).toEqual([
+      'Meredith Cantwell',
+      'Nicholas Przybyl',
+    ])
+  })
+
+  it('handles a trust whose name is cut off mid-word across both fields', () => {
+    // Owner ends "...OF THE DO" and Owner2 begins "WELL FAMILY TRUST".
+    const parsed = parseOwner(
+      'DIANE DOWELL SATURDAY, TRUSTEE OF THE DO',
+      'WELL FAMILY TRUST DATED JULY 1, 2008'
+    )
+    expect(parsed.kind).toBe('business')
+    expect(parsed.truncated).toBe(true)
+    expect(parsed.confidence).toBe('low')
+  })
+
+  it('reads a plain two-token owner with confidence', () => {
+    const parsed = parseOwner('WILLIAMS PATRICK')
+    expect(parsed.display).toBe('Patrick Williams')
+    expect(parsed.confidence).toBe('high')
   })
 })

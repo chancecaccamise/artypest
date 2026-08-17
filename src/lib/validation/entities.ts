@@ -64,7 +64,10 @@ const optionalPin = z
   .transform((value) => (value === '' ? null : normalizePin(value)))
   .nullable()
   .refine((value) => value === null || isValidPin(value), {
-    message: 'A PIN is 11 characters: 20032 63001 with a space, or 10993C01034 with a letter.',
+    // Three real shapes, see docs/SAGIS-API.md. The 12-character form has both
+    // a space and a trailing letter, and is a real parcel.
+    message:
+      'A PIN is 11 or 12 characters: 20074 45001 with a space, 10025C01001 with a letter, or 10011 02012C with both.',
   })
 
 export const personDataSchema = z.object({
@@ -84,9 +87,17 @@ export const propertyDataSchema = z.object({
   // what is actually there. Collapsing them breaks the core query.
   zoning: optionalText,
   propertyUse: optionalText,
+  /** The county's Board of Assessors class code, for example R3. */
+  propertyUseCode: optionalText,
   acreage: optionalNumber,
+  fairMarketValue: optionalNumber,
+  /** 40% of fair market value, which is Georgia's assessment ratio. */
   assessedValue: optionalNumber,
-  assessedYear: optionalYear,
+  /**
+   * When the county last touched the parcel. There is no assessment-year field
+   * on the parcel roll, so this is the closest thing to one.
+   */
+  parcelUpdatedAt: optionalText,
   yearBuilt: optionalYear,
   squareFeet: optionalNumber,
   parcelSource: optionalText,

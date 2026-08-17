@@ -494,9 +494,12 @@ function PreviewStep({
                   <Td>{parcel.situsAddress}</Td>
                   <Td className="font-mono text-xs">{parcel.ownerName}</Td>
                   <Td className="text-right font-mono text-xs">{formatAcreage(parcel.acreage)}</Td>
-                  <Td className="font-mono text-xs">{parcel.zoningDistrict}</Td>
+                  <Td className="font-mono text-xs">
+                    {/* Null outside city limits: the zoning layer is Savannah only. */}
+                    {parcel.zoningDistrict ?? 'Not available'}
+                  </Td>
                   <Td className="text-right font-mono text-xs">
-                    {formatCurrency(parcel.assessedValue)}
+                    {formatCurrency(parcel.totalAssessment)}
                   </Td>
                 </Tr>
               )
@@ -683,8 +686,10 @@ function MatchRow({ row, onUpdate }: { row: PlanRow; onUpdate: (patch: Partial<P
 
           {row.propertyAction === 'create_property' ? (
             <p className="text-ink-muted font-mono text-xs">
-              {row.parcel.zoningDistrict} · {formatAcreage(row.parcel.acreage)} ·{' '}
-              {formatCurrency(row.parcel.assessedValue)} ({row.parcel.assessedYear})
+              {row.parcel.zoningDistrict ?? 'Zoning not available'} ·{' '}
+              {formatAcreage(row.parcel.acreage)} ·{' '}
+              {formatCurrency(row.parcel.totalAssessment)}
+              {row.parcel.dateUpdated === null ? '' : ` (county updated ${row.parcel.dateUpdated})`}
             </p>
           ) : row.changes.length === 0 ? (
             <p className="text-ink-faint text-xs">

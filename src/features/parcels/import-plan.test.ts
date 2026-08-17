@@ -22,11 +22,22 @@ function parcel(overrides: Partial<ParcelRecord> = {}): ParcelRecord {
     pin: '20032 63001',
     situsAddress: '1207 E Washington Ave',
     ownerName: 'SMITH, JOHN A',
-    ownerMailingAddress: '1207 E Washington Ave, Savannah, GA 31405',
+    ownerName2: null,
+    ownerMailingAddress: {
+      street: '1207 E Washington Ave',
+      city: 'Savannah',
+      state: 'GA',
+      zip: '31405',
+    },
     acreage: 0.22,
-    zoningDistrict: 'R-6',
-    assessedValue: 412000,
-    assessedYear: 2026,
+    zoningDistrict: 'RSF-6',
+    propertyUseCode: 'R3',
+    fairMarketValue: 1_030_000,
+    totalAssessment: 412000,
+    yearBuilt: 1926,
+    legalDescription: 'LOTS 12 AND 13 PIERPONT WARD',
+    municipalityCode: '020',
+    dateUpdated: '2025-05-06',
     ...overrides,
   }
 }
@@ -66,25 +77,35 @@ describe('diffParcelAgainstProperty', () => {
     const stored = property({
       pin: '20032 63001',
       situsAddress: '1207 E Washington Ave',
-      zoning: 'R-6',
+      zoning: 'RSF-6',
+      propertyUseCode: 'R3',
       acreage: 0.22,
       assessedValue: 375000,
-      assessedYear: 2025,
+      fairMarketValue: 937_500,
     })
 
     const changes = diffParcelAgainstProperty(parcel(), stored)
-    expect(changes.map((change) => change.field)).toEqual(['assessedValue', 'assessedYear'])
-    expect(changes[0]).toMatchObject({ from: '375000', to: '412000' })
+    expect(changes.map((change) => change.field)).toEqual([
+      'fairMarketValue',
+      'assessedValue',
+      'parcelUpdatedAt',
+    ])
+    expect(changes.find((change) => change.field === 'assessedValue')).toMatchObject({
+      from: '375000',
+      to: '412000',
+    })
   })
 
   it('reports nothing when the stored record already matches the roll', () => {
     const stored = property({
       pin: '20032 63001',
       situsAddress: '1207 E Washington Ave',
-      zoning: 'R-6',
+      zoning: 'RSF-6',
+      propertyUseCode: 'R3',
       acreage: 0.22,
       assessedValue: 412000,
-      assessedYear: 2026,
+      fairMarketValue: 1_030_000,
+      parcelUpdatedAt: '2025-05-06',
     })
 
     expect(diffParcelAgainstProperty(parcel(), stored)).toEqual([])
@@ -95,7 +116,7 @@ describe('diffParcelAgainstProperty', () => {
     const changes = diffParcelAgainstProperty(parcel(), stored)
     expect(changes.find((change) => change.field === 'zoning')).toMatchObject({
       from: null,
-      to: 'R-6',
+      to: 'RSF-6',
     })
   })
 })
@@ -107,8 +128,11 @@ describe('parcelToPropertyData', () => {
 
     // Zoning is the regulatory district and comes from the roll. Property use
     // is what is actually there and must survive the import untouched.
-    expect(next.zoning).toBe('R-6')
+    expect(next.zoning).toBe('RSF-6')
     expect(next.propertyUse).toBe('commercial')
+    // The county's own class code arrives under its own key, so the two sit
+    // side by side rather than one overwriting the other.
+    expect(next.propertyUseCode).toBe('R3')
   })
 
   it('normalises the PIN and marks the source as imported', () => {
@@ -221,6 +245,7 @@ describe('summarizePlan', () => {
     ownerMatchConfidence: null,
     ownerKind: 'person',
     ownerDisplayName: 'John A. Smith',
+    ownerNameConfidence: 'high',
     ownershipAlreadyRecorded: false,
   }
 
@@ -338,7 +363,7 @@ describe('applyImportPlan', () => {
     const originalUse = target.data.propertyUse
 
     const rows = await planFor([
-      parcel({ pin: String(target.data.pin), assessedValue: 999_500, zoningDistrict: 'TC-1' }),
+      parcel({ pin: String(target.data.pin), totalAssessment: 999_500, zoningDistrict: 'TC-1' }),
     ])
 
     await applyImportPlan({ rows, provider, ownsRelationTypeId: 'rt-owns' })

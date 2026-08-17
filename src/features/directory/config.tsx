@@ -284,8 +284,24 @@ const propertyConfig: DirectoryConfig = {
     { key: 'situsAddress', label: 'Situs address', hiddenFromGrid: true },
     { key: 'zoning', label: 'Zoning district', format: 'reference', referenceList: 'zoning', hiddenFromGrid: true },
     { key: 'acreage', label: 'Acreage', format: 'acreage', hiddenFromGrid: true },
+    {
+      key: 'propertyUseCode',
+      label: 'County class code',
+      format: 'mono',
+      hiddenFromGrid: true,
+    },
+    {
+      key: 'fairMarketValue',
+      label: 'Fair market value',
+      format: 'currency',
+      hiddenFromGrid: true,
+    },
     { key: 'assessedValue', label: 'Assessed value', format: 'currency', hiddenFromGrid: true },
-    { key: 'assessedYear', label: 'Assessed year', format: 'year', hiddenFromGrid: true },
+    /*
+      The parcel roll has no assessment-year field. This is when the county last
+      touched the record, which is the closest thing it publishes.
+    */
+    { key: 'parcelUpdatedAt', label: 'County last updated', hiddenFromGrid: true },
     { key: 'pin', label: 'Parcel number', format: 'mono', hiddenFromGrid: true },
     { key: 'parcelSource', label: 'Parcel source', hiddenFromGrid: true },
     { key: 'notes', label: 'Notes', format: 'longtext', internal: true, hiddenFromGrid: true },

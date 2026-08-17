@@ -153,11 +153,15 @@ describe('parcel geometry', () => {
     }
   })
 
-  it('includes the two common areas as ordinary parcels', () => {
-    const common = PARCELS.features.filter((feature) => feature.properties.commonArea)
-    expect(common).toHaveLength(2)
-    // They carry PINs like any other lot, so nothing downstream special-cases them.
-    for (const feature of common) {
+  it('carries nothing but a PIN, so the parcel roll stays the only source', () => {
+    /*
+      The geometry used to be generated, and carried invented flags like
+      commonArea. It is now real SAGIS output for E 49th St, where the only
+      property is the PIN and everything else about a lot is looked up from the
+      parcel record. See docs/SAGIS-API.md.
+    */
+    for (const feature of PARCELS.features) {
+      expect(Object.keys(feature.properties)).toEqual(['pin'])
       expect(isValidPin(feature.properties.pin)).toBe(true)
     }
   })
