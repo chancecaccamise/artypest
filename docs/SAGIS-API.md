@@ -280,6 +280,36 @@ So DPLAT cannot be the plat view's geometry source. Parcel polygons cover the
 whole county and have to be the base, with DPLAT layers (common areas,
 easements, setback lines) as an enhancement where they exist.
 
+## Harvesting a whole area
+
+`resultRecordCount` is not honoured once geometry is involved, and the shortfall
+is reported only through `exceededTransferLimit`, which is easy to miss:
+
+```
+asked   60 -> got   53        asked 1000 -> got  974
+asked  200 -> got  191        asked 2000 -> got 1957
+asked  500 -> got  487
+```
+
+So `resultOffset` paging loses 2% to 12% of rows with no error. That is how a
+harvest ends up missing parcels without anyone noticing.
+
+Two things do not have this problem:
+
+- `returnIdsOnly=true` returns the complete OBJECTID list in one request. IDs are
+  small, so the transfer limit never bites. It answered with all 26,447 IDs for a
+  wide bounding box, every one distinct.
+- Fetching by explicit `objectIds` returns exactly what was asked for. 250
+  requested, 250 returned, `exceededTransferLimit` absent.
+
+`scripts/sagis/harvest.mjs` therefore asks for the manifest, fetches those IDs in
+chunks of 250, and asserts every one came back. Coverage becomes checkable rather
+than hoped for: the service reports 10,399 parcels for the current corridor and
+the harvest writes 10,399.
+
+Queries go over POST. A neighborhood polygon and a 250-item ID list both exceed
+what a URL will carry.
+
 ## Reproducing any of this
 
 Every check in this document is a single curl. For example, the owner-format

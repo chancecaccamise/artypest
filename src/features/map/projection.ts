@@ -25,6 +25,12 @@ export interface ParcelPath {
   centroid: [number, number]
   /** Projected area in square pixels, for gating labels on legibility. */
   area: number
+  /**
+   * Projected bounds, for viewport culling. With the harvested corridor loaded
+   * the plat holds over ten thousand lots, and drawing the ones that are off
+   * screen is the difference between panning smoothly and not.
+   */
+  bounds: [minX: number, minY: number, maxX: number, maxY: number]
   commonArea: string | null
 }
 
@@ -64,41 +70,81 @@ const PADDING = 16
   and Mapbox reads it correctly. The reversal lives here instead, in the file
   the Mapbox swap deletes. It runs once at module load, not per render.
 */
-const D3_PARCELS: FeatureCollection<Polygon, ParcelProperties> = {
-  type: 'FeatureCollection',
-  features: PARCELS.features.map((feature) => ({
-    ...feature,
-    geometry: {
-      ...feature.geometry,
-      coordinates: feature.geometry.coordinates.map((ring) => [...ring].reverse()),
-    },
-  })),
+function reverseWinding(
+  collection: FeatureCollection<Polygon, ParcelProperties>
+): FeatureCollection<Polygon, ParcelProperties> {
+  return {
+    type: 'FeatureCollection',
+    features: collection.features.map((feature) => ({
+      ...feature,
+      geometry: {
+        ...feature.geometry,
+        coordinates: feature.geometry.coordinates.map((ring) => [...ring].reverse()),
+      },
+    })),
+  }
 }
 
-export function buildProjection(width: number, height: number): PlatProjection {
+/** The committed 40-lot fixture, reversed once at module load. */
+const D3_PARCELS = reverseWinding(PARCELS)
+
+/*
+  The harvested corridor is fetched rather than bundled, so it arrives later and
+  has to be reversed then. Cached by identity: the collection is loaded once for
+  the life of the page, and reversing ten thousand polygons on every resize would
+  undo the point of computing paths per size rather than per frame.
+*/
+const reversedCache = new WeakMap<
+  FeatureCollection<Polygon, ParcelProperties>,
+  FeatureCollection<Polygon, ParcelProperties>
+>()
+
+function d3Parcels(
+  collection?: FeatureCollection<Polygon, ParcelProperties>
+): FeatureCollection<Polygon, ParcelProperties> {
+  if (!collection) return D3_PARCELS
+
+  const cached = reversedCache.get(collection)
+  if (cached) return cached
+
+  const reversed = reverseWinding(collection)
+  reversedCache.set(collection, reversed)
+  return reversed
+}
+
+export function buildProjection(
+  width: number,
+  height: number,
+  /** Defaults to the committed fixture, which is what the tests use. */
+  collection?: FeatureCollection<Polygon, ParcelProperties>
+): PlatProjection {
   const safeWidth = Math.max(width, 1)
   const safeHeight = Math.max(height, 1)
+
+  const source = d3Parcels(collection)
 
   const projection: GeoProjection = geoMercator().fitExtent(
     [
       [PADDING, PADDING],
       [Math.max(safeWidth - PADDING, PADDING + 1), Math.max(safeHeight - PADDING, PADDING + 1)],
     ],
-    D3_PARCELS
+    source
   )
 
   const path = geoPath(projection)
 
   const parcels: ParcelPath[] = []
-  for (const feature of D3_PARCELS.features) {
+  for (const feature of source.features) {
     const d = path(feature)
     if (!d) continue
     const [cx, cy] = path.centroid(feature)
+    const [[minX, minY], [maxX, maxY]] = path.bounds(feature)
     parcels.push({
       pin: normalizePin(feature.properties.pin),
       d,
       centroid: [cx ?? 0, cy ?? 0],
       area: path.area(feature),
+      bounds: [minX, minY, maxX, maxY],
       commonArea: feature.properties.commonArea ?? null,
     })
   }

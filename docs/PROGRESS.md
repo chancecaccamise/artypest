@@ -280,3 +280,80 @@ to the Supabase provider. The parcel and geocoding seams are already swapped and
 tested, so nothing in that work touches SAGIS. Ask the Board of Assessors for the
 property class code table, and ask SAGIS whether the zoning layer's two code
 vintages are documented anywhere.
+
+## 2026-08-17: the corridor, MLK to E Broad, river to DeRenne
+
+**Did.** Replaced the 60-parcel single-street fixture with 10,399 real parcels
+covering the corridor from the Savannah River down to DeRenne Avenue, between
+MLK Jr Blvd and E Broad Street. That is both Historic Districts, Thomas Square,
+Midtown, Live Oak, Beach Institute, the Victorian districts, and most of Ardsley
+Park, across 27 neighborhoods.
+
+*Why the old fixture was so small.* It was selected by an address predicate,
+`PropAddress_StreetName='49TH'`, which is one street. Everything else was missing
+because nothing had ever asked for it.
+
+*The bug that mattered.* SAGIS truncates any query returning geometry and reports
+it only through an `exceededTransferLimit` flag. Asking for 2000 features returns
+1957, asking for 60 returns 53, asking for 500 returns 487. So `resultOffset`
+paging, which the old generator used, silently drops 2% to 12% of rows. That is
+exactly how a map ends up missing a neighborhood.
+
+Two things do not have that problem: `returnIdsOnly` returns the complete
+OBJECTID list in one request, and fetching by explicit `objectIds` returns
+precisely what was asked for. `scripts/sagis/harvest.mjs` asks for the manifest,
+fetches those IDs in chunks of 250, and asserts every one came back. Coverage is
+checked rather than hoped for.
+
+*Coverage is a contract.* `scripts/sagis/coverage.mjs` holds the corridor bounds,
+taken from real street centreline geometry rather than drawn by eye. Every parcel
+is tagged with the neighborhood containing its centroid, and
+`src/lib/parcels/coverage-manifest.json`, which is committed, records harvested
+against total for each of the 27. A partial clip like "Eastside 564 of 767" is
+visible as a decision instead of being mistaken later for a gap.
+
+*Storage.* 14MB across three files, none committed. `data/sagis/parcels.ndjson`
+is one JSON object per line, which is what loads into Postgres, so the harvest is
+not thrown away at the swap. The app fetches `public/parcels/attributes.json`
+before first render and lazy-loads the geometry only when the map opens. Neither
+is bundled: the JS bundle did not move.
+
+*One record per parcel, without breaking the dashboard.* Every parcel is a
+property record, so the directory lists all 10,436. Association membership is now
+a `member_of` relation to the association, the same shape `CLAUDE.md` specifies
+for board seats, and `computeStats` and `computeOccupancy` read that instead of
+every property. The dashboard still says 48 lots at 54% owner occupied.
+
+Owner entities were deliberately not expanded. That would add roughly 8,000 more
+people and businesses, and the parcel import is the feature that exists to create
+owners deliberately. County owner names sit on the property record, so they stay
+searchable.
+
+*The plat.* Viewport culling in `PlatView.tsx`, with a 3,000 lot ceiling and an
+on-screen notice when it bites, because a plat that has quietly dropped two
+thirds of the city looks exactly like a plat of a smaller city.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 350 tests, and a
+production build. The harvest was checked against the service independently: a
+`returnCountOnly` query reports 10,399 for the corridor and the harvest wrote
+10,399, and two spot-checked PINs match the live records field for field. The
+real 10,399 records were run through the whole boot path: 10,436 properties,
+10,527 entities, built in 56ms, audit log still 54 entries.
+
+**Two things this surfaced, both real bugs.** `at()` wraps with modulo, so
+growing the `properties` array from 48 to 10,447 silently re-pointed a dozen
+fixed indices at county parcels and moved the occupancy figures. County parcels
+are now appended only after the association's own data is fully wired. And Vite
+answers an unknown path with `index.html` at status 200, so the loader checks the
+content type before believing it found a slice, which is verified against the
+real dev server.
+
+**Not done, and why.** Still no Supabase, no migrations, no RLS: Docker is not
+installed and the schema needs `docs/BUILD-PLAN.md`. Nothing refreshes the
+harvest. The corridor is a rectangle in latitude and longitude while Savannah's
+grid is rotated, so its edges follow MLK and E Broad exactly only in the Historic
+District and drift slightly further south.
+
+**Next.** Install Docker, write the migrations, and load `parcels.ndjson` into
+Postgres. `initializeData` and the served slice both go away with the provider
+swap, which is the point of writing the harvest out in that shape.

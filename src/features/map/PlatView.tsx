@@ -14,6 +14,7 @@ import { Crosshair, Maximize2, Minus, Plus } from 'lucide-react'
 
 import { arcColor, arcPath, type MapArc } from './arcs'
 import { buildProjection, shouldLabel, shouldLabelStreet, type ParcelPath } from './projection'
+import { useHarvestedParcels } from './use-harvested-parcels'
 import type { Theming } from './theming'
 import { Button } from '@/components/ui/button'
 import { entityTypeColor } from '@/components/ui/badge'
@@ -37,6 +38,19 @@ import { cn } from '@/lib/utils'
 
 const MIN_ZOOM = 0.5
 const MAX_ZOOM = 20
+
+/*
+  The most lots drawn at once. Above roughly this many an SVG plat stops panning
+  smoothly, and the harvested corridor holds 10,399. At any zoom where a reader
+  is looking at lots rather than at the shape of the city, far fewer than this
+  are on screen, so the cap only bites when fully zoomed out. When it does, the
+  plat says so: quietly drawing part of the neighbourhood would be the same
+  silent-gap problem the harvester exists to prevent.
+*/
+const MAX_DRAWN_PARCELS = 3000
+
+/** Below this the plat draws every lot and never consults the viewport. */
+const CULL_THRESHOLD = 500
 
 export interface PlatMarker {
   entity: Entity
@@ -131,10 +145,59 @@ export function PlatView({
     group does all navigation. Recomputing path data per pan frame is the one
     mistake that makes this feel slow.
   */
+  const harvested = useHarvestedParcels()
+
   const projection = useMemo(
-    () => buildProjection(size.width, size.height),
-    [size.width, size.height]
+    () => buildProjection(size.width, size.height, harvested.collection ?? undefined),
+    [size.width, size.height, harvested.collection]
   )
+
+  /*
+    Only the lots on screen are drawn.
+
+    With the harvested corridor loaded this is over ten thousand polygons, and
+    an SVG that renders all of them repaints every pan frame. The path strings
+    are still computed once per size, as before: this decides which of them the
+    browser is asked to lay out.
+
+    Fully zoomed out every lot is on screen and culling cannot help, so there is
+    also a ceiling. When it bites the plat says so rather than quietly drawing
+    part of the neighbourhood, which would be the same silent-gap problem the
+    harvester exists to avoid.
+  */
+  const visibleParcels = useMemo(() => {
+    /*
+      A small plat is drawn whole. Culling buys nothing at 40 lots, and it costs
+      correctness anywhere the container has not been measured yet: an unmeasured
+      element is one pixel wide, every lot falls outside it, and the plat renders
+      empty. Below this many parcels the viewport is not consulted at all.
+    */
+    if (projection.parcels.length <= CULL_THRESHOLD) {
+      return { parcels: projection.parcels, capped: 0 }
+    }
+
+    const { k, x, y } = transform
+    // The viewport in pre-transform space, which is what bounds are measured in.
+    const left = -x / k
+    const top = -y / k
+    const right = (size.width - x) / k
+    const bottom = (size.height - y) / k
+
+    const onScreen = projection.parcels.filter((parcel) => {
+      const [minX, minY, maxX, maxY] = parcel.bounds
+      return maxX >= left && minX <= right && maxY >= top && minY <= bottom
+    })
+
+    if (onScreen.length <= MAX_DRAWN_PARCELS) return { parcels: onScreen, capped: 0 }
+
+    // Largest first, so what survives the cap is the lots a reader can actually
+    // see rather than an arbitrary slice of the list.
+    const ranked = [...onScreen].sort((a, b) => b.area - a.area)
+    return {
+      parcels: ranked.slice(0, MAX_DRAWN_PARCELS),
+      capped: onScreen.length - MAX_DRAWN_PARCELS,
+    }
+  }, [projection.parcels, transform, size.width, size.height])
 
   useEffect(() => {
     const svg = svgRef.current
@@ -243,12 +306,27 @@ export function PlatView({
 
   return (
     <div ref={containerRef} className={cn('relative h-full w-full overflow-hidden', className)}>
+      {/*
+        Said out loud, because a plat that has quietly dropped two thirds of the
+        city looks exactly like a plat of a smaller city.
+      */}
+      {visibleParcels.capped > 0 ? (
+        <div className="border-rule bg-paper-raised text-ink-muted absolute top-2 left-2 z-10 rounded-[3px] border px-2 py-1 text-xs">
+          Showing {visibleParcels.parcels.length.toLocaleString()} of{' '}
+          {projection.parcels.length.toLocaleString()} lots. Zoom in to see the rest.
+        </div>
+      ) : null}
+
       <svg
         ref={svgRef}
         width={size.width}
         height={size.height}
         role="img"
-        aria-label={`Plat of the subdivision, ${projection.parcels.length} lots`}
+        aria-label={
+          visibleParcels.capped > 0
+            ? `Plat, showing ${visibleParcels.parcels.length} of ${projection.parcels.length} lots. Zoom in for the rest.`
+            : `Plat of the subdivision, ${projection.parcels.length} lots`
+        }
         className={cn(
           'block h-full w-full touch-none',
           placingEntity ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'
@@ -259,7 +337,7 @@ export function PlatView({
           {/* Layer order matches the Mapbox implementation's, so the mental
               model transfers even though the code does not. */}
           <g className="parcels">
-            {projection.parcels.map((parcel) => (
+            {visibleParcels.parcels.map((parcel) => (
               <Parcel
                 key={parcel.pin}
                 parcel={parcel}
@@ -333,7 +411,7 @@ export function PlatView({
               ) : null
             )}
 
-            {projection.parcels.map((parcel) =>
+            {visibleParcels.parcels.map((parcel) =>
               shouldLabel(parcel, zoomLevel) ? (
                 <text
                   key={`lot-${parcel.pin}`}

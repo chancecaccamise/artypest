@@ -52,7 +52,15 @@ supabase stop
 supabase db reset     # drop, re-run all migrations, re-seed
 supabase migration new <name>
 supabase gen types typescript --local > src/types/database.ts
+
+pnpm sagis:harvest    # download the parcel corridor from the county service
 ```
+
+`pnpm sagis:harvest` writes ~14MB to `data/` and `public/parcels/`, none of it
+committed, so a fresh clone has no parcel layer until it runs. The app falls back
+to the 60-parcel fixture in the meantime, which works but only covers one street.
+Coverage is defined in `scripts/sagis/coverage.mjs` and recorded in
+`src/lib/parcels/coverage-manifest.json`. See `docs/SAGIS-API.md`.
 
 `pnpm verify` must pass before any commit. No exceptions.
 
