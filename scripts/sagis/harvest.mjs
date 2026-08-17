@@ -22,6 +22,7 @@
     data/sagis/parcels.ndjson             full records with geometry, for Postgres
     public/parcels/attributes.json        slim, no geometry, for the app
     public/parcels/geometry.json          GeoJSON, lazy loaded by the map
+    public/parcels/streets.json           street centrelines, lazy loaded
     src/lib/parcels/coverage-manifest.json  what was covered, and how completely
 
   Nothing here is random and nothing reads the clock except the harvest date, so
@@ -47,6 +48,7 @@ import {
   objectIdsFor,
   PARCEL_LAYER,
   query,
+  ROADS_LAYER,
   ZONING_LAYER,
 } from './client.mjs'
 
@@ -242,6 +244,59 @@ const zoningFeatures = zoning.features ?? []
 console.log(`  ${zoningFeatures.length} zoning polygons`)
 const locateZoning = makeLocator(zoningFeatures)
 
+/* --------------------------------------------------------------- streets -- */
+
+/*
+  The street centrelines are what make the plat readable at anything wider than
+  a block. Zoomed out to the whole corridor a lot is about three square pixels,
+  so the parcels read as a tint and the streets carry the structure.
+
+  Fetched by ID for the same reason the parcels are: 3,004 segments is well past
+  the point where the transfer limit starts quietly dropping rows.
+*/
+console.log('\nFetching street centrelines...')
+const roadIds = await objectIdsFor(ROADS_LAYER, envelope)
+console.log(`  ${roadIds.length.toLocaleString()} segments in the corridor`)
+
+const roads = await fetchByIds(
+  ROADS_LAYER,
+  roadIds,
+  { outFields: 'OBJECTID,FULLNAME,RD_CLASS', returnGeometry: 'true' },
+  { onProgress: progress('streets') }
+)
+
+if (roads.missing.length > 0) {
+  console.error(`\nFAILED: ${roads.missing.length} street segments did not come back.`)
+  process.exit(1)
+}
+
+/*
+  Census feature class codes. A2 and A3 are arterials, which the plat draws
+  heavier than the residential streets around the lots.
+*/
+function classify(code) {
+  const value = text(code)
+  return value.startsWith('A2') || value.startsWith('A3') ? 'through' : 'local'
+}
+
+const streetFeatures = []
+const seenStreets = new Set()
+for (const feature of roads.features) {
+  const name = text(feature.properties?.FULLNAME)
+  if (name === '' || !feature.geometry) continue
+
+  const key = `${name}|${JSON.stringify(feature.geometry.coordinates)}`
+  if (seenStreets.has(key)) continue
+  seenStreets.add(key)
+
+  streetFeatures.push({
+    type: 'Feature',
+    properties: { name, classification: classify(feature.properties?.RD_CLASS) },
+    geometry: roundGeometry(feature.geometry),
+  })
+}
+streetFeatures.sort((a, b) => a.properties.name.localeCompare(b.properties.name))
+
 /* ----------------------------------------------------------------- build -- */
 
 console.log('\nBuilding records...')
@@ -341,6 +396,10 @@ write(
   'public/parcels/geometry.json',
   JSON.stringify({ type: 'FeatureCollection', features: geometryFeatures })
 )
+write(
+  'public/parcels/streets.json',
+  JSON.stringify({ type: 'FeatureCollection', features: streetFeatures })
+)
 
 const coverage = [...byNeighborhood.entries()]
   .map(([name, harvested]) => ({
@@ -378,6 +437,7 @@ write(
 /* ---------------------------------------------------------------- summary -- */
 
 console.log(`\n  ${records.length.toLocaleString()} parcels written`)
+console.log(`  ${streetFeatures.length.toLocaleString()} street segments written`)
 console.log(`  ${coverage.length} neighborhoods`)
 if (droppedExcluded > 0) console.log(`  ${droppedExcluded} dropped as excluded (across the river)`)
 if (duplicatePins > 0) console.log(`  ${duplicatePins} dropped as duplicate PINs`)

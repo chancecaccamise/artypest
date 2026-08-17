@@ -1,8 +1,8 @@
-import type { FeatureCollection, Polygon } from 'geojson'
+import type { FeatureCollection, LineString, MultiPolygon, Polygon } from 'geojson'
 import { useEffect, useState } from 'react'
 
-import type { ParcelProperties } from '@/lib/geo'
-import { loadParcelGeometry } from '@/lib/parcels/parcel-layer'
+import type { ParcelProperties, StreetProperties } from '@/lib/geo'
+import { loadParcelGeometry, loadParcelStreets } from '@/lib/parcels/parcel-layer'
 
 /*
   The harvested corridor's geometry, fetched on demand.
@@ -14,14 +14,19 @@ import { loadParcelGeometry } from '@/lib/parcels/parcel-layer'
   broken one.
 */
 export interface HarvestedParcels {
-  collection: FeatureCollection<Polygon, ParcelProperties> | null
+  collection: FeatureCollection<Polygon | MultiPolygon, ParcelProperties> | null
+  streets: FeatureCollection<LineString, StreetProperties> | null
   loading: boolean
 }
 
 export function useHarvestedParcels(enabled = true): HarvestedParcels {
   const [collection, setCollection] = useState<FeatureCollection<
-    Polygon,
+    Polygon | MultiPolygon,
     ParcelProperties
+  > | null>(null)
+  const [streets, setStreets] = useState<FeatureCollection<
+    LineString,
+    StreetProperties
   > | null>(null)
   /*
     Starts true when enabled, rather than being set true inside the effect,
@@ -35,14 +40,15 @@ export function useHarvestedParcels(enabled = true): HarvestedParcels {
 
     let cancelled = false
 
-    void loadParcelGeometry()
-      .then((result) => {
+    void Promise.all([loadParcelGeometry(), loadParcelStreets()])
+      .then(([geometry, streetData]) => {
         if (cancelled) return
         setCollection(
-          result === null
+          geometry === null
             ? null
-            : (result as unknown as FeatureCollection<Polygon, ParcelProperties>)
+            : (geometry as unknown as FeatureCollection<Polygon | MultiPolygon, ParcelProperties>)
         )
+        setStreets(streetData as FeatureCollection<LineString, StreetProperties> | null)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -53,5 +59,5 @@ export function useHarvestedParcels(enabled = true): HarvestedParcels {
     }
   }, [enabled])
 
-  return { collection, loading }
+  return { collection, streets, loading }
 }

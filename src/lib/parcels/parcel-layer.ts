@@ -1,3 +1,5 @@
+import type { StreetProperties } from '@/lib/geo'
+
 import type { ParcelRecord } from './types'
 
 /*
@@ -29,6 +31,7 @@ export interface ParcelLayer {
 
 const ATTRIBUTES_URL = '/parcels/attributes.json'
 const GEOMETRY_URL = '/parcels/geometry.json'
+const STREETS_URL = '/parcels/streets.json'
 
 /**
  * Fetches the parcel attributes.
@@ -66,12 +69,20 @@ export async function loadParcelLayer(fetchImpl: typeof fetch = fetch): Promise<
 /** Longitude first, as GeoJSON requires. */
 type Ring = [number, number][]
 
+/*
+  Both shapes occur. 21 of the 10,399 harvested parcels are MultiPolygons: a lot
+  split by a lane, or one that wraps a corner. Calling them all Polygons is what
+  let a ring-order reversal through, which d3-geo then drew as the complement.
+*/
 export interface ParcelGeometryCollection {
   type: 'FeatureCollection'
   features: {
     type: 'Feature'
     properties: { pin: string }
-    geometry: { type: 'Polygon'; coordinates: Ring[] } | null
+    geometry:
+      | { type: 'Polygon'; coordinates: Ring[] }
+      | { type: 'MultiPolygon'; coordinates: Ring[][] }
+      | null
   }[]
 }
 
@@ -96,7 +107,39 @@ export function loadParcelGeometry(
   return geometryPromise
 }
 
-/** Test seam. The geometry fetch is cached for the life of the page. */
+export interface StreetCollection {
+  type: 'FeatureCollection'
+  features: {
+    type: 'Feature'
+    properties: StreetProperties
+    geometry: { type: 'LineString'; coordinates: [number, number][] } | null
+  }[]
+}
+
+/*
+  Street centrelines for the corridor. Zoomed out to the whole corridor a lot is
+  about three square pixels, so the parcels read as a tint and it is the streets
+  that carry the structure. Loaded with the geometry, for the same reason.
+*/
+let streetsPromise: Promise<StreetCollection | null> | null = null
+
+export function loadParcelStreets(
+  fetchImpl: typeof fetch = fetch
+): Promise<StreetCollection | null> {
+  streetsPromise ??= fetchImpl(STREETS_URL)
+    .then(async (response) => {
+      if (!response.ok) return null
+      const contentType = response.headers.get('content-type') ?? ''
+      if (!contentType.includes('json')) return null
+      return (await response.json()) as StreetCollection
+    })
+    .catch(() => null)
+
+  return streetsPromise
+}
+
+/** Test seam. Both fetches are cached for the life of the page. */
 export function resetParcelGeometryCache(): void {
   geometryPromise = null
+  streetsPromise = null
 }

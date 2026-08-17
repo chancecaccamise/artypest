@@ -87,6 +87,10 @@ export async function objectIdsFor(layer, params, options) {
  * Fetches features by explicit ID, and refuses to quietly return fewer than
  * were asked for.
  *
+ * `params.outFields` must include OBJECTID. That is how each feature is matched
+ * back to the ID that asked for it, and without it every feature looks
+ * unaccounted for.
+ *
  * Anything still missing after the retries is returned rather than thrown, so
  * the caller can report exactly which parcels are unaccounted for instead of
  * losing the whole run.

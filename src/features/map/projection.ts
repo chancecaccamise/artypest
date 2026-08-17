@@ -1,5 +1,5 @@
 import { geoMercator, geoPath, type GeoProjection } from 'd3-geo'
-import type { FeatureCollection, Polygon } from 'geojson'
+import type { FeatureCollection, LineString, MultiPolygon, Polygon, Position } from 'geojson'
 
 import { PARCELS, STREETS, type ParcelProperties, type StreetProperties } from '@/lib/geo'
 import type { Point } from '@/lib/geocoding/types'
@@ -70,17 +70,41 @@ const PADDING = 16
   and Mapbox reads it correctly. The reversal lives here instead, in the file
   the Mapbox swap deletes. It runs once at module load, not per render.
 */
+/**
+ * Reverses every ring, exterior and hole alike, which keeps their relative
+ * orientation and is what d3-geo wants.
+ *
+ * MultiPolygon has to be handled separately. Its `coordinates` is an array of
+ * polygons, not an array of rings, so treating it like a Polygon reverses the
+ * order of a lot's rings instead of the order of its points. d3-geo then reads
+ * the result as the complement and fills the entire canvas with it, and because
+ * such a shape has world-sized bounds it also drags `fitExtent` out to the whole
+ * globe and squashes every honest lot into a dot.
+ *
+ * The 40-lot fixture had no MultiPolygons, so this only appeared once the
+ * harvested corridor arrived with 21 of them.
+ */
+function reverseRings(rings: Position[][]): Position[][] {
+  return rings.map((ring) => [...ring].reverse())
+}
+
 function reverseWinding(
-  collection: FeatureCollection<Polygon, ParcelProperties>
-): FeatureCollection<Polygon, ParcelProperties> {
+  collection: FeatureCollection<Polygon | MultiPolygon, ParcelProperties>
+): FeatureCollection<Polygon | MultiPolygon, ParcelProperties> {
   return {
     type: 'FeatureCollection',
     features: collection.features.map((feature) => ({
       ...feature,
-      geometry: {
-        ...feature.geometry,
-        coordinates: feature.geometry.coordinates.map((ring) => [...ring].reverse()),
-      },
+      geometry:
+        feature.geometry.type === 'MultiPolygon'
+          ? {
+              ...feature.geometry,
+              coordinates: feature.geometry.coordinates.map(reverseRings),
+            }
+          : {
+              ...feature.geometry,
+              coordinates: reverseRings(feature.geometry.coordinates),
+            },
     })),
   }
 }
@@ -95,13 +119,13 @@ const D3_PARCELS = reverseWinding(PARCELS)
   undo the point of computing paths per size rather than per frame.
 */
 const reversedCache = new WeakMap<
-  FeatureCollection<Polygon, ParcelProperties>,
-  FeatureCollection<Polygon, ParcelProperties>
+  FeatureCollection<Polygon | MultiPolygon, ParcelProperties>,
+  FeatureCollection<Polygon | MultiPolygon, ParcelProperties>
 >()
 
 function d3Parcels(
-  collection?: FeatureCollection<Polygon, ParcelProperties>
-): FeatureCollection<Polygon, ParcelProperties> {
+  collection?: FeatureCollection<Polygon | MultiPolygon, ParcelProperties>
+): FeatureCollection<Polygon | MultiPolygon, ParcelProperties> {
   if (!collection) return D3_PARCELS
 
   const cached = reversedCache.get(collection)
@@ -116,7 +140,9 @@ export function buildProjection(
   width: number,
   height: number,
   /** Defaults to the committed fixture, which is what the tests use. */
-  collection?: FeatureCollection<Polygon, ParcelProperties>
+  collection?: FeatureCollection<Polygon | MultiPolygon, ParcelProperties>,
+  /** Harvested street centrelines. Also defaults to the committed fixture. */
+  streetCollection?: FeatureCollection<LineString, StreetProperties>
 ): PlatProjection {
   const safeWidth = Math.max(width, 1)
   const safeHeight = Math.max(height, 1)
@@ -150,7 +176,8 @@ export function buildProjection(
   }
 
   const streets: StreetPath[] = []
-  STREETS.features.forEach((feature, index) => {
+  const streetSource = streetCollection ?? STREETS
+  streetSource.features.forEach((feature, index) => {
     const d = path(feature)
     if (!d) return
     streets.push({

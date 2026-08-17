@@ -28,7 +28,13 @@ export type ParcelFeature = Feature<Polygon, ParcelProperties>
 
 export interface StreetProperties {
   name: string
-  classification: 'through' | 'branch' | 'cul_de_sac' | 'boundary'
+  /*
+    From the county's Census feature class code: A2 and A3 are arterials, drawn
+    heavier than the residential streets around the lots. The earlier values,
+    branch and cul_de_sac and boundary, described the synthetic subdivision that
+    the generated fixture invented and appear in no real data.
+  */
+  classification: 'through' | 'local'
 }
 
 export type StreetFeature = Feature<LineString, StreetProperties>

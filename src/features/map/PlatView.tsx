@@ -148,8 +148,14 @@ export function PlatView({
   const harvested = useHarvestedParcels()
 
   const projection = useMemo(
-    () => buildProjection(size.width, size.height, harvested.collection ?? undefined),
-    [size.width, size.height, harvested.collection]
+    () =>
+      buildProjection(
+        size.width,
+        size.height,
+        harvested.collection ?? undefined,
+        harvested.streets ?? undefined
+      ),
+    [size.width, size.height, harvested.collection, harvested.streets]
   )
 
   /*
