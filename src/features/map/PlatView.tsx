@@ -1,0 +1,509 @@
+import { select } from 'd3-selection'
+import { zoom as d3Zoom, zoomIdentity, type D3ZoomEvent, type ZoomBehavior } from 'd3-zoom'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
+import { Crosshair, Maximize2, Minus, Plus } from 'lucide-react'
+
+import { arcColor, arcPath, type MapArc } from './arcs'
+import { buildProjection, shouldLabel, shouldLabelStreet, type ParcelPath } from './projection'
+import type { Theming } from './theming'
+import { Button } from '@/components/ui/button'
+import { entityTypeColor } from '@/components/ui/badge'
+import type { Entity, ResolvedLocation } from '@/lib/data/types'
+import type { Point } from '@/lib/geocoding/types'
+import { readString } from '@/lib/format'
+import { cn } from '@/lib/utils'
+
+/*
+  The plat renderer.
+
+  This is the one file the Mapbox swap replaces. Everything it consumes,
+  projection, theming, arcs, resolved locations, is computed elsewhere and
+  survives untouched, which is the whole argument for building the plat now.
+
+  Parcel polygons drawn as SVG with no basemap, hairline strokes, and monospace
+  lot numbers is a plat drawing. It is not a placeholder for a map: it is the
+  drawing this audience already reads, and it stays as a second view mode when
+  satellite arrives.
+*/
+
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 20
+
+export interface PlatMarker {
+  entity: Entity
+  location: ResolvedLocation
+  /**
+   * True when this marker sits on a lot the plat already draws, because the
+   * record borrowed its location from that lot.
+   *
+   * Those markers are drawn but never take a click: they sit exactly on the
+   * centroid, which is where a reader naturally clicks to select the lot, and
+   * intercepting that made the plat feel broken. The lot's own panel lists
+   * everyone who resolves onto it, so nothing is lost.
+   */
+  onDrawnLot: boolean
+}
+
+export interface PlatViewProps {
+  theming: Theming
+  /** Lots drawn at full strength. Everything else is drawn faintly. */
+  litPins: Set<string> | null
+  selectedPin: string | null
+  /** Point markers for records that are not lots. */
+  markers: PlatMarker[]
+  selectedEntityId: string | null
+  arcs: MapArc[]
+  onSelectPin: (pin: string | null) => void
+  onSelectEntity: (entityId: string) => void
+  /**
+   * The label a lot carries on the drawing. A plat is annotated with lot
+   * numbers, so that is what this returns when the record has one; the tail of
+   * the parcel number is the fallback, because an unlabelled lot is worse than
+   * one labelled with a code.
+   */
+  labelForPin: (pin: string) => string
+  /** Active while the user is placing a record by hand. */
+  placingEntity: Entity | null
+  onPlace: (point: Point) => void
+  className?: string
+}
+
+export function PlatView({
+  theming,
+  litPins,
+  selectedPin,
+  markers,
+  selectedEntityId,
+  arcs,
+  onSelectPin,
+  onSelectEntity,
+  labelForPin,
+  placingEntity,
+  onPlace,
+  className,
+}: PlatViewProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
+
+  const [size, setSize] = useState({ width: 960, height: 640 })
+  /*
+    The zoom behaviour is created once and reads the current size through this
+    ref, so a resize does not tear it down and lose the reader's position.
+  */
+  const sizeRef = useRef(size)
+  const [transform, setTransform] = useState(() => zoomIdentity)
+  const [hoveredPin, setHoveredPin] = useState<string | null>(null)
+
+  useLayoutEffect(() => {
+    const element = containerRef.current
+    if (!element) return
+
+    const apply = (width: number, height: number) => {
+      const next = { width: Math.max(width, 1), height: Math.max(height, 1) }
+      // Written here rather than during render, so the zoom behaviour can read
+      // the current size without the component reaching for a ref mid-render.
+      sizeRef.current = next
+      setSize(next)
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return
+      apply(entry.contentRect.width, entry.contentRect.height)
+    })
+    observer.observe(element)
+    apply(element.clientWidth, element.clientHeight)
+    return () => observer.disconnect()
+  }, [])
+
+  /*
+    Path strings depend only on geometry and viewport size, never on pan or
+    zoom, so they are computed once per size and the transform on the parent
+    group does all navigation. Recomputing path data per pan frame is the one
+    mistake that makes this feel slow.
+  */
+  const projection = useMemo(
+    () => buildProjection(size.width, size.height),
+    [size.width, size.height]
+  )
+
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+
+    const behaviour = d3Zoom<SVGSVGElement, unknown>()
+      .scaleExtent([MIN_ZOOM, MAX_ZOOM])
+      /*
+        The extent is set explicitly rather than left to d3's default, which
+        reads the SVG element's width and height attributes as animated
+        lengths. The measured size is the better answer anyway, and the
+        default throws outright under jsdom.
+      */
+      .extent((): [[number, number], [number, number]] => [
+        [0, 0],
+        [sizeRef.current.width, sizeRef.current.height],
+      ])
+      /* Keeps the plat from being panned entirely out of view. */
+      .translateExtent([
+        [-sizeRef.current.width, -sizeRef.current.height],
+        [sizeRef.current.width * 2, sizeRef.current.height * 2],
+      ])
+      /*
+        d3's own default filter, plus one guard: a drag gesture is tracked
+        through `event.view`, and an environment that leaves that null makes
+        d3 throw on the first mousedown. Refusing to start a gesture we cannot
+        follow is the honest response either way.
+      */
+      .filter((event: MouseEvent) => {
+        if (event.ctrlKey && event.type !== 'wheel') return false
+        if (event.button) return false
+        return event.type === 'wheel' || event.view !== null
+      })
+      .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
+        setTransform(event.transform)
+      })
+
+    zoomRef.current = behaviour
+    select(svg).call(behaviour)
+
+    return () => {
+      select(svg).on('.zoom', null)
+      zoomRef.current = null
+    }
+  }, [])
+
+  const zoomBy = useCallback((factor: number) => {
+    const svg = svgRef.current
+    const behaviour = zoomRef.current
+    if (!svg || !behaviour) return
+    /*
+      Applied instantly rather than tweened: d3-transition is another
+      dependency for an effect prefers-reduced-motion would disable anyway.
+
+      Wrapped in an arrow because d3 hands these out as unbound methods, and
+      passing one straight to `call` loses its receiver.
+    */
+    select(svg).call((selection) => behaviour.scaleBy(selection, factor))
+  }, [])
+
+  const fitToView = useCallback(() => {
+    const svg = svgRef.current
+    const behaviour = zoomRef.current
+    if (!svg || !behaviour) return
+    // fitExtent already framed the plat, so identity is fit-to-view.
+    select(svg).call((selection) => behaviour.transform(selection, zoomIdentity))
+  }, [])
+
+  /** Screen point to longitude and latitude, for hand placement. */
+  const handleClick = useCallback(
+    (event: ReactPointerEvent<SVGSVGElement>) => {
+      if (!placingEntity) return
+      const svg = svgRef.current
+      if (!svg) return
+
+      const bounds = svg.getBoundingClientRect()
+      const [x, y] = transform.invert([event.clientX - bounds.left, event.clientY - bounds.top])
+      const point = projection.invert([x ?? 0, y ?? 0])
+      if (point) onPlace(point)
+    },
+    [placingEntity, projection, transform, onPlace]
+  )
+
+  const zoomLevel = transform.k
+  const strokeWidth = 1 / zoomLevel
+
+  const projectedMarkers = useMemo(() => {
+    return markers
+      .map((marker) => {
+        const screen = projection.project(marker.location.point)
+        return screen ? { ...marker, screen } : null
+      })
+      .filter((marker): marker is PlatMarker & { screen: [number, number] } => marker !== null)
+  }, [markers, projection])
+
+  const projectedArcs = useMemo(() => {
+    return arcs
+      .map((arc) => {
+        const from = projection.project(arc.from)
+        const to = projection.project(arc.to)
+        if (!from || !to) return null
+        return { arc, d: arcPath(from, to) }
+      })
+      .filter((row): row is { arc: MapArc; d: string } => row !== null)
+  }, [arcs, projection])
+
+  return (
+    <div ref={containerRef} className={cn('relative h-full w-full overflow-hidden', className)}>
+      <svg
+        ref={svgRef}
+        width={size.width}
+        height={size.height}
+        role="img"
+        aria-label={`Plat of the subdivision, ${projection.parcels.length} lots`}
+        className={cn(
+          'block h-full w-full touch-none',
+          placingEntity ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'
+        )}
+        onPointerDown={handleClick}
+      >
+        <g transform={transform.toString()}>
+          {/* Layer order matches the Mapbox implementation's, so the mental
+              model transfers even though the code does not. */}
+          <g className="parcels">
+            {projection.parcels.map((parcel) => (
+              <Parcel
+                key={parcel.pin}
+                parcel={parcel}
+                fill={theming.colorForPin(parcel.pin)}
+                lit={litPins === null || litPins.has(parcel.pin)}
+                selected={parcel.pin === selectedPin}
+                hovered={parcel.pin === hoveredPin}
+                strokeWidth={strokeWidth}
+                onSelect={onSelectPin}
+                onHover={setHoveredPin}
+              />
+            ))}
+          </g>
+
+          <g className="streets" pointerEvents="none">
+            {projection.streets.map((street) => (
+              <path
+                key={street.id}
+                id={`street-${street.id}`}
+                d={street.d}
+                fill="none"
+                stroke="var(--rule-strong)"
+                strokeWidth={2 / zoomLevel}
+                strokeLinecap="round"
+              />
+            ))}
+          </g>
+
+          <g className="arcs" pointerEvents="none">
+            {projectedArcs.map(({ arc, d }) => (
+              <path
+                key={arc.relationId}
+                d={d}
+                fill="none"
+                stroke={arcColor(arc.relationKey)}
+                strokeWidth={1 / zoomLevel}
+                strokeDasharray={arc.current ? undefined : `${3 / zoomLevel} ${3 / zoomLevel}`}
+                opacity={arc.current ? 0.55 : 0.3}
+              />
+            ))}
+          </g>
+
+          <g className="pins">
+            {projectedMarkers.map((marker) => (
+              <Marker
+                key={marker.entity.id}
+                marker={marker}
+                selected={marker.entity.id === selectedEntityId}
+                zoom={zoomLevel}
+                onSelect={onSelectEntity}
+              />
+            ))}
+          </g>
+
+          <g className="labels" pointerEvents="none">
+            {/* Street names follow the centreline, which a raster basemap
+                cannot do as cleanly. */}
+            {projection.streets.map((street) =>
+              shouldLabelStreet(street, zoomLevel) ? (
+                <text
+                  key={`label-${street.id}`}
+                  fontSize={11 / zoomLevel}
+                  fill="var(--ink-muted)"
+                  letterSpacing={2 / zoomLevel}
+                  style={{ fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}
+                >
+                  <textPath href={`#street-${street.id}`} startOffset="42%" textAnchor="middle">
+                    {street.name}
+                  </textPath>
+                </text>
+              ) : null
+            )}
+
+            {projection.parcels.map((parcel) =>
+              shouldLabel(parcel, zoomLevel) ? (
+                <text
+                  key={`lot-${parcel.pin}`}
+                  x={parcel.centroid[0]}
+                  y={parcel.centroid[1]}
+                  fontSize={10 / zoomLevel}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fill="var(--ink-muted)"
+                  style={{ fontFamily: 'var(--font-mono)' }}
+                >
+                  {parcel.commonArea ?? labelForPin(parcel.pin)}
+                </text>
+              ) : null
+            )}
+          </g>
+        </g>
+      </svg>
+
+      {/* Board members will not think to scroll-zoom, so the controls are explicit. */}
+      <div className="absolute top-2 right-2 flex flex-col gap-1">
+        <Button
+          size="icon-sm"
+          variant="secondary"
+          onClick={() => zoomBy(1.5)}
+          aria-label="Zoom in"
+          disabled={zoomLevel >= MAX_ZOOM}
+        >
+          <Plus />
+        </Button>
+        <Button
+          size="icon-sm"
+          variant="secondary"
+          onClick={() => zoomBy(1 / 1.5)}
+          aria-label="Zoom out"
+          disabled={zoomLevel <= MIN_ZOOM}
+        >
+          <Minus />
+        </Button>
+        <Button size="icon-sm" variant="secondary" onClick={fitToView} aria-label="Fit the whole plat">
+          <Maximize2 />
+        </Button>
+      </div>
+
+      {placingEntity ? (
+        <div className="panel panel-enter absolute top-2 left-2 flex items-center gap-2 px-2.5 py-1.5">
+          <Crosshair className="text-survey size-4" aria-hidden="true" />
+          <span className="text-13">
+            Click the plat to place <span className="font-semibold">{placingEntity.name}</span>
+          </span>
+        </div>
+      ) : null}
+
+      <div className="text-ink-faint absolute bottom-2 left-2 font-mono text-[0.6875rem]">
+        {Math.round(zoomLevel * 100)}%
+      </div>
+    </div>
+  )
+}
+
+/** `20032 63001` reads as `63001` on the drawing. The full PIN is in the panel. */
+function shortPin(pin: string): string {
+  return pin.slice(6)
+}
+
+/* ---------------------------------------------------------------- parcel -- */
+
+interface ParcelProps {
+  parcel: ParcelPath
+  fill: string
+  lit: boolean
+  selected: boolean
+  hovered: boolean
+  strokeWidth: number
+  onSelect: (pin: string | null) => void
+  onHover: (pin: string | null) => void
+}
+
+/*
+  Memoised per lot. SVG hit testing is free and precise to the boundary, so
+  there is no need for a Mapbox feature-state equivalent: React state plus a
+  stroke change is enough at this scale.
+
+  React reconciliation is the likelier bottleneck than the browser's SVG
+  rendering, which is why this is memoised rather than inlined.
+*/
+const Parcel = memo(function Parcel({
+  parcel,
+  fill,
+  lit,
+  selected,
+  hovered,
+  strokeWidth,
+  onSelect,
+  onHover,
+}: ParcelProps) {
+  return (
+    <path
+      d={parcel.d}
+      fill={lit ? fill : 'color-mix(in srgb, var(--ink) 2%, transparent)'}
+      stroke={selected ? 'var(--survey)' : hovered ? 'var(--rule-strong)' : 'var(--rule-strong)'}
+      strokeWidth={(selected ? 2.5 : hovered ? 1.8 : 1) * strokeWidth}
+      opacity={lit ? 1 : 0.4}
+      className="cursor-pointer transition-[fill] duration-[120ms]"
+      onClick={(event) => {
+        event.stopPropagation()
+        onSelect(selected ? null : parcel.pin)
+      }}
+      onPointerEnter={() => onHover(parcel.pin)}
+      onPointerLeave={() => onHover(null)}
+    >
+      <title>{parcel.commonArea ? `${parcel.commonArea}, ${parcel.pin}` : parcel.pin}</title>
+    </path>
+  )
+})
+
+/* ---------------------------------------------------------------- marker -- */
+
+interface MarkerProps {
+  marker: PlatMarker & { screen: [number, number] }
+  selected: boolean
+  zoom: number
+  onSelect: (entityId: string) => void
+}
+
+const Marker = memo(function Marker({ marker, selected, zoom, onSelect }: MarkerProps) {
+  const [x, y] = marker.screen
+  const color = entityTypeColor(marker.entity.type)
+  const radius = (selected ? 6 : marker.onDrawnLot ? 3.5 : 4.5) / zoom
+
+  return (
+    <g
+      className={marker.onDrawnLot ? undefined : 'cursor-pointer'}
+      pointerEvents={marker.onDrawnLot ? 'none' : undefined}
+      onClick={(event) => {
+        event.stopPropagation()
+        onSelect(marker.entity.id)
+      }}
+    >
+      <circle
+        cx={x}
+        cy={y}
+        r={radius}
+        fill={color}
+        stroke="var(--paper-raised)"
+        strokeWidth={1.5 / zoom}
+      />
+      {selected ? (
+        <circle
+          cx={x}
+          cy={y}
+          r={radius * 2.2}
+          fill="none"
+          stroke={color}
+          strokeWidth={1 / zoom}
+          opacity={0.6}
+        />
+      ) : null}
+      <title>
+        {marker.entity.name}
+        {marker.location.precision === 'derived' ? ` (${marker.location.explanation})` : ''}
+      </title>
+    </g>
+  )
+})
+
+/** Exported for the panel, which shows the same short form beside the full PIN. */
+export { shortPin }
+
+/** Reads a lot number off a property record, for the panel heading. */
+export function lotNumberOf(entity: Entity | undefined): string {
+  return entity ? readString(entity.data.lotNumber) : ''
+}
