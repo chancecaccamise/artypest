@@ -47,14 +47,26 @@ describe('application shell', () => {
     })
   })
 
-  it('says that search is not connected yet rather than failing silently', async () => {
+  it('searches records from the header', async () => {
     const user = userEvent.setup()
     renderWithProviders(<App />)
 
-    const search = await screen.findByRole('searchbox', { name: 'Search' })
-    await user.click(search)
+    const search = await screen.findByRole('combobox', { name: 'Search' })
+    await user.type(search, 'ardsley')
 
-    expect(await screen.findByText(/Search arrives in Phase 2/)).toBeInTheDocument()
+    // The association is seeded, so this is a real record from the store.
+    const results = await screen.findByRole('listbox', { name: 'Search results' })
+    expect(within(results).getByText(/Ardsley Park Homeowners Association/)).toBeInTheDocument()
+  })
+
+  it('says nothing matched rather than showing an empty panel', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<App />)
+
+    const search = await screen.findByRole('combobox', { name: 'Search' })
+    await user.type(search, 'zzzznothinghere')
+
+    expect(await screen.findByText(/Nothing matches/)).toBeInTheDocument()
   })
 
   it('routes an unknown path to the not-found page', async () => {

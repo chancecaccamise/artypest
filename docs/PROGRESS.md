@@ -357,3 +357,51 @@ District and drift slightly further south.
 **Next.** Install Docker, write the migrations, and load `parcels.ndjson` into
 Postgres. `initializeData` and the served slice both go away with the provider
 swap, which is the point of writing the harvest out in that shape.
+
+## 2026-08-17: global search
+
+**Did.** Replaced the header's "Search arrives in Phase 2" placeholder with
+working search over every record.
+
+*Ranking.* `src/lib/search.ts`, pure and tested. It stands in for the Postgres
+side of this, which is a `search_vector` column, a pg_trgm index, and a trigger
+to maintain it, so the ordering rules here are the ones that become `ts_rank`
+weights later and the behaviour a board member learns now is the behaviour they
+keep.
+
+Words match in any order across the name, the address, the parcel number, the
+county owner, and the neighborhood, and punctuation is dropped on both sides, so
+`1402 E. 49th St.` and `20003-15001` both find what the reader meant. An exact
+name beats a name that starts with the query, which beats a name containing all
+the words, which beats a match in the address, which beats a match anywhere
+else. Shorter names win ties, which is why `10 whitaker` returns
+`10 WHITAKER ST` above `1005 WHITAKER ST`.
+
+Every string and number in `data` is indexed rather than a fixed field list,
+because the per-type field lists are still provisional and a whitelist would
+quietly stop finding things the day a field is renamed. Notes are excluded: they
+are internal, and never rendered for a resident.
+
+*Reach.* Searching an address returns the lot and the people whose mailing
+address is that lot. Searching a county owner returns their land, which matters
+because owner names sit on the parcel rather than becoming records of their own,
+so this is the only route from an owner to their property. Deleted records never
+answer; archived ones do, ranked below live ones, because "where did that lot go"
+is a real question.
+
+*The control.* A proper combobox in `src/components/layout/SearchBar.tsx`:
+`/` to focus, arrows to move, Enter to open, Escape to close and again to clear,
+results grouped by kind with the strongest match deciding which group leads. It
+is drivable from the keyboard alone.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 384 tests, and a
+production build. 25 of those tests are new.
+
+Measured against the real corridor rather than the demo: 10,527 records, index
+built once in 36ms, and every query answered in 1 to 2ms. `10 whitaker`, the
+query from the report, returns `10 WHITAKER ST` first.
+
+**Not done, and why.** The search box is still hidden below the `sm` breakpoint,
+as it was before. Relations are not searchable as such: a record is found by its
+own fields, not by the name of something it connects to. Both are worth doing
+and neither is what was asked for here.
