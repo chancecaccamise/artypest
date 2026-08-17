@@ -13,6 +13,10 @@ dist-ssr
 coverage
 *.local
 
+# This project is pnpm only. A stray npm lockfile makes tooling pick the wrong
+# package manager, so it is ignored rather than committed.
+package-lock.json
+
 # Environment. Never commit real credentials, .env.example carries placeholders.
 .env
 .env.local
