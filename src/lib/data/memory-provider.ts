@@ -1,21 +1,33 @@
-import {
-  DEMO_AUDIT_ENTRIES,
-  DEMO_ENTITIES,
-  DEMO_ORG,
-  DEMO_RELATIONS,
-  DEMO_RELATION_TYPES,
-} from './fixtures'
+import { readString } from '../format'
+import { centroidForPin } from '../geo'
+import { geocodeSync } from '../geocoding'
+import { resolveGraph } from '../insights'
+import { resolveAllLocations, resolveLocation, type ResolveContext } from '../locations/resolve'
+import { buildDemoData, type DemoData } from './fixtures'
+import { ENTITY_TYPES } from './types'
 import type {
+  ActivityEntry,
   AuditEntry,
   DataProvider,
   Entity,
   EntityInput,
   EntityPatch,
+  EntityType,
+  ListActivityOptions,
   ListEntitiesOptions,
+  LocationIndex,
   Org,
+  OrgPatch,
+  OrgUser,
   Page,
+  ReferenceItem,
+  ReferenceItemInput,
+  ReferenceItemPatch,
+  ReferenceList,
   Relation,
+  RelationInput,
   RelationType,
+  ResolvedLocation,
 } from './types'
 
 /*
@@ -23,15 +35,17 @@ import type {
   resets on reload. It exists so the UI can be built and reviewed before the
   local Supabase stack is set up.
 
-  It deliberately mimics two behaviours the Postgres schema will own, so the
+  It deliberately mimics three behaviours the Postgres schema will own, so the
   UI written against it does not have to change later:
 
     1. Soft delete and archive are separate states, not a single flag.
     2. Updates write one audit row per changed field, which is what makes the
        History tab a field-level diff rather than a list of "record updated".
+    3. Relation changes are audited too. "Unit 42 changed hands" is the
+       highest-value entry in the log.
 */
 
-const DEFAULT_PAGE_SIZE = 25
+const DEFAULT_PAGE_SIZE = 50
 
 /** Stand-in for auth. The Supabase provider will read this from the session. */
 const CURRENT_USER = 'Demo User'
@@ -53,7 +67,7 @@ function nextId(prefix: string): string {
  */
 function toAuditValue(value: unknown): string | null {
   if (value === null || value === undefined) return null
-  if (typeof value === 'string') return value
+  if (typeof value === 'string') return value === '' ? null : value
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   return JSON.stringify(value)
 }
@@ -61,34 +75,82 @@ function toAuditValue(value: unknown): string | null {
 class MemoryProvider implements DataProvider {
   readonly kind = 'memory' as const
 
-  private org: Org = clone(DEMO_ORG)
-  private entities: Entity[] = clone(DEMO_ENTITIES)
-  private relations: Relation[] = clone(DEMO_RELATIONS)
-  private relationTypes: RelationType[] = clone(DEMO_RELATION_TYPES)
-  private auditEntries: AuditEntry[] = clone(DEMO_AUDIT_ENTRIES)
+  private org: Org
+  private entities: Entity[]
+  private relations: Relation[]
+  private relationTypes: RelationType[]
+  private auditEntries: AuditEntry[]
+  private referenceItems: ReferenceItem[]
+  private users: OrgUser[]
+
+  /** Set while runBatch is in flight, so every audit row it causes is grouped. */
+  private currentBatchId: string | null = null
+
+  constructor(data: DemoData) {
+    this.org = clone(data.org)
+    this.entities = clone(data.entities)
+    this.relations = clone(data.relations)
+    this.relationTypes = clone(data.relationTypes)
+    this.auditEntries = clone(data.auditEntries)
+    this.referenceItems = clone(data.referenceItems)
+    this.users = clone(data.users)
+  }
+
+  /* ----------------------------------------------------------------- org -- */
 
   getOrg(): Promise<Org> {
     return Promise.resolve(clone(this.org))
   }
 
-  listEntities(options: ListEntitiesOptions = {}): Promise<Page<Entity>> {
-    const { type, search, page = 1, pageSize = DEFAULT_PAGE_SIZE, include = 'active' } = options
+  updateOrg(patch: OrgPatch): Promise<Org> {
+    const now = new Date().toISOString()
 
-    let rows = this.entities.filter((entity) => {
-      switch (include) {
-        case 'active':
-          return entity.deletedAt === null && entity.archivedAt === null
-        case 'archived':
-          return entity.deletedAt === null && entity.archivedAt !== null
-        case 'deleted':
-          return entity.deletedAt !== null
-        case 'all':
-          return true
-      }
-    })
+    if (patch.name !== undefined && patch.name !== this.org.name) {
+      this.recordAudit('entities', this.org.id, 'update', 'name', this.org.name, patch.name, now)
+      this.org.name = patch.name
+    }
+
+    if (patch.sagisUrlTemplate !== undefined && patch.sagisUrlTemplate !== this.org.sagisUrlTemplate) {
+      this.recordAudit(
+        'entities',
+        this.org.id,
+        'update',
+        'sagisUrlTemplate',
+        this.org.sagisUrlTemplate,
+        patch.sagisUrlTemplate,
+        now
+      )
+      this.org.sagisUrlTemplate = patch.sagisUrlTemplate
+    }
+
+    return Promise.resolve(clone(this.org))
+  }
+
+  /* ------------------------------------------------------------ entities -- */
+
+  listEntities(options: ListEntitiesOptions = {}): Promise<Page<Entity>> {
+    const {
+      type,
+      search,
+      page = 1,
+      pageSize = DEFAULT_PAGE_SIZE,
+      include = 'active',
+      sortBy = 'name',
+      sortDir = 'asc',
+      dataFilters,
+    } = options
+
+    let rows = this.entities.filter((entity) => this.matchesInclude(entity, include))
 
     if (type) {
       rows = rows.filter((entity) => entity.type === type)
+    }
+
+    if (dataFilters) {
+      for (const [key, value] of Object.entries(dataFilters)) {
+        if (value === '') continue
+        rows = rows.filter((entity) => readString(entity.data[key]) === value)
+      }
     }
 
     if (search && search.trim() !== '') {
@@ -101,7 +163,11 @@ class MemoryProvider implements DataProvider {
       )
     }
 
-    rows.sort((a, b) => a.name.localeCompare(b.name))
+    const direction = sortDir === 'asc' ? 1 : -1
+    rows = rows.slice().sort((a, b) => {
+      if (sortBy === 'name') return a.name.localeCompare(b.name) * direction
+      return a[sortBy].localeCompare(b[sortBy]) * direction
+    })
 
     const total = rows.length
     const start = (page - 1) * pageSize
@@ -112,6 +178,24 @@ class MemoryProvider implements DataProvider {
       page,
       pageSize,
     })
+  }
+
+  listAllEntities(): Promise<Entity[]> {
+    return Promise.resolve(clone(this.entities.filter((entity) => entity.deletedAt === null)))
+  }
+
+  countsByType(): Promise<Record<EntityType, number>> {
+    const counts = Object.fromEntries(ENTITY_TYPES.map((type) => [type, 0])) as Record<
+      EntityType,
+      number
+    >
+
+    for (const entity of this.entities) {
+      if (entity.deletedAt !== null || entity.archivedAt !== null) continue
+      counts[entity.type] += 1
+    }
+
+    return Promise.resolve(counts)
   }
 
   getEntity(id: string): Promise<Entity | null> {
@@ -135,7 +219,7 @@ class MemoryProvider implements DataProvider {
     }
 
     this.entities.push(entity)
-    this.recordAudit(entity.id, 'insert', null, null, null, now)
+    this.recordAudit('entities', entity.id, 'insert', null, null, null, now)
 
     return Promise.resolve(clone(entity))
   }
@@ -145,12 +229,12 @@ class MemoryProvider implements DataProvider {
     const now = new Date().toISOString()
 
     if (patch.name !== undefined && patch.name !== entity.name) {
-      this.recordAudit(id, 'update', 'name', entity.name, patch.name, now)
+      this.recordAudit('entities', id, 'update', 'name', entity.name, patch.name, now)
       entity.name = patch.name
     }
 
     if (patch.folderId !== undefined && patch.folderId !== entity.folderId) {
-      this.recordAudit(id, 'update', 'folderId', entity.folderId, patch.folderId, now)
+      this.recordAudit('entities', id, 'update', 'folderId', entity.folderId, patch.folderId, now)
       entity.folderId = patch.folderId
     }
 
@@ -161,7 +245,7 @@ class MemoryProvider implements DataProvider {
         const before = toAuditValue(entity.data[key])
         const after = toAuditValue(patch.data[key])
         if (before !== after) {
-          this.recordAudit(id, 'update', `data.${key}`, before, after, now)
+          this.recordAudit('entities', id, 'update', `data.${key}`, before, after, now)
         }
       }
       entity.data = { ...patch.data }
@@ -191,6 +275,8 @@ class MemoryProvider implements DataProvider {
     return Promise.resolve(clone(entity))
   }
 
+  /* ----------------------------------------------------------- relations -- */
+
   listRelationTypes(): Promise<RelationType[]> {
     return Promise.resolve(clone(this.relationTypes))
   }
@@ -205,11 +291,223 @@ class MemoryProvider implements DataProvider {
     return Promise.resolve(clone(rows))
   }
 
+  createRelation(input: RelationInput): Promise<Relation> {
+    const now = new Date().toISOString()
+    const relation: Relation = {
+      id: nextId('rel'),
+      orgId: this.org.id,
+      relationTypeId: input.relationTypeId,
+      fromEntityId: input.fromEntityId,
+      toEntityId: input.toEntityId,
+      startDate: input.startDate ?? null,
+      endDate: input.endDate ?? null,
+      attributes: input.attributes ?? {},
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      archivedAt: null,
+    }
+
+    this.relations.push(relation)
+    this.recordAudit('relations', relation.id, 'insert', null, null, null, now)
+
+    return Promise.resolve(clone(relation))
+  }
+
+  deleteRelation(id: string): Promise<Relation> {
+    const relation = this.relations.find((candidate) => candidate.id === id)
+    if (!relation) throw new Error(`No relation with id ${id}`)
+
+    const now = new Date().toISOString()
+    this.recordAudit('relations', id, 'delete', 'deletedAt', null, now, now)
+    relation.deletedAt = now
+    relation.updatedAt = now
+
+    return Promise.resolve(clone(relation))
+  }
+
+  /* ------------------------------------------------------------ location -- */
+
+  /*
+    Location is resolved, never stored, so these read through the cascade in
+    src/lib/locations. In Postgres this becomes a view and these three methods
+    become queries against it, which is why they sit on the provider rather
+    than in the map feature.
+  */
+
+  private resolveContext(): ResolveContext {
+    return {
+      graph: resolveGraph({
+        entities: this.entities,
+        relations: this.relations.filter((relation) => relation.deletedAt === null),
+        relationTypes: this.relationTypes,
+      }),
+      centroidForPin,
+      geocode: geocodeSync,
+    }
+  }
+
+  resolveLocation(entityId: string): Promise<ResolvedLocation | null> {
+    const entity = this.entities.find((candidate) => candidate.id === entityId)
+    if (!entity) return Promise.resolve(null)
+    return Promise.resolve(resolveLocation(entity, this.resolveContext()))
+  }
+
+  listLocations(): Promise<LocationIndex> {
+    return Promise.resolve(resolveAllLocations(this.resolveContext()))
+  }
+
+  setManualLocation(
+    entityId: string,
+    point: [longitude: number, latitude: number] | null
+  ): Promise<Entity> {
+    const entity = this.requireEntity(entityId)
+    // Routed through updateEntity so the placement is audited like any other
+    // field change, which is what makes "who moved this pin" answerable.
+    const data = { ...entity.data }
+    if (point === null) delete data.location
+    else data.location = point
+
+    return this.updateEntity(entityId, { data })
+  }
+
+  /* --------------------------------------------------------------- audit -- */
+
   listAuditEntries(recordId: string): Promise<AuditEntry[]> {
     const rows = this.auditEntries
       .filter((entry) => entry.recordId === recordId)
       .sort((a, b) => b.changedAt.localeCompare(a.changedAt))
     return Promise.resolve(clone(rows))
+  }
+
+  listActivity(options: ListActivityOptions = {}): Promise<Page<ActivityEntry>> {
+    const { entityType, action, actor, from, to, batchId, page = 1, pageSize = 100 } = options
+
+    let rows = this.auditEntries.map((entry) => this.resolveActivity(entry))
+
+    if (entityType) rows = rows.filter((entry) => entry.entityType === entityType)
+    if (action) rows = rows.filter((entry) => entry.action === action)
+    if (actor) rows = rows.filter((entry) => entry.changedBy === actor)
+    if (batchId) rows = rows.filter((entry) => entry.batchId === batchId)
+    // Dates are inclusive on both ends, compared on the date part only.
+    if (from) rows = rows.filter((entry) => entry.changedAt.slice(0, 10) >= from)
+    if (to) rows = rows.filter((entry) => entry.changedAt.slice(0, 10) <= to)
+
+    rows.sort((a, b) => b.changedAt.localeCompare(a.changedAt))
+
+    const total = rows.length
+    const start = (page - 1) * pageSize
+
+    return Promise.resolve({
+      rows: clone(rows.slice(start, start + pageSize)),
+      total,
+      page,
+      pageSize,
+    })
+  }
+
+  listActors(): Promise<string[]> {
+    const actors = new Set<string>()
+    for (const entry of this.auditEntries) {
+      if (entry.changedBy) actors.add(entry.changedBy)
+    }
+    return Promise.resolve([...actors].sort((a, b) => a.localeCompare(b)))
+  }
+
+  /* ----------------------------------------------------------- reference -- */
+
+  listReferenceItems(list?: ReferenceList): Promise<ReferenceItem[]> {
+    const rows = this.referenceItems
+      .filter((item) => (list ? item.list === list : true))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label))
+    return Promise.resolve(clone(rows))
+  }
+
+  createReferenceItem(input: ReferenceItemInput): Promise<ReferenceItem> {
+    const siblings = this.referenceItems.filter((item) => item.list === input.list)
+    const item: ReferenceItem = {
+      id: nextId('ref'),
+      orgId: this.org.id,
+      list: input.list,
+      // The stored value is a slug, so renaming the label never rewrites data.
+      value: input.value ?? input.label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''),
+      label: input.label,
+      sortOrder: input.sortOrder ?? siblings.length,
+      active: input.active ?? true,
+    }
+    this.referenceItems.push(item)
+    return Promise.resolve(clone(item))
+  }
+
+  updateReferenceItem(id: string, patch: ReferenceItemPatch): Promise<ReferenceItem> {
+    const item = this.referenceItems.find((candidate) => candidate.id === id)
+    if (!item) throw new Error(`No reference item with id ${id}`)
+
+    if (patch.label !== undefined) item.label = patch.label
+    if (patch.sortOrder !== undefined) item.sortOrder = patch.sortOrder
+    if (patch.active !== undefined) item.active = patch.active
+
+    return Promise.resolve(clone(item))
+  }
+
+  /* --------------------------------------------------------------- users -- */
+
+  listUsers(): Promise<OrgUser[]> {
+    return Promise.resolve(clone(this.users))
+  }
+
+  /* -------------------------------------------------------------- batch -- */
+
+  async runBatch<T>(work: () => Promise<T>): Promise<{ batchId: string; result: T }> {
+    const batchId = nextId('batch')
+    const previous = this.currentBatchId
+    this.currentBatchId = batchId
+    try {
+      const result = await work()
+      return { batchId, result }
+    } finally {
+      this.currentBatchId = previous
+    }
+  }
+
+  /* ------------------------------------------------------------ internal -- */
+
+  private matchesInclude(entity: Entity, include: NonNullable<ListEntitiesOptions['include']>) {
+    switch (include) {
+      case 'active':
+        return entity.deletedAt === null && entity.archivedAt === null
+      case 'archived':
+        return entity.deletedAt === null && entity.archivedAt !== null
+      case 'deleted':
+        return entity.deletedAt !== null
+      case 'all':
+        return true
+    }
+  }
+
+  /**
+   * Resolves the subject of an audit row. For a relation change the subject is
+   * the entity the relation starts from, because "Marguerite Hollis sold
+   * 1207 E Washington" reads better than "relation rel-0001 changed".
+   */
+  private resolveActivity(entry: AuditEntry): ActivityEntry {
+    let entityId: string | null = entry.recordId
+
+    if (entry.tableName === 'relations') {
+      const relation = this.relations.find((candidate) => candidate.id === entry.recordId)
+      entityId = relation?.fromEntityId ?? null
+    }
+
+    const entity = entityId
+      ? (this.entities.find((candidate) => candidate.id === entityId) ?? null)
+      : null
+
+    return {
+      ...entry,
+      entityId: entity?.id ?? null,
+      entityName: entity?.name ?? null,
+      entityType: entity?.type ?? null,
+    }
   }
 
   private requireEntity(id: string): Entity {
@@ -228,7 +526,7 @@ class MemoryProvider implements DataProvider {
     const entity = this.requireEntity(id)
     const now = value ?? new Date().toISOString()
 
-    this.recordAudit(id, 'update', field, entity[field], value, now)
+    this.recordAudit('entities', id, 'update', field, entity[field], value, now)
     entity[field] = value
     entity.updatedAt = now
 
@@ -236,6 +534,7 @@ class MemoryProvider implements DataProvider {
   }
 
   private recordAudit(
+    tableName: AuditEntry['tableName'],
     recordId: string,
     action: AuditEntry['action'],
     fieldName: string | null,
@@ -246,7 +545,7 @@ class MemoryProvider implements DataProvider {
     this.auditEntries.push({
       id: nextId('aud'),
       orgId: this.org.id,
-      tableName: 'entities',
+      tableName,
       recordId,
       action,
       fieldName,
@@ -254,10 +553,11 @@ class MemoryProvider implements DataProvider {
       newValue,
       changedBy: CURRENT_USER,
       changedAt,
+      batchId: this.currentBatchId,
     })
   }
 }
 
-export function createMemoryProvider(): DataProvider {
-  return new MemoryProvider()
+export function createMemoryProvider(data: DemoData = buildDemoData()): DataProvider {
+  return new MemoryProvider(data)
 }
