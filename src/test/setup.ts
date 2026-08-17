@@ -4,6 +4,12 @@ import { afterEach, vi } from 'vitest'
 
 afterEach(() => {
   cleanup()
+  /*
+    Work is saved to localStorage now, so a test that creates a record would
+    otherwise leave it behind for the next one. Cleared here rather than in each
+    test, because the leak is invisible until something unrelated fails.
+  */
+  localStorage.clear()
 })
 
 /*

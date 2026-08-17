@@ -118,9 +118,19 @@ export function EntityFormDialog({
 
     try {
       if (entity) {
+        /*
+          Keys the form does not manage are carried through. `data` is replaced
+          wholesale by the provider, and the form only submits what is in the
+          field list, so without this a person's photograph would vanish the
+          moment somebody corrected their phone number, and a parcel would lose
+          its neighborhood and county owner on any edit.
+        */
         await updateEntity.mutateAsync({
           id: entity.id,
-          patch: { name: parsed.data.name, data: parsed.data.data },
+          patch: {
+            name: parsed.data.name,
+            data: { ...entity.data, ...parsed.data.data },
+          },
         })
       } else {
         const created = await createEntity.mutateAsync({

@@ -183,6 +183,12 @@ const personConfig: DirectoryConfig = {
     { key: 'mailingAddress', label: 'Mailing address' },
     { key: 'householdRole', label: 'Household role' },
     { key: 'memberSince', label: 'Member since', format: 'year' },
+    /*
+      Public, and distinct from notes on purpose. This is who the person is to
+      the association and it appears on their card; notes are internal and are
+      never rendered for a resident.
+    */
+    { key: 'bio', label: 'Biography', format: 'longtext', hiddenFromGrid: true },
     { key: 'notes', label: 'Notes', format: 'longtext', internal: true, hiddenFromGrid: true },
   ],
   chips: (entity) => {

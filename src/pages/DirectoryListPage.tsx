@@ -11,12 +11,12 @@ import { Panel } from '@/components/ui/panel'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableWrap, Tbody, Td, Th, Thead, Tr } from '@/components/ui/table'
 import { EntityFormDialog } from '@/features/directory/EntityFormDialog'
+import { PersonGrid } from '@/features/directory/PersonGrid'
 import { DIRECTORY_CONFIGS } from '@/features/directory/config'
 import { useEntities } from '@/hooks/use-data'
 import { useReferenceLabels } from '@/hooks/use-reference-labels'
 import { ENTITY_TYPE_LABELS, type EntityType } from '@/lib/data/types'
 import { useRole } from '@/lib/role'
-import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 50
 
@@ -27,6 +27,35 @@ const PAGE_SIZE = 50
   Filter state lives in the query string so a filtered view is a link the
   property manager can send to a board member.
 */
+interface PagerProps {
+  page: number
+  total: number
+  pageCount: number
+  onPage: (page: number) => void
+}
+
+/** Shared by the table and the card grid, so the two cannot drift apart. */
+function PagerControls({ page, total, pageCount, onPage }: PagerProps) {
+  return (
+    <div className="border-rule flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2">
+      <p className="text-ink-muted font-mono text-xs">
+        {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, total)} of {total}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+          Previous
+        </Button>
+        <span className="text-ink-muted font-mono text-xs">
+          {page} / {pageCount}
+        </span>
+        <Button size="sm" disabled={page >= pageCount} onClick={() => onPage(page + 1)}>
+          Next
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export function DirectoryListPage({ type }: { type: EntityType }) {
   const config = DIRECTORY_CONFIGS[type]
   const navigate = useNavigate()
@@ -89,6 +118,7 @@ export function DirectoryListPage({ type }: { type: EntityType }) {
   const rows = query.data?.rows ?? []
   const total = query.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
   const activeFilterCount = Object.keys(dataFilters).length + (search ? 1 : 0) + (showArchived ? 1 : 0)
 
   const clearFilters = () => setParams(new URLSearchParams(), { replace: true })
@@ -202,6 +232,21 @@ export function DirectoryListPage({ type }: { type: EntityType }) {
               }
             />
           </div>
+        ) : type === 'person' ? (
+          /*
+            People are cards rather than rows. Everything around them, the
+            filter bar, the search, the archived toggle, and the pager, is the
+            same: only the middle changes.
+          */
+          <>
+            <PersonGrid people={rows} />
+            <PagerControls
+              page={page}
+              total={total}
+              pageCount={pageCount}
+              onPage={(next) => setParam('page', String(next))}
+            />
+          </>
         ) : (
           <>
             {/* Table on a laptop. Stacked cards below sm, so 375px works. */}
@@ -300,30 +345,12 @@ export function DirectoryListPage({ type }: { type: EntityType }) {
               ))}
             </ul>
 
-            <div className="border-rule flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2">
-              <p className="text-ink-muted font-mono text-xs">
-                {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, total)} of {total}
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => setParam('page', String(page - 1))}
-                >
-                  Previous
-                </Button>
-                <span className={cn('text-ink-muted font-mono text-xs')}>
-                  {page} / {pageCount}
-                </span>
-                <Button
-                  size="sm"
-                  disabled={page >= pageCount}
-                  onClick={() => setParam('page', String(page + 1))}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
+            <PagerControls
+              page={page}
+              total={total}
+              pageCount={pageCount}
+              onPage={(next) => setParam('page', String(next))}
+            />
           </>
         )}
       </Panel>

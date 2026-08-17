@@ -7,6 +7,7 @@ import { Panel, PanelBody, PanelHeader } from '@/components/ui/panel'
 import { LocationSourceNote } from '@/features/map/LocationSourceNote'
 import { ParcelRecordCard } from '@/features/parcels/ParcelRecordCard'
 import { DIRECTORY_CONFIGS, type FieldDef } from '@/features/directory/config'
+import { PhotoPanel } from '@/features/directory/PhotoPanel'
 import { useLocation, useSetManualLocation } from '@/hooks/use-data'
 import { useReferenceLabels } from '@/hooks/use-reference-labels'
 import type { Entity, Org } from '@/lib/data/types'
@@ -91,6 +92,8 @@ export function DetailsTab({ entity, org, onAddParcelRecord }: DetailsTabProps) 
 
   return (
     <div className="flex flex-col gap-4">
+      {/* A face is how a board member recognises a resident, so it leads. */}
+      {entity.type === 'person' && canEdit ? <PhotoPanel entity={entity} /> : null}
       <Panel>
         <PanelHeader title="Details" />
         <PanelBody>

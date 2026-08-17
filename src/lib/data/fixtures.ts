@@ -13,6 +13,7 @@ import type {
   ReferenceItem,
   Relation,
   RelationType,
+  DataSnapshot,
 } from './types'
 
 /*
@@ -32,15 +33,11 @@ import type {
      the app is opened. Tests pass a fixed reference; the app passes today.
 */
 
-export interface DemoData {
-  org: Org
-  relationTypes: RelationType[]
-  entities: Entity[]
-  relations: Relation[]
-  auditEntries: AuditEntry[]
-  referenceItems: ReferenceItem[]
-  users: OrgUser[]
-}
+/*
+  The demo dataset is just a store snapshot, so persistence and the eventual
+  Postgres load can work in the same shape rather than in a parallel one.
+*/
+export type DemoData = DataSnapshot
 
 const ORG_ID = 'org-ardsley'
 

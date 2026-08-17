@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronDown, ChevronUp, Plug, Plus } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plug, Plus, RotateCcw } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 import { StatusBadge } from '@/components/ui/badge'
@@ -28,6 +28,7 @@ import {
   type ReferenceList,
 } from '@/lib/data/types'
 import { formatDateTime } from '@/lib/format'
+import { hasLocalWork, onPersistenceError, resetLocalWork } from '@/lib/data'
 import { parcelService } from '@/lib/parcels'
 import { buildParcelViewerUrl } from '@/lib/parcels/pin'
 import { ROLE_LABELS } from '@/lib/role'
@@ -49,7 +50,9 @@ export function SettingsPage() {
   const { tab } = useParams<{ tab: string }>()
   const navigate = useNavigate()
 
-  const active = TABS.some((candidate) => candidate.value === tab) ? (tab as string) : 'organization'
+  const active = TABS.some((candidate) => candidate.value === tab)
+    ? (tab as string)
+    : 'organization'
 
   return (
     <>
@@ -153,7 +156,7 @@ function OrganizationTab() {
         >
           <Input
             value={template}
-            className="font-mono text-13"
+            className="text-13 font-mono"
             placeholder="https://gis.chathamcounty.org/parcelviewer?pin={pin}"
             onChange={(event) => {
               setTemplate(event.target.value)
@@ -225,13 +228,13 @@ function IntegrationsTab() {
         }
       />
       <PanelBody className="flex flex-col gap-4">
-        <p className="text-ink-muted max-w-2xl text-13">
+        <p className="text-ink-muted text-13 max-w-2xl">
           SAGIS is a public county service. There is no account, no API key, and nothing to
           authorize: it allows browser requests directly, so parcel lookups, the zoning district,
           and address geocoding all work without credentials.
         </p>
 
-        <p className="text-ink-muted max-w-2xl text-13">
+        <p className="text-ink-muted text-13 max-w-2xl">
           {live
             ? 'Parcel lookups read the county service. Zoning is resolved by locating each parcel inside the county zoning map, which covers the city, the unincorporated county, and the other municipalities.'
             : 'Parcel data is being read from a local sample of 60 real county records, so the app works with no network. Turn on live reading by setting VITE_SAGIS_LIVE in the environment file.'}
@@ -261,7 +264,7 @@ function IntegrationsTab() {
           </div>
         </dl>
 
-        <div className="text-ink-faint flex items-center gap-2 text-13">
+        <div className="text-ink-faint text-13 flex items-center gap-2">
           <Plug className="size-4" aria-hidden="true" />
           <span>
             There is no Connect button here on purpose. There is nothing to connect: the county
@@ -313,7 +316,10 @@ function ReferenceDataTab() {
 
       <PanelBody className="flex flex-col gap-3 p-0">
         <div className="border-rule flex flex-wrap items-end gap-2 border-b p-3">
-          <Field label={`Add to ${REFERENCE_LIST_LABELS[list].toLowerCase()}`} className="max-w-sm flex-1">
+          <Field
+            label={`Add to ${REFERENCE_LIST_LABELS[list].toLowerCase()}`}
+            className="max-w-sm flex-1"
+          >
             <Input
               value={newLabel}
               placeholder="Label as it should read in the app"
@@ -405,7 +411,10 @@ function ReferenceDataTab() {
                         checked={item.active}
                         aria-label={`${item.label} is active`}
                         onChange={(event) =>
-                          updateItem.mutate({ id: item.id, patch: { active: event.target.checked } })
+                          updateItem.mutate({
+                            id: item.id,
+                            patch: { active: event.target.checked },
+                          })
                         }
                       />
                     </Td>
@@ -507,48 +516,134 @@ function RelationTypesTab() {
 
 /* ----------------------------------------------------------- appearance -- */
 
+/*
+  What is kept in this browser, and how to be rid of it.
+
+  Until Supabase is connected, everything typed here lives in local storage on
+  one machine. A board member should be able to see that stated plainly and to
+  get back to a clean demo without clearing their whole browser.
+*/
+function SavedWorkPanel() {
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(() => hasLocalWork())
+  const [confirming, setConfirming] = useState(false)
+
+  useEffect(() => onPersistenceError(setError), [])
+
+  return (
+    <Panel>
+      <PanelHeader title="Saved work" />
+      <PanelBody className="flex flex-col gap-3">
+        <p className="text-ink-muted text-13 max-w-2xl">
+          Records, connections, and photographs are kept in this browser, on this computer, until
+          the database is connected. They are not shared with anyone else and they are not backed
+          up.
+        </p>
+
+        <dl className="grid max-w-2xl gap-x-8 gap-y-2 sm:grid-cols-2">
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-ink-muted text-13">Status</dt>
+            <dd className="font-mono text-xs">
+              {saved ? 'work saved in this browser' : 'nothing saved yet'}
+            </dd>
+          </div>
+        </dl>
+
+        {error === null ? null : (
+          <p role="alert" className="text-oxblood text-13 max-w-2xl">
+            {error}
+          </p>
+        )}
+
+        <div>
+          {confirming ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-ink-muted text-13">
+                This removes everything added or changed here. It cannot be undone.
+              </span>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  resetLocalWork()
+                  setSaved(false)
+                  setConfirming(false)
+                  // A reload rather than rebuilding in place: cached queries
+                  // point at records that are about to stop existing.
+                  window.location.reload()
+                }}
+              >
+                Discard and reload
+              </Button>
+              <Button size="sm" onClick={() => setConfirming(false)}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" disabled={!saved} onClick={() => setConfirming(true)}>
+              <RotateCcw />
+              Discard saved work and restore the demo
+            </Button>
+          )}
+        </div>
+      </PanelBody>
+    </Panel>
+  )
+}
+
 function AppearanceTab() {
   const { theme, resolved, setTheme } = useTheme()
 
   const options = [
     { value: 'light' as const, label: 'Light', description: 'Cool gray-green paper stock.' },
     { value: 'dark' as const, label: 'Dark', description: 'Deep slate-teal, same accent hues.' },
-    { value: 'system' as const, label: 'Match the system', description: 'Follows the operating system, and keeps following it.' },
+    {
+      value: 'system' as const,
+      label: 'Match the system',
+      description: 'Follows the operating system, and keeps following it.',
+    },
   ]
 
   return (
-    <Panel>
-      <PanelHeader title="Appearance" action={<span className="text-ink-faint font-mono text-xs">now: {resolved}</span>} />
-      <PanelBody>
-        <fieldset className="flex flex-col gap-2">
-          <legend className="label-caps mb-1">Theme</legend>
-          {options.map((option) => (
-            <label
-              key={option.value}
-              className="border-rule hover:border-rule-strong flex cursor-pointer items-start gap-3 rounded-[3px] border p-3 transition-colors duration-[120ms]"
-            >
-              <input
-                type="radio"
-                name="theme"
-                value={option.value}
-                checked={theme === option.value}
-                onChange={() => setTheme(option.value)}
-                className="accent-moss mt-0.5 size-4"
-              />
-              <span className="min-w-0">
-                <span className="text-ink block text-sm font-semibold">{option.label}</span>
-                <span className="text-ink-muted block text-13">{option.description}</span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
+    <div className="flex flex-col gap-4">
+      <Panel>
+        <PanelHeader
+          title="Appearance"
+          action={<span className="text-ink-faint font-mono text-xs">now: {resolved}</span>}
+        />
+        <PanelBody>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="label-caps mb-1">Theme</legend>
+            {options.map((option) => (
+              <label
+                key={option.value}
+                className="border-rule hover:border-rule-strong flex cursor-pointer items-start gap-3 rounded-[3px] border p-3 transition-colors duration-[120ms]"
+              >
+                <input
+                  type="radio"
+                  name="theme"
+                  value={option.value}
+                  checked={theme === option.value}
+                  onChange={() => setTheme(option.value)}
+                  className="accent-moss mt-0.5 size-4"
+                />
+                <span className="min-w-0">
+                  <span className="text-ink block text-sm font-semibold">{option.label}</span>
+                  <span className="text-ink-muted text-13 block">{option.description}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
 
-        <p className="text-ink-faint mt-3 text-xs">
-          {THEMES.length} options. Transitions are disabled automatically when the operating system
-          asks for reduced motion.
-        </p>
-      </PanelBody>
-    </Panel>
+          <p className="text-ink-faint mt-3 text-xs">
+            {THEMES.length} options. Transitions are disabled automatically when the operating
+            system asks for reduced motion.
+          </p>
+        </PanelBody>
+      </Panel>
+
+      <SavedWorkPanel />
+    </div>
   )
 }
 

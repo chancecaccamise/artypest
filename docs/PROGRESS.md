@@ -405,3 +405,62 @@ query from the report, returns `10 WHITAKER ST` first.
 as it was before. Relations are not searchable as such: a record is found by its
 own fields, not by the name of something it connects to. Both are worth doing
 and neither is what was asked for here.
+
+## 2026-08-17: the people directory as cards, with photographs that persist
+
+**Did.** Rebuilt the People directory as cards, added photographs and public
+biographies, and made work survive a page refresh.
+
+*Cards.* `PersonCard` leads with the photograph, then how to reach the person,
+then a short biography, then what they are connected to. Those connection counts
+are the point of the whole card: "two properties, one association" is the
+question this application exists to answer and it should not need a click. The
+card carries its own controls: open, show on the Connection Map, edit, archive,
+delete.
+
+Only People. Properties now holds 10,436 records and cards would be unusable
+there, so everything else keeps the table. The filter bar, search, archived
+toggle, and pager are shared, and the pager was extracted so the two views
+cannot drift apart.
+
+*Photographs.* Chosen from the computer, downscaled in the browser to 320 pixels
+on the long edge, and kept on the record as a data URL. Downscaling is not a
+nicety: a phone photograph is several megabytes, a browser holds about five in
+total, and thirty residents would fill it with the first handful. At 320 pixels a
+face is about 25KB. When Storage arrives this becomes an upload returning a URL
+and nothing else changes, because the record already holds a string.
+
+*Biography, distinct from notes.* `bio` is public and appears on the card.
+`notes` stays internal and is still never rendered for a resident.
+
+*Work that survives a refresh.* Nothing did before: the store was rebuilt from
+fixtures on every load. Saving the whole store is not possible and would not be
+right, since it is 10,527 records of which almost all are county parcels that
+should be rebuilt from the county. So what is saved is the difference between the
+store and the freshly built baseline: records created, changed, or removed, and
+the audit trail of those actions. A few dozen kilobytes instead of several
+megabytes.
+
+That split is the one Supabase inherits. The overlay is the user's data and
+becomes rows; the baseline is the parcel layer and becomes a table loaded from
+`data/sagis/parcels.ndjson`.
+
+Settings gained a Saved work panel: what is kept, that it is on one machine only,
+and a way to discard it and get the demo back.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 419 tests, and a
+production build. 35 of those tests are new, covering the overlay diff and
+restore, the storage failure paths including a full quota, photo downscaling and
+validation, and the card view end to end.
+
+**A real bug this surfaced.** The provider replaces `data` wholesale on update,
+and the edit form only submits the fields in its config. So a photograph would
+have vanished the moment somebody corrected a phone number, and any edit to a
+county parcel would have silently dropped its neighborhood, county owner, and
+legal description, which are not form fields. The form now carries unmanaged keys
+through.
+
+**Not done, and why.** Documents attached to a person are related `document`
+records, which the Connections tab already shows; file upload still waits on
+Supabase Storage. Saved work lives in one browser on one machine and is not
+backed up, which the Settings panel says plainly. Cards are People only.

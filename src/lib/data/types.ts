@@ -94,6 +94,23 @@ export interface Relation {
 export type RelationInput = Pick<Relation, 'relationTypeId' | 'fromEntityId' | 'toEntityId'> &
   Partial<Pick<Relation, 'startDate' | 'endDate' | 'attributes'>>
 
+/**
+ * Everything the store holds, in one object.
+ *
+ * The provider is constructed from one of these and can hand one back, which is
+ * what makes both saving work locally and loading it into Postgres a matter of
+ * moving data rather than reaching into the provider.
+ */
+export interface DataSnapshot {
+  org: Org
+  relationTypes: RelationType[]
+  entities: Entity[]
+  relations: Relation[]
+  auditEntries: AuditEntry[]
+  referenceItems: ReferenceItem[]
+  users: OrgUser[]
+}
+
 export type AuditAction = 'insert' | 'update' | 'delete'
 
 /** One row per changed field, so history reads as a field-level diff. */
@@ -288,6 +305,12 @@ export interface DataProvider {
   updateReferenceItem(id: string, patch: ReferenceItemPatch): Promise<ReferenceItem>
 
   listUsers(): Promise<OrgUser[]>
+
+  /**
+   * The whole store, for saving work between page loads and for the eventual
+   * migration into Postgres. A read: it changes nothing.
+   */
+  snapshot(): DataSnapshot
 
   /**
    * Runs `work` as one audited batch and returns the batch id alongside the

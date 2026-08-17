@@ -76,6 +76,16 @@ export const personDataSchema = z.object({
   mailingAddress: optionalText,
   householdRole: optionalText,
   memberSince: optionalYear,
+  /**
+   * A short public description: who this person is to the association. Distinct
+   * from `notes`, which is internal and is never rendered for a resident.
+   */
+  bio: optionalText,
+  /**
+   * A data URL today, downscaled in the browser by src/lib/photos.ts. Becomes a
+   * Supabase Storage URL later, and stays a string either way.
+   */
+  photo: optionalText,
   notes: optionalText,
 })
 

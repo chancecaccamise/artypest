@@ -86,6 +86,7 @@ class MemoryProvider implements DataProvider {
   /** Set while runBatch is in flight, so every audit row it causes is grouped. */
   private currentBatchId: string | null = null
 
+
   constructor(data: DemoData) {
     this.org = clone(data.org)
     this.entities = clone(data.entities)
@@ -556,6 +557,24 @@ class MemoryProvider implements DataProvider {
       batchId: this.currentBatchId,
     })
   }
+
+  /*
+    The whole store, for persistence and for the eventual migration into
+    Postgres. Cloned, so a caller cannot reach in and mutate the store by
+    holding on to what it was given.
+  */
+  snapshot(): DemoData {
+    return {
+      org: clone(this.org),
+      entities: clone(this.entities),
+      relations: clone(this.relations),
+      relationTypes: clone(this.relationTypes),
+      auditEntries: clone(this.auditEntries),
+      referenceItems: clone(this.referenceItems),
+      users: clone(this.users),
+    }
+  }
+
 }
 
 export function createMemoryProvider(data: DemoData = buildDemoData()): DataProvider {
