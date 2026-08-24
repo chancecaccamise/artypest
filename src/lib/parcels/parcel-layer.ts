@@ -6,11 +6,12 @@ import type { ParcelRecord } from './types'
   Loads the harvested parcel layer that `pnpm sagis:harvest` writes to
   public/parcels/.
 
-  Those files are not committed. They are roughly 24MB on disk, they are rebuilt
-  from the county service rather than edited, and they are headed for Postgres.
-  So a fresh clone has no parcel layer at all, and that has to be an ordinary
-  state rather than a crash: the app falls back to the committed 60-parcel
-  fixture and says which it is using.
+  These three are committed, because the deployed site serves them as static
+  files and has no database behind it yet. The larger Postgres-shaped copy in
+  data/sagis/ is not. Either way the app has to survive their absence rather
+  than crash: a clone that has not run the harvest, and a host that answers a
+  missing path with index.html, both end up here. It falls back to the committed
+  60-parcel fixture and says which it is using.
 
   The layer is never bundled. `src/lib/parcels/fixtures/chatham-sample.json` is
   imported and therefore compiled into the JavaScript; these are fetched, so

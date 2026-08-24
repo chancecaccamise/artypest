@@ -436,3 +436,53 @@ file.
 directory before, 8.0MB and 443ms after. Ninety-seven milliseconds for 60% more
 records does not justify the split, and splitting would cost the search index
 its recall over legal descriptions and mailing addresses.
+
+## 2026-08-24, deploying to Vercel
+
+### `.gitignore` patterns for build output are anchored
+
+**Chosen.** `/data/`, with a leading slash.
+
+**Rejected.** The bare `data/` that was there.
+
+**Why.** A pattern without a slash matches a directory of that name at any
+depth, so `data/` also matched `src/lib/data/`. Files already tracked stayed
+tracked, which is why nothing looked wrong, but three written after the rule
+landed were never committed: `persistence.ts`, `persistence.test.ts`, and
+`parcel-layer-integration.test.ts`. Every deploy since then failed on
+`TS2307: Cannot find module './persistence'` while the build passed on the
+machine that had the files, and Vercel kept serving the last build that
+succeeded, which was the scaffold from the first commit.
+
+The general rule this earns: a gitignore entry meant for one directory gets a
+leading slash, and a clean clone is the only thing that can prove a build.
+
+### `public/parcels/` is committed, `data/sagis/` is not
+
+**Chosen.** Commit the 13MB the browser fetches. Keep the 11MB
+`parcels.ndjson` out.
+
+**Rejected.** Running `pnpm sagis:harvest` as part of the Vercel build command,
+and committing nothing and letting the deploy show the 48-lot demo.
+
+**Why.** The deployed site is static files with no database behind it, so
+committed data is the only way it gets a map. Harvesting at build time would add
+five minutes and about a hundred requests to a municipal server to every deploy,
+preview deploys included, and would make a SAGIS outage a failed deploy.
+
+This reverses the earlier "none of it committed" position, which was written
+when the only consumer was a local dev server. It costs a copy in git history
+per re-harvest and goes away when Supabase takes over serving.
+
+### A rewrite so deep links work
+
+**Chosen.** `vercel.json` rewriting everything to `/index.html`.
+
+**Why.** `BrowserRouter` and one built HTML file, so `/plat/:id` would 404 on a
+refresh or a shared link. Vercel checks the filesystem before applying rewrites,
+so static assets are unaffected.
+
+One consequence worth knowing: a missing `/parcels/attributes.json` now answers
+200 with HTML rather than 404, exactly as the Vite dev server does. The
+content-type check in `loadParcelLayer` already covers that, which is the reason
+it was written.

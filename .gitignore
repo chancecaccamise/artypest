@@ -17,12 +17,23 @@ coverage
 # package manager, so it is ignored rather than committed.
 package-lock.json
 
-# Harvested SAGIS parcel data. Roughly 14MB across three files, rebuilt by
-# `pnpm sagis:harvest`, and destined for Postgres rather than for git.
-# src/lib/parcels/coverage-manifest.json IS committed: it is what makes the
-# coverage reviewable in a diff.
-data/
-public/parcels/
+# `pnpm sagis:harvest` writes two kinds of thing, and only one is ignored.
+#
+# data/sagis/parcels.ndjson is 11MB of full records with geometry, written in
+# the shape that loads into Postgres. It is rebuilt from the county rather than
+# edited, so it stays out of git.
+#
+# public/parcels/ is the 13MB the browser actually fetches, and it IS committed,
+# because the deployed site has no other way to get it: it is served as static
+# files and there is no database behind it yet. Without it the deploy falls back
+# to the 48-lot demo fixture. This goes away when Supabase does the job.
+#
+# The pattern is anchored with a leading slash on purpose. A bare `data/`
+# matches a directory of that name at ANY depth, so it also swallowed
+# src/lib/data/, and three source files written after that rule was added were
+# silently never committed. Every deploy built from the repository failed on the
+# missing module while it built fine on this machine.
+/data/
 
 # Environment. Never commit real credentials, .env.example carries placeholders.
 .env

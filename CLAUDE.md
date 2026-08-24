@@ -56,10 +56,12 @@ supabase gen types typescript --local > src/types/database.ts
 pnpm sagis:harvest    # download the parcel corridor from the county service
 ```
 
-`pnpm sagis:harvest` writes ~14MB to `data/` and `public/parcels/`, none of it
-committed, so a fresh clone has no parcel layer until it runs. The app falls back
-to the 60-parcel fixture in the meantime, which works but only covers one street.
-Coverage is defined in `scripts/sagis/coverage.mjs` and recorded in
+`pnpm sagis:harvest` writes ~24MB. The 13MB in `public/parcels/` is committed,
+because the deployed site is static files with no database behind it yet and has
+no other way to get the map. The 11MB `data/sagis/parcels.ndjson` is not: it is
+the Postgres-shaped copy. When the slice is absent the app falls back to the
+48-lot demo fixture and says which it is using. Coverage is a list of
+neighborhoods in `scripts/sagis/coverage.mjs`, recorded in
 `src/lib/parcels/coverage-manifest.json`. See `docs/SAGIS-API.md`.
 
 `pnpm verify` must pass before any commit. No exceptions.
