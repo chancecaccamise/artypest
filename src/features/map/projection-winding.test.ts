@@ -17,7 +17,7 @@ import { buildProjection } from './projection'
   checks the reversal handles both shapes, because it did not: MultiPolygon
   coordinates are an array of polygons rather than an array of rings, so the
   Polygon path reversed the order of a lot's rings instead of its points. The
-  40-lot fixture had no MultiPolygons and the harvested corridor has 21.
+  40-lot fixture had no MultiPolygons and the harvested layer has 36.
 */
 
 const SQUARE: [number, number][] = [
@@ -70,7 +70,7 @@ describe('winding order', () => {
   it('does not let one bad lot drag the whole plat out of scale', () => {
     /*
       The failure was not only that the broken lot drew wrong. fitExtent frames
-      every feature, so a world-sized one shrank all 10,399 others to a dot.
+      every feature, so a world-sized one shrank all 16,656 others to a dot.
     */
     const withMulti = buildProjection(
       400,
@@ -103,10 +103,11 @@ describe('winding order', () => {
 describe('merging the harvest with the committed fixture', () => {
   it('keeps every association lot drawable', () => {
     /*
-      The corridor runs MLK Jr Blvd to E Broad Street, and E 49th Street carries
-      on east past that edge, so 29 of the association's own 40 platted lots sit
-      outside the harvest. Replacing the fixture rather than merging dropped them
-      off the drawing, which is the worst thing here to lose.
+      Every association lot is inside the harvest now that coverage is whole
+      neighborhoods, but coverage is a list that can be shortened. When it was a
+      rectangle, 29 of the association's own 40 platted lots sat outside it and
+      replacing the fixture rather than merging dropped them off the drawing,
+      which is the worst thing here to lose.
     */
     const harvestOnly = collection([
       {

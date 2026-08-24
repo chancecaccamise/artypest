@@ -40,7 +40,7 @@ import { cn } from '@/lib/utils'
 const MIN_ZOOM = 0.5
 
 /*
-  The corridor is six and a half kilometres of city. Framed whole, a typical lot
+  The harvested map is eight kilometres of city. Framed whole, a typical lot
   is about two pixels across, so the old ceiling of 20 could only ever get one up
   to roughly fifty pixels: visible, but not a drawing anybody could read. This
   allows a single lot to fill the view, which is what "show me this address"
@@ -59,14 +59,28 @@ const READABLE_LOT_PX = 40
 const FOCUS_FILL = 0.45
 
 /*
-  The most lots drawn at once. Above roughly this many an SVG plat stops panning
-  smoothly, and the harvested corridor holds 10,399. At any zoom where a reader
-  is looking at lots rather than at the shape of the city, far fewer than this
-  are on screen, so the cap only bites when fully zoomed out. When it does, the
-  plat says so: quietly drawing part of the neighbourhood would be the same
-  silent-gap problem the harvester exists to prevent.
+  The most lots drawn at once. The harvested layer holds 16,656, and at any zoom
+  where a reader is looking at lots rather than at the shape of the city far
+  fewer than this are on screen, so the cap only bites when fully zoomed out.
+  When it does, the plat says so: quietly drawing part of a neighborhood would be
+  the same silent-gap problem the harvester exists to prevent.
+
+  Measured, not guessed. Panning the full extent in headless Chrome, median
+  frame time against the ceiling, with the 4,755 street segments drawn
+  underneath in every case:
+
+    3,000 -> 37ms     9,000 -> 53ms
+    6,000 -> 45ms    16,656 -> 73ms   (no cap at all)
+
+  There is no cliff to sit below, just a steady 2.7ms per extra thousand lots,
+  so this is a judgement rather than a threshold. 6,000 is twice what the old
+  ceiling showed of a layer 60% larger, which puts a reader back ahead of where
+  they were, and it costs about a fifth more frame time than 3,000 did.
+
+  Those absolute numbers come from a headless browser rasterising in software
+  and are pessimistic. It is the slope between them that decided this.
 */
-const MAX_DRAWN_PARCELS = 3000
+const MAX_DRAWN_PARCELS = 6000
 
 /** Below this the plat draws every lot and never consults the viewport. */
 const CULL_THRESHOLD = 500
@@ -190,7 +204,7 @@ export function PlatView({
   /*
     Only the lots on screen are drawn.
 
-    With the harvested corridor loaded this is over ten thousand polygons, and
+    With the harvested layer loaded this is over sixteen thousand polygons, and
     an SVG that renders all of them repaints every pan frame. The path strings
     are still computed once per size, as before: this decides which of them the
     browser is asked to lay out.
@@ -200,6 +214,20 @@ export function PlatView({
     part of the neighbourhood, which would be the same silent-gap problem the
     harvester exists to avoid.
   */
+  /*
+    Largest first, sorted once per projection rather than once per pan frame.
+
+    The cap has to keep the lots a reader can actually see rather than an
+    arbitrary slice, and ranking by area is how. But area does not change when
+    the view moves, so sorting inside the per-frame memo was re-sorting sixteen
+    thousand lots on every frame of every pan, which measurably cost more than
+    the paths it was there to avoid drawing.
+  */
+  const parcelsByArea = useMemo(
+    () => [...projection.parcels].sort((a, b) => b.area - a.area),
+    [projection.parcels]
+  )
+
   const visibleParcels = useMemo(() => {
     /*
       A small plat is drawn whole. Culling buys nothing at 40 lots, and it costs
@@ -218,21 +246,23 @@ export function PlatView({
     const right = (size.width - x) / k
     const bottom = (size.height - y) / k
 
-    const onScreen = projection.parcels.filter((parcel) => {
+    /*
+      One pass in area order: keep the first MAX_DRAWN_PARCELS that are on
+      screen, and go on counting the rest so the notice can say how many were
+      left out. Counting to the end is what makes "of 16,656" true; stopping
+      early would make it a guess.
+    */
+    const parcels = []
+    let onScreen = 0
+    for (const parcel of parcelsByArea) {
       const [minX, minY, maxX, maxY] = parcel.bounds
-      return maxX >= left && minX <= right && maxY >= top && minY <= bottom
-    })
-
-    if (onScreen.length <= MAX_DRAWN_PARCELS) return { parcels: onScreen, capped: 0 }
-
-    // Largest first, so what survives the cap is the lots a reader can actually
-    // see rather than an arbitrary slice of the list.
-    const ranked = [...onScreen].sort((a, b) => b.area - a.area)
-    return {
-      parcels: ranked.slice(0, MAX_DRAWN_PARCELS),
-      capped: onScreen.length - MAX_DRAWN_PARCELS,
+      if (maxX < left || minX > right || maxY < top || minY > bottom) continue
+      onScreen += 1
+      if (parcels.length < MAX_DRAWN_PARCELS) parcels.push(parcel)
     }
-  }, [projection.parcels, transform, size.width, size.height])
+
+    return { parcels, capped: onScreen - parcels.length }
+  }, [projection.parcels, parcelsByArea, transform, size.width, size.height])
 
   useEffect(() => {
     const svg = svgRef.current
@@ -283,8 +313,8 @@ export function PlatView({
     Take the reader to the selected lot.
 
     Selecting a record elsewhere in the app routes to /plat/:id, which until now
-    highlighted the lot without moving the view. At corridor scale that meant
-    landing on a two pixel mark somewhere in six kilometres of city, which reads
+    highlighted the lot without moving the view. At full extent that meant
+    landing on a two pixel mark somewhere in eight kilometres of city, which reads
     exactly like nothing having happened.
 
     The view only moves when it needs to. A lot already on screen at a readable

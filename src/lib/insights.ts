@@ -78,9 +78,10 @@ export interface DashboardStats {
   Which lots the association actually tracks.
 
   Since the parcel layer landed, most property records in the system are county
-  parcels: land inside the corridor that the association has no relationship to.
+  parcels: land the association has no relationship to, in neighborhoods it does
+  not cover.
   They belong in the directory and on the map, but not in a figure that claims to
-  describe the association. A dashboard reading "10,399 lots, 3% owner occupied"
+  describe the association. A dashboard reading "16,656 lots, 0.3% owner occupied"
   is worse than no dashboard, because it is confidently wrong.
 
   Membership is a `member_of` relation to an association, the same shape
@@ -124,7 +125,7 @@ export function computeStats(graph: ResolvedGraph, today: Date = new Date()): Da
     (entity) => entity.deletedAt === null && entity.archivedAt === null
   )
 
-  // The association's lots, not every parcel in the corridor.
+  // The association's lots, not every parcel on the map.
   const properties = associationProperties(graph, today)
   const propertyIds = new Set(properties.map((entity) => entity.id))
 

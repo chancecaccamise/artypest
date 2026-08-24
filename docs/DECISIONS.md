@@ -360,3 +360,79 @@ added to a newly created `~/.zshrc`.
 
 **Why.** `/usr/local` is root-owned on this machine. A user-level install avoids
 sudo and is trivially reversible.
+
+## 2026-08-24, finishing the parcel layer
+
+### Coverage is a list of neighborhoods, not a rectangle
+
+**Chosen.** `scripts/sagis/coverage.mjs` holds 27 neighborhood names. The
+harvest asks the neighborhood layer for each boundary and uses it as the query
+geometry against the parcel layer.
+
+**Rejected.** Widening the existing latitude and longitude envelope until it
+reached the missing lots.
+
+**Why.** Savannah's grid is rotated, so a rectangle cuts diagonally through the
+neighborhoods inside it. The first harvest clipped all 27 it touched, worst at
+Ardmore with 734 of 1,151, and it missed the River Street frontage entirely.
+Widening moves the problem rather than solving it: the bounding box of those
+same 27 neighborhoods holds 22,674 parcels, so it would drag in Carver Heights,
+Cuyler/Brownville, and Hutchinson Island and still clip whatever landed on its
+new edges. A boundary is the only shape that matches what somebody means when
+they name a neighborhood.
+
+This also deletes two hand-maintained things. `NEIGHBORHOOD_TOTALS` was a table
+of full sizes typed in by hand; the per-neighborhood ID query now returns that
+number as a side effect of asking for the parcels. `EXCLUDED_NEIGHBORHOODS`
+existed to push back what an envelope caught by accident, which an allowlist
+cannot do.
+
+### A lot belongs to the neighborhood its centroid falls in
+
+**Chosen.** Assign by centroid. A parcel that touches a selected neighborhood
+but is centred in one we did not ask for is dropped, counted, and reported.
+
+**Rejected.** Keeping every parcel the boundary queries returned.
+
+**Why.** One lot has to be one record in one place, and 42 of the 16,698
+returned are centred outside the selection. Keeping them would quietly extend
+coverage past the list that is supposed to define it.
+
+The manifest reports both numbers per neighborhood because they answer different
+questions: `touching` is what the service returns for the boundary, `harvested`
+is how many are centred inside it. An earlier version compared the two as though
+the first were a target, and reported 15 neighborhoods as incomplete when every
+parcel was accounted for. The real claim is arithmetic and lives in
+`accounting`: 16,698 fetched = 16,656 written + 42 centred outside + 0 duplicate
+PINs.
+
+### The plat's draw ceiling was raised to 6,000, and the ranking sort moved
+
+**Chosen.** `MAX_DRAWN_PARCELS = 6000`, and the largest-first ordering is
+computed once per projection instead of inside the per-frame memo.
+
+**Rejected.** Leaving it at 3,000, removing the cap, and rewriting the plat onto
+a canvas.
+
+**Why.** Measured by panning the full extent in headless Chrome: 37ms per frame
+at 3,000, 45ms at 6,000, 53ms at 9,000, 73ms uncapped. There is no cliff, just
+2.7ms per extra thousand lots, so the number is a judgement and not a threshold.
+6,000 shows twice what the old ceiling did of a layer 60% larger.
+
+The sort was the one clear waste the measurement found. Area does not change
+when the view moves, but the memo depends on the transform, so every frame of
+every pan re-sorted the on-screen lots. Sorting once per projection took about
+5ms per frame off every ceiling tested.
+
+### The boot payload was left whole
+
+**Chosen.** `public/parcels/attributes.json` stays one file, fetched before the
+first render.
+
+**Rejected.** Splitting it into a slim boot file and a lazily fetched detail
+file.
+
+**Why.** Measured before splitting anything: 5.0MB and 346ms to a usable
+directory before, 8.0MB and 443ms after. Ninety-seven milliseconds for 60% more
+records does not justify the split, and splitting would cost the search index
+its recall over legal descriptions and mailing addresses.

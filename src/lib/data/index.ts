@@ -19,7 +19,7 @@ import type { DataProvider } from './types'
   below the `data` export goes away, because Postgres does all of it properly.
 
   Why `data` is a `let`. The harvested parcel layer is fetched, so it cannot be
-  there at module-evaluation time, and it is 10,399 lots that have to become
+  there at module-evaluation time, and it is 16,656 lots that have to become
   entities before anything reads them. `data` is an ES module live binding:
   every importer sees the reassignment, so `initializeData` can replace the
   provider once the layer has arrived without a single call site changing. Call

@@ -1,5 +1,5 @@
 /*
-  Harvests every parcel in the corridor defined by scripts/sagis/coverage.mjs.
+  Harvests every parcel in the neighborhoods listed in scripts/sagis/coverage.mjs.
 
     pnpm sagis:harvest
 
@@ -16,6 +16,11 @@
   This instead asks for the complete OBJECTID list in one request, which is not
   subject to the limit, then fetches those exact IDs in chunks and checks that
   every one came back. Coverage stops being something we hope for.
+
+  Selection is by neighborhood boundary, not by a rectangle. The ID list is
+  asked for once per neighborhood, so the manifest can report what the service
+  says the neighborhood holds beside what was written, from the same run. See
+  coverage.mjs for why the rectangle had to go.
 
   Output, none of it committed except the manifest:
 
@@ -35,13 +40,7 @@ import { dirname } from 'node:path'
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon'
 import centroid from '@turf/centroid'
 
-import {
-  CORRIDOR,
-  DRIFT_TOLERANCE,
-  EXCLUDED_NEIGHBORHOODS,
-  EXPECTED_PARCEL_COUNT,
-  NEIGHBORHOOD_TOTALS,
-} from './coverage.mjs'
+import { DRIFT_TOLERANCE, EXPECTED_PARCEL_COUNT, NEIGHBORHOODS } from './coverage.mjs'
 import {
   fetchByIds,
   NEIGHBORHOOD_LAYER,
@@ -75,12 +74,8 @@ const PARCEL_FIELDS = [
 /** Six decimal places is about 11cm, far finer than a plat drawing can show. */
 const COORD_PRECISION = 6
 
-const envelope = {
-  geometry: JSON.stringify(CORRIDOR),
-  geometryType: 'esriGeometryEnvelope',
-  inSR: '4326',
-  spatialRel: 'esriSpatialRelIntersects',
-}
+/** Neighborhood polygons are large, so they are asked for a few at a time. */
+const BOUNDARY_CHUNK_SIZE = 20
 
 /* ---------------------------------------------------------------- helpers -- */
 
@@ -135,7 +130,7 @@ function bboxOf(geometry) {
 /**
  * Point in polygon over a set of features, with a bounding-box prefilter.
  *
- * 10,399 parcels against several hundred districts is a few million tests
+ * 16,698 parcels against several hundred districts is a few million tests
  * without one, and the prefilter turns almost all of them into four number
  * comparisons.
  */
@@ -170,13 +165,98 @@ function progress(label) {
   }
 }
 
-/* ---------------------------------------------------------------- harvest -- */
+/**
+ * A neighborhood boundary as query geometry.
+ *
+ * The rings come back from the service in Esri's own JSON, so their winding is
+ * already what the service expects: clockwise for an outer ring, the other way
+ * for a hole. Converting GeoJSON back into rings would invert that and turn a
+ * neighborhood into its own hole.
+ */
+function polygonQuery(rings) {
+  return {
+    geometry: JSON.stringify({ rings, spatialReference: { wkid: 4326 } }),
+    geometryType: 'esriGeometryPolygon',
+    inSR: '4326',
+    spatialRel: 'esriSpatialRelIntersects',
+    where: '1=1',
+  }
+}
 
-console.log('Corridor:', JSON.stringify(CORRIDOR))
+/* ----------------------------------------------------------- boundaries -- */
 
-console.log('\nAsking for the complete parcel ID list...')
-const ids = await objectIdsFor(PARCEL_LAYER, envelope)
-console.log(`  ${ids.length.toLocaleString()} parcels in the corridor`)
+console.log(`Coverage: ${NEIGHBORHOODS.length} neighborhoods, complete to their own boundaries`)
+
+console.log('\nFetching neighborhood boundaries...')
+const quoted = NEIGHBORHOODS.map((name) => `'${name.replace(/'/g, "''")}'`).join(',')
+const boundaryIds = await objectIdsFor(NEIGHBORHOOD_LAYER, { where: `NAME IN (${quoted})` })
+
+/*
+  Twice, in two formats, because they are needed for two different things and
+  converting between them is where the winding-order bugs live. Esri rings go
+  to the service as query geometry; GeoJSON goes to turf to decide which
+  neighborhood a lot's centroid falls in.
+*/
+const ringsByName = new Map()
+const boundaryFeatures = []
+
+for (let index = 0; index < boundaryIds.length; index += BOUNDARY_CHUNK_SIZE) {
+  const chunk = boundaryIds.slice(index, index + BOUNDARY_CHUNK_SIZE).join(',')
+  const params = { objectIds: chunk, outFields: 'NAME', returnGeometry: 'true', outSR: '4326' }
+
+  const esri = await query(NEIGHBORHOOD_LAYER, params)
+  for (const feature of esri.features ?? []) {
+    const name = text(feature.attributes?.NAME)
+    // A neighborhood can be published as several rows. Its boundary is all of them.
+    const rings = ringsByName.get(name) ?? []
+    rings.push(...(feature.geometry?.rings ?? []))
+    ringsByName.set(name, rings)
+  }
+
+  const geo = await query(NEIGHBORHOOD_LAYER, { ...params, f: 'geojson' })
+  boundaryFeatures.push(...(geo.features ?? []))
+}
+
+const missingNames = NEIGHBORHOODS.filter((name) => (ringsByName.get(name) ?? []).length === 0)
+if (missingNames.length > 0) {
+  console.error(
+    `\nFAILED: the service published no boundary for ${missingNames.join(', ')}. ` +
+      'Check the spelling in coverage.mjs against the NAME field.'
+  )
+  process.exit(1)
+}
+console.log(`  ${ringsByName.size} boundaries, ${boundaryFeatures.length} polygons`)
+
+const locateNeighborhood = makeLocator(boundaryFeatures)
+
+/*
+  Every ring from every selected neighborhood, as one query geometry. Used for
+  the streets, which have to cover the same ground the lots do and no more.
+*/
+const coverageRings = [...ringsByName.values()].flat()
+
+/* -------------------------------------------------------------- parcel IDs -- */
+
+/*
+  One ID list per neighborhood rather than one for the union. It costs 27
+  requests instead of one and buys the number this whole file exists to report:
+  what the neighborhood holds, straight from the service, next to what we wrote.
+*/
+console.log('\nAsking for the parcel ID list, one neighborhood at a time...')
+
+const totalByNeighborhood = new Map()
+const parcelIds = new Set()
+
+for (const name of NEIGHBORHOODS) {
+  const ids = await objectIdsFor(PARCEL_LAYER, polygonQuery(ringsByName.get(name)))
+  totalByNeighborhood.set(name, ids.length)
+  for (const id of ids) parcelIds.add(id)
+  console.log(`  ${String(ids.length).padStart(5)}  ${name}`)
+}
+
+// A lot on a shared boundary is returned by both of its neighbors.
+const ids = [...parcelIds]
+console.log(`  ${ids.length.toLocaleString()} distinct parcels across all of them`)
 
 const drift = Math.abs(ids.length - EXPECTED_PARCEL_COUNT) / EXPECTED_PARCEL_COUNT
 if (drift > DRIFT_TOLERANCE) {
@@ -185,6 +265,8 @@ if (drift > DRIFT_TOLERANCE) {
       `which is ${(drift * 100).toFixed(1)}% away. The county may have republished.`
   )
 }
+
+/* ---------------------------------------------------------------- parcels -- */
 
 console.log('\nFetching parcels by ID...')
 let { features, missing } = await fetchByIds(
@@ -218,23 +300,33 @@ if (features.length !== ids.length) {
 }
 console.log(`  all ${features.length.toLocaleString()} accounted for`)
 
-/* ---------------------------------------------------------- neighborhoods -- */
+/* ---------------------------------------------------------------- zoning -- */
 
-console.log('\nFetching neighborhood boundaries...')
-const neighborhoods = await query(NEIGHBORHOOD_LAYER, {
-  ...envelope,
-  outFields: 'NAME',
-  outSR: '4326',
-  returnGeometry: 'true',
-  f: 'geojson',
-})
-const neighborhoodFeatures = neighborhoods.features ?? []
-console.log(`  ${neighborhoodFeatures.length} neighborhoods touch the corridor`)
-const locateNeighborhood = makeLocator(neighborhoodFeatures)
+/*
+  An envelope is right here where it was wrong for the parcels. Zoning is only
+  ever read by asking which district a point falls in, so a few polygons beyond
+  the edge cost one bounding-box comparison each and nothing else.
+*/
+let xmin = Infinity
+let ymin = Infinity
+let xmax = -Infinity
+let ymax = -Infinity
+for (const ring of coverageRings) {
+  for (const [x, y] of ring) {
+    if (x < xmin) xmin = x
+    if (y < ymin) ymin = y
+    if (x > xmax) xmax = x
+    if (y > ymax) ymax = y
+  }
+}
+const extent = { xmin, ymin, xmax, ymax }
 
 console.log('\nFetching zoning districts...')
 const zoning = await query(ZONING_LAYER, {
-  ...envelope,
+  geometry: JSON.stringify(extent),
+  geometryType: 'esriGeometryEnvelope',
+  inSR: '4326',
+  spatialRel: 'esriSpatialRelIntersects',
   outFields: 'ZONE,ZONING_DISTRICT',
   outSR: '4326',
   returnGeometry: 'true',
@@ -248,15 +340,15 @@ const locateZoning = makeLocator(zoningFeatures)
 
 /*
   The street centrelines are what make the plat readable at anything wider than
-  a block. Zoomed out to the whole corridor a lot is about three square pixels,
-  so the parcels read as a tint and the streets carry the structure.
+  a block. Zoomed out to the whole map a lot is about three square pixels, so
+  the parcels read as a tint and the streets carry the structure.
 
-  Fetched by ID for the same reason the parcels are: 3,004 segments is well past
-  the point where the transfer limit starts quietly dropping rows.
+  Fetched by ID for the same reason the parcels are: six thousand segments is
+  well past the point where the transfer limit starts quietly dropping rows.
 */
 console.log('\nFetching street centrelines...')
-const roadIds = await objectIdsFor(ROADS_LAYER, envelope)
-console.log(`  ${roadIds.length.toLocaleString()} segments in the corridor`)
+const roadIds = await objectIdsFor(ROADS_LAYER, polygonQuery(coverageRings))
+console.log(`  ${roadIds.length.toLocaleString()} segments across the neighborhoods`)
 
 const roads = await fetchByIds(
   ROADS_LAYER,
@@ -301,16 +393,16 @@ streetFeatures.sort((a, b) => a.properties.name.localeCompare(b.properties.name)
 
 console.log('\nBuilding records...')
 
-const excluded = new Set(EXCLUDED_NEIGHBORHOODS)
+const selected = new Set(NEIGHBORHOODS)
 const records = []
 const geometryFeatures = []
 const byNeighborhood = new Map()
 const seenPins = new Set()
 
-let droppedExcluded = 0
+let outsideSelection = 0
 let duplicatePins = 0
-let withoutNeighborhood = 0
 let withoutZoning = 0
+let multiPolygons = 0
 
 for (const feature of features) {
   const properties = feature.properties ?? {}
@@ -321,8 +413,15 @@ for (const feature of features) {
   const neighborhood = locateNeighborhood(point)
   const name = neighborhood ? text(neighborhood.properties.NAME) : ''
 
-  if (excluded.has(name)) {
-    droppedExcluded += 1
+  /*
+    A lot belongs to whichever neighborhood its centroid sits in, so that one
+    lot is one record in one place. A lot that merely touches the edge of a
+    selected neighborhood can be centred in one we did not ask for, and taking
+    it would quietly extend coverage past the list in coverage.mjs. It is
+    dropped and counted instead.
+  */
+  if (!selected.has(name)) {
+    outsideSelection += 1
     continue
   }
   // The same parcel is returned once per query, but a PIN can repeat in the
@@ -333,7 +432,7 @@ for (const feature of features) {
   }
   seenPins.add(pin)
 
-  if (name === '') withoutNeighborhood += 1
+  if (feature.geometry.type === 'MultiPolygon') multiPolygons += 1
 
   const district = locateZoning(point)
   const zoningDistrict = district ? optionalText(district.properties.ZONE) : null
@@ -362,7 +461,7 @@ for (const feature of features) {
     legalDescription: text(properties.Legal_Description),
     municipalityCode: optionalText(properties.Municipality),
     dateUpdated: isoDate(properties.Date_Updated),
-    neighborhood: name === '' ? null : name,
+    neighborhood: name,
   })
 
   geometryFeatures.push({
@@ -401,32 +500,60 @@ write(
   JSON.stringify({ type: 'FeatureCollection', features: streetFeatures })
 )
 
-const coverage = [...byNeighborhood.entries()]
-  .map(([name, harvested]) => ({
-    neighborhood: name === '' ? '(outside every neighborhood boundary)' : name,
-    harvested,
-    inNeighborhood: NEIGHBORHOOD_TOTALS[name] ?? null,
-    // A neighborhood the corridor only clips. Expected, and recorded so it is
-    // never mistaken later for a gap.
-    partial: NEIGHBORHOOD_TOTALS[name] === undefined ? null : harvested < NEIGHBORHOOD_TOTALS[name],
-  }))
-  .sort((a, b) => b.harvested - a.harvested)
+/*
+  Two numbers per neighborhood, and they answer two different questions.
+
+  `touching` is what the service reports: every parcel whose geometry meets the
+  boundary, which includes lots on a shared edge that belong to the neighbor.
+  `harvested` is how many are centred inside it, which is how a lot is assigned
+  to exactly one neighborhood. So `touching` is always the larger of the two,
+  and the difference is not a gap. Reporting the first as though it were the
+  target is what made an earlier run claim 15 neighborhoods were short when
+  every parcel was accounted for.
+
+  The completeness claim lives in `accounting` below, where it can be checked
+  by addition.
+*/
+const coverage = NEIGHBORHOODS.map((name) => {
+  const harvested = byNeighborhood.get(name) ?? 0
+  const touching = totalByNeighborhood.get(name) ?? 0
+  return { neighborhood: name, harvested, touching, sharedWithNeighbor: touching - harvested }
+}).sort((a, b) => b.harvested - a.harvested)
+
+/*
+  Every parcel the service offered, and where each one went. These must add up,
+  and the harvest fails if they do not: that is the whole coverage claim in four
+  numbers.
+*/
+const accounting = {
+  idsReturnedByService: ids.length,
+  fetched: features.length,
+  written: records.length,
+  centredOutsideSelection: outsideSelection,
+  duplicatePins,
+}
+
+const unaccounted =
+  accounting.fetched - accounting.written - accounting.centredOutsideSelection - duplicatePins
+if (unaccounted !== 0) {
+  console.error(
+    `\nFAILED: ${accounting.fetched} parcels fetched but ${accounting.written} written, ` +
+      `${accounting.centredOutsideSelection} centred elsewhere and ${duplicatePins} duplicate ` +
+      `PINs. ${unaccounted} unaccounted for.`
+  )
+  process.exit(1)
+}
 
 write(
   'src/lib/parcels/coverage-manifest.json',
   JSON.stringify(
     {
       harvestedAt,
-      corridor: CORRIDOR,
-      bounds: {
-        west: 'MLK Jr Blvd',
-        east: 'E Broad St',
-        north: 'Savannah River',
-        south: 'DeRenne Ave',
-      },
-      excludedNeighborhoods: EXCLUDED_NEIGHBORHOODS,
+      selection: 'neighborhood',
+      neighborhoods: [...NEIGHBORHOODS].sort((a, b) => a.localeCompare(b)),
+      extent,
       parcels: records.length,
-      neighborhoods: coverage.length,
+      accounting,
       coverage,
     },
     null,
@@ -439,15 +566,23 @@ write(
 console.log(`\n  ${records.length.toLocaleString()} parcels written`)
 console.log(`  ${streetFeatures.length.toLocaleString()} street segments written`)
 console.log(`  ${coverage.length} neighborhoods`)
-if (droppedExcluded > 0) console.log(`  ${droppedExcluded} dropped as excluded (across the river)`)
+console.log(`  ${multiPolygons.toLocaleString()} of them MultiPolygons`)
+if (outsideSelection > 0)
+  console.log(`  ${outsideSelection} dropped: touched a boundary, centred outside the selection`)
 if (duplicatePins > 0) console.log(`  ${duplicatePins} dropped as duplicate PINs`)
-if (withoutNeighborhood > 0)
-  console.log(`  ${withoutNeighborhood} outside every neighborhood boundary`)
 if (withoutZoning > 0) console.log(`  ${withoutZoning} with no zoning district`)
 
-console.log('\n  Coverage by neighborhood:')
+console.log('\n  Coverage by neighborhood. Centred in it, and touching it:')
 for (const row of coverage) {
-  const of = row.inNeighborhood === null ? '' : ` of ${row.inNeighborhood}`
-  const flag = row.partial === true ? '  (clipped by the corridor)' : ''
-  console.log(`    ${String(row.harvested).padStart(5)}${of.padEnd(9)}  ${row.neighborhood}${flag}`)
+  const shared = row.sharedWithNeighbor === 0 ? '' : `  (+${row.sharedWithNeighbor} on the edge)`
+  console.log(
+    `    ${String(row.harvested).padStart(5)} of ${String(row.touching).padEnd(5)}  ` +
+      `${row.neighborhood}${shared}`
+  )
 }
+
+console.log(
+  `\n  Accounted for: ${accounting.fetched.toLocaleString()} fetched = ` +
+    `${accounting.written.toLocaleString()} written + ` +
+    `${accounting.centredOutsideSelection} centred outside + ${duplicatePins} duplicate PINs.`
+)

@@ -507,3 +507,73 @@ now and the effect depends on `open` alone.
 board role or a term, are not editable here yet; the seeded data has them and the
 editor does not write them. File upload still waits on Supabase Storage: images
 are not files.
+
+## 2026-08-24: finishing the neighborhoods the rectangle clipped
+
+**Did.** Took the parcel layer from 10,399 lots to 16,656, and changed how
+coverage is decided so that number means something.
+
+*The rectangle was the bug.* Coverage was an envelope: MLK Jr Blvd to E Broad
+Street, the river down to DeRenne. Savannah's grid is rotated, so it followed
+those streets only in the Historic District and cut diagonally through
+everywhere else. All 27 neighborhoods it touched came back clipped, and the
+manifest said so honestly: North Historic District 1,708 of 1,740, Eastside 564
+of 767, Ardmore 734 of 1,151. The whole River Street frontage was outside it.
+
+*Coverage is now a list of names.* `scripts/sagis/coverage.mjs` holds the 27
+neighborhoods. The harvest fetches each boundary from the neighborhood layer and
+uses it as the query geometry, so the ID list it gets back is both what to
+harvest and what the neighborhood holds. Adding a neighborhood is adding a line.
+
+Two details cost a first attempt. Esri winds an outer ring clockwise and GeoJSON
+winds it the other way, so the boundaries are read as `f=json` for the query and
+`f=geojson` for the point-in-polygon assignment rather than converted between
+the two. And a lot on a shared edge is returned by both neighbors, so the ID
+sets are de-duplicated before the fetch.
+
+*What that found.* 16,698 parcels, against 16,698 the service reports for the
+union of the same boundaries. 313 W River St, 708 Ott St, and 17 E 52nd St did
+not exist in the app yesterday; all three now search, open, and navigate to
+their own lot on the plat. Every one of the association's own 40 platted lots is
+inside the harvest now, where 29 of them used to fall outside it.
+
+*A reporting bug I wrote and then caught.* The first run declared 15
+neighborhoods incomplete. They were not. The service counts parcels that
+intersect a boundary; the harvest assigns a lot to whichever neighborhood its
+centroid falls in. Comparing the two as though the first were a target reports a
+shortfall that is really 175 lots double counted on shared edges plus 42 centred
+outside the selection. The manifest now carries both numbers under their own
+names and an `accounting` block that has to add up: 16,698 fetched = 16,656
+written + 42 centred outside + 0 duplicate PINs. The harvest fails if it does
+not.
+
+*The plat.* The draw ceiling went from 3,000 to 6,000, measured rather than
+guessed by panning the full extent in headless Chrome: 37ms per frame at 3,000,
+45ms at 6,000, 53ms at 9,000, 73ms with no cap. No cliff, just 2.7ms per extra
+thousand lots. The measurement also found real waste: the largest-first ranking
+that decides what survives the cap was being recomputed inside the per-frame
+memo, so every frame of every pan re-sorted the on-screen lots. Sorting once per
+projection took 5ms off every frame at every ceiling tested.
+
+*Storage and boot.* 24MB across four files, still none of it committed except
+the manifest. `attributes.json` went from 5.0MB to 8.0MB and it is fetched
+before the first render, so that was measured too: 346ms to a usable directory
+before, 443ms after. Not enough to justify splitting the file, which would have
+cost the search index its recall over legal descriptions and mailing addresses.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 430 tests, and a
+production build. The JS bundle did not move, because the layer is fetched and
+never bundled. The harvest was checked against the service independently: a
+`returnCountOnly` union query over the 27 boundaries reports 16,698 and the
+harvest fetched 16,698. Two consecutive runs produced identical output. In the
+running app: 16,664 properties in the directory, the dashboard still reads 48
+lots, and the plat draws, pans, and navigates to a named lot.
+
+**Not done, and why.** Still no Supabase, no migrations, no RLS: Docker is not
+installed and the schema needs `docs/BUILD-PLAN.md`. Nothing refreshes the
+harvest. The 4,755 street centrelines are drawn without viewport culling, which
+is most of what the plat draws once zoomed in, and they grew by 58% with this
+change; the parcels are culled and the streets are not. Coverage stops at the 27
+neighborhoods that were already on the map, so the west side (Carver Heights,
+Cuyler/Brownville, West Savannah) and everything south of DeRenne are still
+absent by choice, not by accident.

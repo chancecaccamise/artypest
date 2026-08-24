@@ -7,8 +7,8 @@ import { PARCELS, platPins } from '@/lib/geo'
 
 /*
   Selecting a record elsewhere in the app routes to /plat/:id. Before this, the
-  plat highlighted the lot and left the view where it was, which at corridor
-  scale means landing on a two pixel mark somewhere in six kilometres of city.
+  plat highlighted the lot and left the view where it was, which at full extent
+  means landing on a two pixel mark somewhere in eight kilometres of city.
 */
 
 const PINS = platPins()
@@ -85,9 +85,9 @@ describe('navigating to a selected lot', () => {
     }
   })
 
-  it('has a ceiling high enough to read one lot in the corridor', async () => {
+  it('has a ceiling high enough to read one lot on the whole map', async () => {
     /*
-      A lot is about two pixels across when the whole corridor is framed, so a
+      A lot is about two pixels across when the whole map is framed, so a
       ceiling of 20 could only ever reach fifty pixels. The zoom-in control has
       to still be usable well past that.
     */

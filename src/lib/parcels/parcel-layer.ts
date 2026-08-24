@@ -6,7 +6,7 @@ import type { ParcelRecord } from './types'
   Loads the harvested parcel layer that `pnpm sagis:harvest` writes to
   public/parcels/.
 
-  Those files are not committed. They are roughly 14MB on disk, they are rebuilt
+  Those files are not committed. They are roughly 24MB on disk, they are rebuilt
   from the county service rather than edited, and they are headed for Postgres.
   So a fresh clone has no parcel layer at all, and that has to be an ordinary
   state rather than a crash: the app falls back to the committed 60-parcel
@@ -14,7 +14,7 @@ import type { ParcelRecord } from './types'
 
   The layer is never bundled. `src/lib/parcels/fixtures/chatham-sample.json` is
   imported and therefore compiled into the JavaScript; these are fetched, so
-  4.8MB of parcels does not become 4.8MB of bundle.
+  8.1MB of parcels does not become 8.1MB of bundle.
 */
 
 /** One parcel plus the neighborhood its centroid falls in. */
@@ -70,7 +70,7 @@ export async function loadParcelLayer(fetchImpl: typeof fetch = fetch): Promise<
 type Ring = [number, number][]
 
 /*
-  Both shapes occur. 21 of the 10,399 harvested parcels are MultiPolygons: a lot
+  Both shapes occur. 36 of the 16,656 harvested parcels are MultiPolygons: a lot
   split by a lane, or one that wraps a corner. Calling them all Polygons is what
   let a ring-order reversal through, which d3-geo then drew as the complement.
 */
@@ -117,7 +117,8 @@ export interface StreetCollection {
 }
 
 /*
-  Street centrelines for the corridor. Zoomed out to the whole corridor a lot is
+  Street centrelines for the harvested neighborhoods. Zoomed out to the whole
+  map a lot is
   about three square pixels, so the parcels read as a tint and it is the streets
   that carry the structure. Loaded with the geometry, for the same reason.
 */

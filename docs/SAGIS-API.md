@@ -304,11 +304,45 @@ Two things do not have this problem:
 
 `scripts/sagis/harvest.mjs` therefore asks for the manifest, fetches those IDs in
 chunks of 250, and asserts every one came back. Coverage becomes checkable rather
-than hoped for: the service reports 10,399 parcels for the current corridor and
-the harvest writes 10,399.
+than hoped for: the service reports 16,698 parcels for the harvested
+neighborhoods and the harvest writes 16,698.
 
 Queries go over POST. A neighborhood polygon and a 250-item ID list both exceed
 what a URL will carry.
+
+### Selecting by neighborhood rather than by envelope
+
+An envelope is the obvious query geometry and the wrong one. Savannah's grid is
+rotated, so a rectangle drawn on the streets that bound an area cuts diagonally
+through the neighborhoods inside it: the first harvest clipped all 27 of them,
+worst at Ardmore (734 of 1,151).
+
+The neighborhood layer's own polygons work as query geometry, and the ID list
+they return is complete:
+
+```sh
+# North Historic District's boundary, then every parcel ID inside it
+curl -s "https://pub.sagis.org/arcgis/rest/services/OpenData/Community/MapServer/10/query" \
+  -d "where=NAME='North Historic District'" -d "outFields=NAME" \
+  -d "returnGeometry=true" -d "outSR=4326" -d "f=json"
+
+curl -s "https://pub.sagis.org/arcgis/rest/services/OpenData/Parcels/FeatureServer/27/query" \
+  -d "geometry={\"rings\":[...],\"spatialReference\":{\"wkid\":4326}}" \
+  -d "geometryType=esriGeometryPolygon" -d "inSR=4326" \
+  -d "spatialRel=esriSpatialRelIntersects" -d "where=1=1" \
+  -d "returnIdsOnly=true" -d "f=json"
+```
+
+That returns all 1,740 with no `exceededTransferLimit`, and 1,740 is also what
+`returnCountOnly` reports for the same boundary. So the count the harvest writes
+and the count the neighborhood holds come from the same request, which is what
+lets the manifest say `1740 of 1740` rather than a percentage.
+
+Two details matter. Read the rings as `f=json`, not `f=geojson`: Esri winds an
+outer ring clockwise and GeoJSON winds it the other way, so a converted ring is
+read back as a hole and selects nothing. And a parcel on a shared boundary is
+returned by both neighbors, so the ID sets have to be de-duplicated before the
+fetch.
 
 ## Reproducing any of this
 

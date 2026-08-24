@@ -37,7 +37,7 @@ const queryClient = new QueryClient({
 /*
   The harvested parcel layer is fetched, not bundled, so it has to arrive before
   the first render: every lot becomes an entity, and a directory that grew from
-  48 rows to 10,399 a second after painting would read as a bug.
+  48 rows to 16,656 a second after painting would read as a bug.
 
   When the slice is absent, which is every fresh clone until `pnpm sagis:harvest`
   runs, this resolves to nothing and the app renders the committed demo instead

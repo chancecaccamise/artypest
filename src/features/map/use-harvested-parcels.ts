@@ -5,7 +5,7 @@ import type { ParcelProperties, StreetProperties } from '@/lib/geo'
 import { loadParcelGeometry, loadParcelStreets } from '@/lib/parcels/parcel-layer'
 
 /*
-  The harvested corridor's geometry, fetched on demand.
+  The harvested layer's geometry, fetched on demand.
 
   It is the larger half of the parcel layer and most sessions never open the
   map, so it is not fetched at boot with the attributes. Until it resolves, and

@@ -25,7 +25,7 @@ export interface ParcelProperties {
 }
 
 /*
-  Both shapes occur in county data. 21 of the harvested corridor's 10,399 lots
+  Both shapes occur in county data. 36 of the harvested layer's 16,656 lots
   are MultiPolygons: a lot split by a lane, or one wrapping a corner.
 */
 export type ParcelFeature = Feature<Polygon | MultiPolygon, ParcelProperties>

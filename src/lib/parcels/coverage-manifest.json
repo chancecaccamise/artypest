@@ -1,184 +1,211 @@
 {
-  "harvestedAt": "2026-08-17",
-  "corridor": {
-    "xmin": -81.099,
-    "ymin": 32.023,
-    "xmax": -81.0837,
-    "ymax": 32.082
-  },
-  "bounds": {
-    "west": "MLK Jr Blvd",
-    "east": "E Broad St",
-    "north": "Savannah River",
-    "south": "DeRenne Ave"
-  },
-  "excludedNeighborhoods": [
-    "Hutchinson Island"
+  "harvestedAt": "2026-08-24",
+  "selection": "neighborhood",
+  "neighborhoods": [
+    "Abercorn Heights/Lamara Heights/Ridgewood/Poplar Heights",
+    "Ardmore/Gould Estates/Olin Heights",
+    "Ardsley Park/Chatham Crescent",
+    "Baldwin Park",
+    "Beach Institute",
+    "Dixon Park",
+    "East Victorian District",
+    "Eastside",
+    "Edgemere",
+    "Fairway Oaks",
+    "Forest Park",
+    "Groveland/Kensington Park",
+    "Hitch Village/Fred Wessels Homes",
+    "LaRoche Park/Springhill/Daffin Heights/Wilemere/Shirley Park",
+    "Live Oak",
+    "Medical Arts",
+    "Memorial Hospital/Fairfield",
+    "Metropolitan",
+    "Midtown",
+    "North Historic District",
+    "Parkside",
+    "Sackville",
+    "South Garden",
+    "South Historic District",
+    "Thomas Square",
+    "West Victorian District",
+    "Yamacraw Village"
   ],
-  "parcels": 10399,
-  "neighborhoods": 27,
+  "extent": {
+    "xmin": -81.11080118318812,
+    "ymin": 32.016555721542424,
+    "xmax": -81.06544661998973,
+    "ymax": 32.08760312582318
+  },
+  "parcels": 16656,
+  "accounting": {
+    "idsReturnedByService": 16698,
+    "fetched": 16698,
+    "written": 16656,
+    "centredOutsideSelection": 42,
+    "duplicatePins": 0
+  },
   "coverage": [
     {
       "neighborhood": "North Historic District",
-      "harvested": 1708,
-      "inNeighborhood": 1740,
-      "partial": true
+      "harvested": 1735,
+      "touching": 1740,
+      "sharedWithNeighbor": 5
     },
     {
       "neighborhood": "Midtown",
-      "harvested": 1414,
-      "inNeighborhood": 1495,
-      "partial": true
+      "harvested": 1457,
+      "touching": 1495,
+      "sharedWithNeighbor": 38
     },
     {
       "neighborhood": "South Historic District",
-      "harvested": 1238,
-      "inNeighborhood": 1378,
-      "partial": true
+      "harvested": 1375,
+      "touching": 1378,
+      "sharedWithNeighbor": 3
     },
     {
-      "neighborhood": "Ardsley Park/Chatham Crescent",
-      "harvested": 879,
-      "inNeighborhood": 1087,
-      "partial": true
+      "neighborhood": "Live Oak",
+      "harvested": 1224,
+      "touching": 1224,
+      "sharedWithNeighbor": 0
     },
     {
       "neighborhood": "Ardmore/Gould Estates/Olin Heights",
-      "harvested": 734,
-      "inNeighborhood": 1151,
-      "partial": true
+      "harvested": 1151,
+      "touching": 1151,
+      "sharedWithNeighbor": 0
+    },
+    {
+      "neighborhood": "Ardsley Park/Chatham Crescent",
+      "harvested": 1087,
+      "touching": 1087,
+      "sharedWithNeighbor": 0
+    },
+    {
+      "neighborhood": "LaRoche Park/Springhill/Daffin Heights/Wilemere/Shirley Park",
+      "harvested": 985,
+      "touching": 1024,
+      "sharedWithNeighbor": 39
+    },
+    {
+      "neighborhood": "Metropolitan",
+      "harvested": 811,
+      "touching": 811,
+      "sharedWithNeighbor": 0
     },
     {
       "neighborhood": "Thomas Square",
-      "harvested": 660,
-      "inNeighborhood": 783,
-      "partial": true
+      "harvested": 783,
+      "touching": 783,
+      "sharedWithNeighbor": 0
     },
     {
       "neighborhood": "Eastside",
-      "harvested": 564,
-      "inNeighborhood": 767,
-      "partial": true
+      "harvested": 766,
+      "touching": 767,
+      "sharedWithNeighbor": 1
+    },
+    {
+      "neighborhood": "Abercorn Heights/Lamara Heights/Ridgewood/Poplar Heights",
+      "harvested": 715,
+      "touching": 715,
+      "sharedWithNeighbor": 0
+    },
+    {
+      "neighborhood": "Groveland/Kensington Park",
+      "harvested": 441,
+      "touching": 463,
+      "sharedWithNeighbor": 22
     },
     {
       "neighborhood": "Beach Institute",
       "harvested": 440,
-      "inNeighborhood": 440,
-      "partial": false
+      "touching": 440,
+      "sharedWithNeighbor": 0
+    },
+    {
+      "neighborhood": "West Victorian District",
+      "harvested": 432,
+      "touching": 432,
+      "sharedWithNeighbor": 0
+    },
+    {
+      "neighborhood": "Parkside",
+      "harvested": 425,
+      "touching": 427,
+      "sharedWithNeighbor": 2
     },
     {
       "neighborhood": "Baldwin Park",
       "harvested": 371,
-      "inNeighborhood": 411,
-      "partial": true
+      "touching": 411,
+      "sharedWithNeighbor": 40
     },
     {
       "neighborhood": "East Victorian District",
       "harvested": 321,
-      "inNeighborhood": 321,
-      "partial": false
+      "touching": 321,
+      "sharedWithNeighbor": 0
     },
     {
       "neighborhood": "Sackville",
-      "harvested": 310,
-      "inNeighborhood": 335,
-      "partial": true
+      "harvested": 319,
+      "touching": 335,
+      "sharedWithNeighbor": 16
+    },
+    {
+      "neighborhood": "Forest Park",
+      "harvested": 307,
+      "touching": 326,
+      "sharedWithNeighbor": 19
     },
     {
       "neighborhood": "South Garden",
       "harvested": 283,
-      "inNeighborhood": 291,
-      "partial": true
+      "touching": 291,
+      "sharedWithNeighbor": 8
     },
     {
       "neighborhood": "Dixon Park",
       "harvested": 268,
-      "inNeighborhood": 268,
-      "partial": false
-    },
-    {
-      "neighborhood": "Abercorn Heights/Lamara Heights/Ridgewood/Poplar Heights",
-      "harvested": 232,
-      "inNeighborhood": 715,
-      "partial": true
-    },
-    {
-      "neighborhood": "Parkside",
-      "harvested": 185,
-      "inNeighborhood": 427,
-      "partial": true
+      "touching": 268,
+      "sharedWithNeighbor": 0
     },
     {
       "neighborhood": "Edgemere",
-      "harvested": 146,
-      "inNeighborhood": 282,
-      "partial": true
+      "harvested": 267,
+      "touching": 282,
+      "sharedWithNeighbor": 15
+    },
+    {
+      "neighborhood": "Hitch Village/Fred Wessels Homes",
+      "harvested": 218,
+      "touching": 221,
+      "sharedWithNeighbor": 3
+    },
+    {
+      "neighborhood": "Fairway Oaks",
+      "harvested": 177,
+      "touching": 177,
+      "sharedWithNeighbor": 0
     },
     {
       "neighborhood": "Medical Arts",
       "harvested": 145,
-      "inNeighborhood": 145,
-      "partial": false
+      "touching": 145,
+      "sharedWithNeighbor": 0
     },
     {
-      "neighborhood": "West Victorian District",
-      "harvested": 125,
-      "inNeighborhood": 432,
-      "partial": true
-    },
-    {
-      "neighborhood": "Live Oak",
-      "harvested": 106,
-      "inNeighborhood": 1224,
-      "partial": true
-    },
-    {
-      "neighborhood": "Groveland/Kensington Park",
-      "harvested": 76,
-      "inNeighborhood": 463,
-      "partial": true
+      "neighborhood": "Yamacraw Village",
+      "harvested": 81,
+      "touching": 83,
+      "sharedWithNeighbor": 2
     },
     {
       "neighborhood": "Memorial Hospital/Fairfield",
       "harvested": 72,
-      "inNeighborhood": 76,
-      "partial": true
-    },
-    {
-      "neighborhood": "Hitch Village/Fred Wessels Homes",
-      "harvested": 43,
-      "inNeighborhood": 221,
-      "partial": true
-    },
-    {
-      "neighborhood": "Yamacraw Village",
-      "harvested": 30,
-      "inNeighborhood": 83,
-      "partial": true
-    },
-    {
-      "neighborhood": "Fairway Oaks",
-      "harvested": 28,
-      "inNeighborhood": 177,
-      "partial": true
-    },
-    {
-      "neighborhood": "Metropolitan",
-      "harvested": 9,
-      "inNeighborhood": 811,
-      "partial": true
-    },
-    {
-      "neighborhood": "Forest Park",
-      "harvested": 8,
-      "inNeighborhood": 326,
-      "partial": true
-    },
-    {
-      "neighborhood": "LaRoche Park/Springhill/Daffin Heights/Wilemere/Shirley Park",
-      "harvested": 4,
-      "inNeighborhood": 1024,
-      "partial": true
+      "touching": 76,
+      "sharedWithNeighbor": 4
     }
   ]
 }

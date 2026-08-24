@@ -32,7 +32,7 @@ export interface ParcelPath {
   /** Projected area in square pixels, for gating labels on legibility. */
   area: number
   /**
-   * Projected bounds, for viewport culling. With the harvested corridor loaded
+   * Projected bounds, for viewport culling. With the harvested layer loaded
    * the plat holds over ten thousand lots, and drawing the ones that are off
    * screen is the difference between panning smoothly and not.
    */
@@ -88,7 +88,7 @@ const PADDING = 16
  * globe and squashes every honest lot into a dot.
  *
  * The 40-lot fixture had no MultiPolygons, so this only appeared once the
- * harvested corridor arrived with 21 of them.
+ * harvested layer arrived with 36 of them.
  */
 function reverseRings(rings: Position[][]): Position[][] {
   return rings.map((ring) => [...ring].reverse())
@@ -119,7 +119,7 @@ function reverseWinding(
 const D3_PARCELS = reverseWinding(PARCELS)
 
 /*
-  The harvested corridor is fetched rather than bundled, so it arrives later and
+  The harvested layer is fetched rather than bundled, so it arrives later and
   has to be reversed then. Cached by identity: the collection is loaded once for
   the life of the page, and reversing ten thousand polygons on every resize would
   undo the point of computing paths per size rather than per frame.
@@ -130,13 +130,18 @@ const reversedCache = new WeakMap<
 >()
 
 /**
- * The committed fixture merged with the harvested corridor, keyed on PIN.
+ * The committed fixture merged with the harvested layer, keyed on PIN.
  *
- * Merged rather than replaced, because the two do not contain each other. The
- * corridor runs MLK Jr Blvd to E Broad Street, and E 49th Street carries on east
- * past that edge, so 29 of the association's own 40 platted lots sit outside it.
- * Replacing the fixture dropped them off the drawing entirely, which is the
- * worst possible thing to lose: they are the lots this application exists for.
+ * Merged rather than replaced. When coverage was a rectangle it ran MLK Jr Blvd
+ * to E Broad Street while E 49th Street carries on east past that edge, so 29 of
+ * the association's own 40 platted lots fell outside the harvest and replacing
+ * the fixture dropped them off the drawing entirely: the worst possible thing to
+ * lose, since they are the lots this application exists for.
+ *
+ * Harvesting whole neighborhoods put all 40 back inside, so today the merge
+ * changes nothing. It stays because coverage is a list in coverage.mjs that can
+ * be shortened as easily as it was lengthened, and because a clone that has not
+ * run the harvest has nothing but the fixture.
  *
  * Where both have a lot the harvested geometry wins, being the current county
  * record.

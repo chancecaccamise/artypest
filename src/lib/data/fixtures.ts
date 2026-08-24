@@ -1450,7 +1450,7 @@ export function buildDemoData(
           neighborhood: parcel.neighborhood,
           legalDescription: parcel.legalDescription,
           // Kept so the owner is searchable without creating an entity for
-          // every owner in the corridor. The parcel import is what creates
+          // every owner on the map. The parcel import is what creates
           // owner records, deliberately and one screen at a time.
           countyOwnerName: owner.display,
           countyOwnerRaw: parcel.ownerName,
