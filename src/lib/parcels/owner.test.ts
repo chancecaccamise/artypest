@@ -34,7 +34,6 @@ describe('classifyOwner', () => {
     'MERCER FAMILY TRUST',
     'VICTORY DRIVE PARTNERS LP',
     'BULL STREET INVESTMENTS CORP',
-    'ARDSLEY PARK CIVIC ASSOCIATION',
   ])('reads %j as a business', (name) => {
     expect(classifyOwner(name)).toBe('business')
   })
@@ -266,5 +265,72 @@ describe('owner strings from the Ardsley Park fixture', () => {
     const parsed = parseOwner('WILLIAMS PATRICK')
     expect(parsed.display).toBe('Patrick Williams')
     expect(parsed.confidence).toBe('high')
+  })
+})
+
+/*
+  Associations, added when the client asked for owner names to be filed as a
+  Person, a Business or an Association rather than only the first two.
+
+  The token list was chosen against the real owner field rather than imagined,
+  and both of the traps below are real names in Chatham County.
+*/
+describe('telling an association from a company', () => {
+  it('files an owners association as an association', () => {
+    expect(classifyOwner('31ST STREET STATION OWNERS ASSOCIATION I')).toBe('association')
+    expect(classifyOwner('MIDTOWN NEIGHBORHOOD ASSOCIATION INC')).toBe('association')
+  })
+
+  it('reads the association before the INC that follows it', () => {
+    /*
+      Incorporated associations carry both tokens. Reading the INC first would
+      file every condominium association in the county as a company.
+    */
+    expect(classifyOwner('37 THE LOFTS CONDOMINIUM ASSOCIATION INC')).toBe('association')
+  })
+
+  it('files a condominium as an association even without the word', () => {
+    // A condominium regime is an owners' association whether or not the county
+    // wrote the word.
+    expect(classifyOwner('120 WEST ON JONES CONDOMINIUM')).toBe('association')
+  })
+
+  it('does not mistake ASSOCIATES for an association', () => {
+    // A partnership, and there are more of these than there are associations.
+    expect(classifyOwner('239 MADISON AVENUE ASSOCIATES, LLC')).toBe('business')
+    expect(classifyOwner('31 EAST JONES ASSOCIATES LLC')).toBe('business')
+  })
+
+  it('does not mistake a surname beginning HOA for a homeowners association', () => {
+    // HOAGLAND and HOANG are both real owners here. Matching HOA as a substring
+    // rather than as a whole word turns them into associations.
+    expect(classifyOwner('HOAGLAND PETER MILLARD')).toBe('person')
+    expect(classifyOwner('HOANG HAN VAN & LAM X')).toBe('person')
+  })
+
+  it('keeps government bodies out of the association bucket', () => {
+    /*
+      A housing authority is not a homeowners association and must never be
+      offered as one, so government is read before the association token.
+    */
+    expect(classifyOwner('HOUSING AUTHORITY OF SAVANNAH')).toBe('business')
+    expect(classifyOwner('MAYOR & ALDERMEN OF SAVANNAH')).toBe('business')
+  })
+
+  it('leaves congregations as businesses rather than moving them somewhere equally wrong', () => {
+    /*
+      135 records here. The association reference list is homeowners
+      association, committee, civic club and property owners association, and a
+      congregation is none of those. Recorded as a decision, not an oversight.
+    */
+    expect(classifyOwner('ARDSLEY PARK BAPTIST CHURCH INC')).toBe('business')
+    expect(classifyOwner('CONNORS TEMPLE BAPTIST CHURCH')).toBe('business')
+  })
+
+  it('reports an association through parseOwner, with no people attached', () => {
+    const parsed = parseOwner('37 THE LOFTS CONDOMINIUM ASSOCIATION INC')
+    expect(parsed.kind).toBe('association')
+    expect(parsed.people).toEqual([])
+    expect(parsed.display).toContain('CONDOMINIUM')
   })
 })

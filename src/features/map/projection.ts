@@ -9,6 +9,7 @@ import {
   type StreetProperties,
 } from '@/lib/geo'
 import type { Point } from '@/lib/geocoding/types'
+import type { OverlayCollection } from '@/lib/overlays'
 import { normalizePin } from '@/lib/parcels/pin'
 
 /*
@@ -259,4 +260,143 @@ export function shouldLabel(parcel: ParcelPath, zoom: number): boolean {
 /** A street name is only drawn where the segment is long enough to hold it. */
 export function shouldLabelStreet(street: StreetPath, zoom: number): boolean {
   return street.length * zoom >= street.name.length * 9
+}
+
+/*
+  Framing an area of the drawing.
+
+  Kept here with the rest of the projection arithmetic rather than in the view,
+  because it is the same question `fitExtent` answers at build time asked again
+  at zoom time: what scale and offset put this rectangle in that viewport.
+*/
+export interface FrameTransform {
+  k: number
+  x: number
+  y: number
+}
+
+/**
+ * The zoom transform that centres `bounds` in a viewport, filling `fill` of it.
+ *
+ * Scale is clamped, so framing a single lot cannot zoom past what the plat
+ * allows and framing the whole county cannot zoom out past it either.
+ */
+export function frameTransform(
+  bounds: readonly [number, number, number, number],
+  width: number,
+  height: number,
+  fill: number,
+  minZoom: number,
+  maxZoom: number
+): FrameTransform {
+  const [minX, minY, maxX, maxY] = bounds
+  // A degenerate rectangle is one point, and one point has no scale of its own.
+  const boxWidth = Math.max(maxX - minX, 1)
+  const boxHeight = Math.max(maxY - minY, 1)
+
+  const k = Math.min(
+    Math.max(Math.min((width * fill) / boxWidth, (height * fill) / boxHeight), minZoom),
+    maxZoom
+  )
+
+  const centreX = (minX + maxX) / 2
+  const centreY = (minY + maxY) / 2
+
+  return { k, x: width / 2 - centreX * k, y: height / 2 - centreY * k }
+}
+
+/* -------------------------------------------------------------- overlays -- */
+
+/*
+  District boundaries, projected the same way the lots are.
+
+  Deliberately not merged into PlatProjection. The lots are computed once per
+  size and the overlay changes whenever a reader picks a different one, so
+  recomputing every parcel path to switch from voting precincts to sanitation
+  days would be paying for the wrong thing.
+*/
+/** Two decimals is finer than a pixel, and keeps the path strings short. */
+function round(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+export interface OverlayPath {
+  name: string
+  detail: string
+  d: string
+  /** Projected centroid, for the label. */
+  centroid: [number, number]
+  /** Projected area in square pixels, so a sliver is not labelled. */
+  area: number
+  /** Projected bounds, so a label can be kept inside the part on screen. */
+  bounds: [minX: number, minY: number, maxX: number, maxY: number]
+}
+
+export function projectOverlay(
+  collection: OverlayCollection,
+  project: (point: Point) => [number, number] | null
+): OverlayPath[] {
+  const paths: OverlayPath[] = []
+
+  for (const feature of collection.features) {
+    if (!feature.geometry) continue
+
+    const rings =
+      feature.geometry.type === 'MultiPolygon'
+        ? feature.geometry.coordinates.flat()
+        : feature.geometry.coordinates
+
+    let d = ''
+    let sumX = 0
+    let sumY = 0
+    let count = 0
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    for (const ring of rings) {
+      let started = false
+      for (const position of ring) {
+        const point = project([position[0] ?? 0, position[1] ?? 0])
+        if (!point) continue
+        const [x, y] = point
+        d += `${started ? 'L' : 'M'} ${round(x)},${round(y)} `
+        started = true
+        sumX += x
+        sumY += y
+        count += 1
+        if (x < minX) minX = x
+        if (y < minY) minY = y
+        if (x > maxX) maxX = x
+        if (y > maxY) maxY = y
+      }
+      if (started) d += 'Z '
+    }
+
+    if (count === 0) continue
+
+    paths.push({
+      name: feature.properties.name,
+      detail: feature.properties.detail,
+      d: d.trim(),
+      /*
+        The mean of the vertices rather than the bounding box centre. A district
+        shaped like an L has a box centre that sits outside it, and a label
+        floating in a neighbouring district is worse than no label.
+      */
+      centroid: [sumX / count, sumY / count],
+      area: Math.max(maxX - minX, 0) * Math.max(maxY - minY, 0),
+      bounds: [minX, minY, maxX, maxY],
+    })
+  }
+
+  return paths
+}
+
+/** A district label is only drawn where the district is big enough to carry it. */
+export const READABLE_OVERLAY_PX = 90
+
+export function shouldLabelOverlay(path: OverlayPath, zoom: number): boolean {
+  return Math.sqrt(path.area) * zoom >= READABLE_OVERLAY_PX
 }

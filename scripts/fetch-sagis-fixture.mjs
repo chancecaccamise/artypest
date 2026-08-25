@@ -129,6 +129,19 @@ async function queryPagedByPin(url, params, target) {
   return [...byPin.values()].slice(0, target)
 }
 
+/** The last recorded transfer as an ISO date. Mirrors the harvest and the service. */
+function saleDate(year, month, day) {
+  const y = Number(year)
+  const m = Number(month)
+  const d = Number(day)
+  if (!Number.isFinite(y) || y <= 0) return null
+  if (!Number.isFinite(m) || m < 1 || m > 12) return null
+  if (!Number.isFinite(d) || d < 1 || d > 31) return null
+  const iso = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  const parsed = new Date(`${iso}T00:00:00.000Z`)
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== iso ? null : iso
+}
+
 console.log('Fetching parcels...')
 const parcelFields = {
   outFields: [
@@ -148,6 +161,11 @@ const parcelFields = {
     'Total_Assessment',
     'Legal_Description',
     'Date_Updated',
+    'Sale_Price',
+    'Sale_YY',
+    'Sale_MM',
+    'Sale_DD',
+    'Sale_Quality',
   ].join(','),
   orderByFields: 'PIN ASC',
   returnGeometry: 'true',
@@ -243,6 +261,11 @@ const records = parcelFeatures.map((feature) => {
     legalDescription: text(p.Legal_Description),
     municipalityCode: text(p.Municipality) === '' ? null : text(p.Municipality),
     dateUpdated: isoDate(p.Date_Updated),
+    lastSaleDate: saleDate(p.Sale_YY, p.Sale_MM, p.Sale_DD),
+    // Null rather than zero: a transfer with no consideration is not a sale
+    // for nothing. See src/lib/parcels/types.ts.
+    lastSalePrice: typeof p.Sale_Price === 'number' && p.Sale_Price > 0 ? p.Sale_Price : null,
+    saleQualityCode: text(p.Sale_Quality) === '' ? null : text(p.Sale_Quality),
   }
 })
 

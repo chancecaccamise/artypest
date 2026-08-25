@@ -3,7 +3,12 @@ import { Columns2, Map as MapIcon, Network, Spline } from 'lucide-react'
 
 import { MapLegend } from './MapLegend'
 import { MapPanel } from './MapPanel'
+import { normalizePin } from '@/lib/parcels/pin'
 import { PlatView, shortPin, type PlatMarker } from './PlatView'
+import { useHarvestedParcels } from './use-harvested-parcels'
+import { useOverlay } from './use-overlay'
+import { RecencyLegend } from '@/components/graph/RecencyLegend'
+import { buildRecencyScale } from '@/lib/relations/recency'
 import { UnplacedTray } from './UnplacedTray'
 import { arcColor, arcableKeys, buildArcs, undrawnCounts } from './arcs'
 import { THEMATIC_MODES, THEMATIC_MODE_LABELS, buildTheming, type ThematicMode } from './theming'
@@ -55,6 +60,8 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
   const [dataFilter, setDataFilter] = useState('')
   const [arcKeys, setArcKeys] = useState<Set<string>>(new Set())
   const [focusArcsOnSelection, setFocusArcsOnSelection] = useState(true)
+  const [gradeArcsByAge, setGradeArcsByAge] = useState(false)
+  const overlay = useOverlay()
   const [placing, setPlacing] = useState<Entity | null>(null)
 
   /*
@@ -73,7 +80,26 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
   )
 
   const locations = locationsQuery.data ?? null
-  const pins = useMemo(() => platPins(), [])
+  /*
+    Every PIN the plat draws, not just the committed fixture's forty.
+
+    This was `platPins()` alone, which is the 40-lot fixture. Colouring by
+    occupancy therefore classified forty lots and dropped the other 16,616 into
+    "unknown", so picking a colouring appeared to do nothing: 2,084 of the 2,124
+    lots on screen changed from one flat grey to a slightly different flat grey.
+
+    The harvested layer arrives after first paint, so this grows when it lands,
+    the same way the plat's own geometry does.
+  */
+  const harvestedParcels = useHarvestedParcels()
+  const pins = useMemo(() => {
+    const all = new Set(platPins())
+    for (const feature of harvestedParcels.collection?.features ?? []) {
+      const pin = normalizePin(feature.properties.pin)
+      if (pin !== '') all.add(pin)
+    }
+    return [...all]
+  }, [harvestedParcels.collection])
 
   const theming = useMemo(() => {
     if (!graph || !locations) return null
@@ -157,6 +183,12 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
       focusEntityId: focusArcsOnSelection ? selectedId : null,
     })
   }, [graph, locations, arcKeys, focusArcsOnSelection, selectedId])
+
+  /* The same arcs the plat grades, so the legend's dates are the real ends. */
+  const arcScale = useMemo(
+    () => buildRecencyScale(arcs.map((arc) => ({ id: arc.relationId, startDate: arc.startDate }))),
+    [arcs]
+  )
 
   const undrawn = useMemo(
     () =>
@@ -247,6 +279,32 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
             </Select>
           </Field>
 
+          {/*
+            One boundary set at a time. A lot sits inside a commission district
+            and a voting precinct and a sanitation route simultaneously, and
+            drawing three sets of boundaries over a plat is unreadable.
+
+            Absent entirely when the harvest has not been run, rather than shown
+            as an empty control that does nothing.
+          */}
+          {overlay.available.length > 0 ? (
+            <Field label="District overlay" className="w-56">
+              <Select
+                value={overlay.active}
+                onChange={(event) => {
+                  overlay.setActive(event.target.value)
+                }}
+              >
+                <option value="">No overlay</option>
+                {overlay.available.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
+
           <Field label="Show records" className="w-44">
             <Select
               value={typeFilter}
@@ -336,6 +394,11 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
                 onChange={(event) => setFocusArcsOnSelection(event.target.checked)}
                 className="ml-2"
               />
+              <Checkbox
+                label="Grade by age"
+                checked={gradeArcsByAge}
+                onChange={(event) => setGradeArcsByAge(event.target.checked)}
+              />
               <Button size="sm" variant="ghost" onClick={() => setArcKeys(new Set())}>
                 Clear
               </Button>
@@ -346,6 +409,12 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
             </span>
           )}
         </div>
+
+        {arcKeys.size > 0 && gradeArcsByAge ? (
+          <div className="border-rule border-b px-3 py-2">
+            <RecencyLegend scale={arcScale} groupedBy="type" />
+          </div>
+        ) : null}
 
         {arcKeys.size > 0 && (undrawn.unplacedEnd > 0 || undrawn.sameLocation > 0) ? (
           <div className="border-rule border-b px-3 py-2">
@@ -378,6 +447,8 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
         >
           <div className="border-rule h-[26rem] border-b lg:h-[38rem] lg:border-r lg:border-b-0">
             <PlatView
+              gradeArcsByAge={gradeArcsByAge}
+              overlay={overlay.collection}
               theming={theming}
               litPins={litPins}
               selectedPin={selectedPin}

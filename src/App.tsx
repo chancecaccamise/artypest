@@ -9,6 +9,7 @@ import { DirectoryDetailPage } from '@/pages/DirectoryDetailPage'
 import { DirectoryListPage } from '@/pages/DirectoryListPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { PlatPage } from '@/pages/PlatPage'
+import { OwnerReconcilePage } from '@/pages/OwnerReconcilePage'
 import { ParcelImportPage } from '@/pages/ParcelImportPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="plat" element={<PlatPage />} />
         <Route path="plat/:id" element={<PlatPage />} />
         <Route path="parcels" element={<ParcelImportPage />} />
+        <Route path="owners" element={<OwnerReconcilePage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/:tab" element={<SettingsPage />} />
 

@@ -38,6 +38,9 @@ function parcel(overrides: Partial<ParcelRecord> = {}): ParcelRecord {
     legalDescription: 'LOTS 12 AND 13 PIERPONT WARD',
     municipalityCode: '020',
     dateUpdated: '2025-05-06',
+    lastSaleDate: '2019-04-01',
+    lastSalePrice: 385000,
+    saleQualityCode: 'Q',
     ...overrides,
   }
 }

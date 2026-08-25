@@ -105,7 +105,43 @@ const GOVERNMENT_TOKENS = new Set([
   'USA',
 ])
 
-export type OwnerKind = 'person' | 'business'
+/*
+  Association tokens, chosen against the real owner field rather than imagined.
+
+  Two traps, both found by looking:
+
+    HOA prefix-matches HOAGLAND and HOANG, which are surnames in this county.
+    Matched as a whole word only, which is why every set here is checked against
+    a token and never against a substring.
+
+    ASSOCIATES is not ASSOCIATION. `239 MADISON AVENUE ASSOCIATES, LLC` is a
+    partnership, and there are more of those than there are real associations.
+
+  Condominium regimes are included with or without the word association, because
+  a condominium is an owners' association whether or not the county wrote the
+  word: `120 WEST ON JONES CONDOMINIUM` is one.
+
+  Deliberately absent: CHURCH, TEMPLE and MINISTRIES, which is 135 records here.
+  The association reference list is homeowners association, committee, civic
+  club and property owners association, and a congregation is none of those.
+  They stay businesses, where they already were, rather than being moved
+  somewhere equally wrong. CLUB, SOCIETY and LODGE are absent for the same
+  reason: `COLUMBIAN CLUB INC` is incorporated and `OGLETHORPE CLUB` may not be,
+  and there are four of them in total. The low confidence review is where those
+  belong, not a rule.
+*/
+const ASSOCIATION_TOKENS = new Set([
+  'ASSOCIATION',
+  'ASSOCIATIONS',
+  'ASSN',
+  'HOA',
+  'POA',
+  'CONDOMINIUM',
+  'CONDOMINIUMS',
+  'CONDO',
+])
+
+export type OwnerKind = 'person' | 'business' | 'association'
 
 /**
  * `low` means a human should confirm the reading before it creates or links a
@@ -189,11 +225,28 @@ export function isGovernmentOwner(name: string): boolean {
  * county. Only an explicit organisation or government token decides it now.
  */
 export function classifyOwner(name: string): OwnerKind {
-  const tokens = tokenize(name)
+  const tokens = tokenize(name).map((token) => token.replace(/\.$/, ''))
+
+  /*
+    Association wins over business, because the incorporated ones carry both:
+    `MIDTOWN NEIGHBORHOOD ASSOCIATION INC` and
+    `37 THE LOFTS CONDOMINIUM ASSOCIATION INC` are associations that happen to
+    be incorporated, and reading the INC first would file every one of them as a
+    company.
+
+    Government still wins over association, because `HOUSING AUTHORITY` is not a
+    homeowners association and must never be offered as one.
+  */
+  for (const token of tokens) {
+    if (GOVERNMENT_TOKENS.has(token)) return 'business'
+  }
 
   for (const token of tokens) {
-    const bare = token.replace(/\.$/, '')
-    if (BUSINESS_TOKENS.has(bare) || GOVERNMENT_TOKENS.has(bare)) return 'business'
+    if (ASSOCIATION_TOKENS.has(token)) return 'association'
+  }
+
+  for (const token of tokens) {
+    if (BUSINESS_TOKENS.has(token)) return 'business'
   }
 
   return 'person'
@@ -374,7 +427,16 @@ export function parseOwner(owner: string, owner2?: string | null): ParsedOwner {
   const truncated = primary.truncated || secondary.truncated
   const marked = primary.marked || secondary.marked
 
-  if (kind === 'business') {
+  /*
+    Organisations, of both kinds. An association is an organisation with a name,
+    not a surname and a given name, so it takes the same path a company does.
+
+    Written as "not a person" rather than "is a business" on purpose: when
+    association was added as a third kind, a check for `business` alone sent
+    every condominium association down the person parser, which read
+    `37 THE LOFTS CONDOMINIUM ASSOCIATION INC` as somebody surnamed 37.
+  */
+  if (kind !== 'person') {
     return {
       raw,
       kind,

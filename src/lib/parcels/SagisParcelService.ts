@@ -58,6 +58,11 @@ const PARCEL_FIELDS = [
   'Total_Assessment',
   'Legal_Description',
   'Date_Updated',
+  'Sale_Price',
+  'Sale_YY',
+  'Sale_MM',
+  'Sale_DD',
+  'Sale_Quality',
 ].join(',')
 
 /**
@@ -86,6 +91,11 @@ interface ParcelProperties {
   Total_Assessment?: number | null
   Legal_Description?: string | null
   Date_Updated?: number | null
+  Sale_Price?: number | null
+  Sale_YY?: number | null
+  Sale_MM?: number | null
+  Sale_DD?: number | null
+  Sale_Quality?: string | null
 }
 
 interface ZoningProperties {
@@ -354,6 +364,32 @@ export function zoningDistrictFor(
   return null
 }
 
+/**
+ * The last recorded transfer, as an ISO date.
+ *
+ * The county publishes the parts separately, with a four digit year, so there
+ * is no century to guess at. A year of zero or absent means no transfer has
+ * been recorded, which is a fact rather than a gap.
+ *
+ * Kept in step with the same function in scripts/sagis/harvest.mjs: the live
+ * service and the harvest must produce identical records, or a lot read one way
+ * would differ from the same lot read the other.
+ */
+export function saleDate(year: unknown, month: unknown, day: unknown): string | null {
+  const y = typeof year === 'number' ? year : Number.NaN
+  const m = typeof month === 'number' ? month : Number.NaN
+  const d = typeof day === 'number' ? day : Number.NaN
+  if (!Number.isFinite(y) || y <= 0) return null
+  if (!Number.isFinite(m) || m < 1 || m > 12) return null
+  if (!Number.isFinite(d) || d < 1 || d > 31) return null
+
+  const iso = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  // An impossible date such as a 31st of February is normalised by Date into
+  // the next month rather than rejected, so it is round tripped to catch it.
+  const parsed = new Date(`${iso}T00:00:00.000Z`)
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== iso ? null : iso
+}
+
 /** Maps one county feature onto the shape the rest of the app reads. */
 export function toParcelRecord(
   feature: ParcelFeature,
@@ -379,6 +415,11 @@ export function toParcelRecord(
     legalDescription: text(properties.Legal_Description),
     municipalityCode: optionalText(properties.Municipality),
     dateUpdated: isoDate(properties.Date_Updated),
+    lastSaleDate: saleDate(properties.Sale_YY, properties.Sale_MM, properties.Sale_DD),
+    // Null rather than zero: a third of transfers carry no price, because a
+    // gift and a foreclosure are transfers with no consideration.
+    lastSalePrice: num(properties.Sale_Price) > 0 ? num(properties.Sale_Price) : null,
+    saleQualityCode: optionalText(properties.Sale_Quality),
   }
 }
 

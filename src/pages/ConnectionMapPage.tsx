@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Search } from 'lucide-react'
+import { ArrowLeft, Clock, Search } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 import { entityHref } from '@/components/layout/nav-config'
 import { ConnectionMap, TypeFilterBar, buildRings } from '@/components/graph/ConnectionMap'
+import { RecencyLegend } from '@/components/graph/RecencyLegend'
 import { TypeBadge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -13,6 +14,7 @@ import { Panel, PanelBody, PanelFooter } from '@/components/ui/panel'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useGraph } from '@/hooks/use-data'
 import { ENTITY_TYPES, ENTITY_TYPE_LABELS, type Entity, type EntityType } from '@/lib/data/types'
+import { buildRecencyScale } from '@/lib/relations/recency'
 import { cn } from '@/lib/utils'
 
 /*
@@ -28,6 +30,7 @@ export function ConnectionMapPage() {
   const { graph, isLoading } = useGraph()
 
   const [hiddenTypes, setHiddenTypes] = useState<Set<EntityType>>(new Set())
+  const [gradeByAge, setGradeByAge] = useState(false)
   const [search, setSearch] = useState('')
 
   /** With no record in the route, start at the association: everything hangs off it. */
@@ -45,6 +48,15 @@ export function ConnectionMapPage() {
     if (!graph || !focus) return null
     return buildRings(graph, focus, hiddenTypes)
   }, [graph, focus, hiddenTypes])
+
+  /*
+    Built from the threads on screen, which is the same set the map grades, so
+    the dates in the legend are the dates the gradient actually runs between.
+  */
+  const scale = useMemo(
+    () => buildRecencyScale([...(rings?.firstRing ?? []), ...(rings?.secondRing ?? [])].map((node) => node.relation)),
+    [rings]
+  )
 
   /** Counts are of everything connected, before the type filters are applied. */
   const counts = useMemo(() => {
@@ -190,7 +202,23 @@ export function ConnectionMapPage() {
             ) : null}
           </Field>
 
-          <TypeFilterBar counts={counts} hiddenTypes={hiddenTypes} onToggle={toggleType} />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setGradeByAge((on) => !on)}
+              aria-pressed={gradeByAge}
+              className={cn(
+                'flex items-center gap-1.5 rounded-[3px] border px-2 py-1 text-xs font-semibold transition-colors duration-[120ms]',
+                gradeByAge
+                  ? 'border-ink-muted text-ink'
+                  : 'border-rule text-ink-faint'
+              )}
+            >
+              <Clock className="size-3.5" aria-hidden="true" />
+              Age
+            </button>
+            <TypeFilterBar counts={counts} hiddenTypes={hiddenTypes} onToggle={toggleType} />
+          </div>
         </div>
 
         <PanelBody className="p-3">
@@ -212,19 +240,28 @@ export function ConnectionMapPage() {
               }
             />
           ) : (
-            <ConnectionMap
-              graph={graph}
-              focus={focus}
-              hiddenTypes={hiddenTypes}
-              onFocusChange={(entity) => navigate(`/map/${entity.id}`)}
-            />
+            <>
+              {gradeByAge ? (
+                <div className="border-rule mb-3 rounded-[3px] border p-3">
+                  <RecencyLegend scale={scale} groupedBy="fan" />
+                </div>
+              ) : null}
+              <ConnectionMap
+                graph={graph}
+                focus={focus}
+                hiddenTypes={hiddenTypes}
+                gradeByAge={gradeByAge}
+                onFocusChange={(entity) => navigate(`/map/${entity.id}`)}
+              />
+            </>
           )}
         </PanelBody>
 
         <PanelFooter className="flex-wrap gap-y-2">
           <span>
-            Solid lines are direct connections. Dashed lines are one step further out. Faded cards
-            are relationships that have ended.
+            Threads are coloured by the kind of connection, the same colours the plat draws them
+            in. Solid is a direct connection, dashed is one step further out, and faded cards are
+            relationships that have ended. Switch Age on to grade them by how recent they are.
           </span>
           <span className="font-mono text-xs">click a card to re-centre</span>
         </PanelFooter>

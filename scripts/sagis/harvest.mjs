@@ -69,6 +69,11 @@ const PARCEL_FIELDS = [
   'Total_Assessment',
   'Legal_Description',
   'Date_Updated',
+  'Sale_Price',
+  'Sale_YY',
+  'Sale_MM',
+  'Sale_DD',
+  'Sale_Quality',
 ].join(',')
 
 /** Six decimal places is about 11cm, far finer than a plat drawing can show. */
@@ -90,6 +95,31 @@ function optionalText(value) {
 
 function num(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+/*
+  The last recorded transfer, as an ISO date.
+
+  The county publishes the parts separately, and a four digit year, so there is
+  no century to guess at. Measured across the harvested extent: 94% of parcels
+  carry a year and every one of those carries a month and a day, so a partial
+  date is not a case that needs handling. A year of 0 or absent means no
+  transfer has been recorded, which is a fact rather than a gap.
+*/
+function saleDate(year, month, day) {
+  const y = Number(year)
+  const m = Number(month)
+  const d = Number(day)
+  if (!Number.isFinite(y) || y <= 0) return null
+  if (!Number.isFinite(m) || m < 1 || m > 12) return null
+  if (!Number.isFinite(d) || d < 1 || d > 31) return null
+
+  const iso = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  // The county has real dates back to 1910 and the odd impossible one, such as
+  // a 31st of February, which Date normalises into the next month rather than
+  // rejecting. Round tripping catches those.
+  const parsed = new Date(`${iso}T00:00:00.000Z`)
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== iso ? null : iso
 }
 
 /** The county publishes epoch milliseconds and no assessment year. */
@@ -461,6 +491,15 @@ for (const feature of features) {
     legalDescription: text(properties.Legal_Description),
     municipalityCode: optionalText(properties.Municipality),
     dateUpdated: isoDate(properties.Date_Updated),
+    lastSaleDate: saleDate(properties.Sale_YY, properties.Sale_MM, properties.Sale_DD),
+    /*
+      Null rather than zero when nothing was recorded. A third of the parcels
+      that carry a transfer date carry no price with it, which is a real kind of
+      transfer, not a missing number: a gift, a family transfer, a foreclosure.
+      Zero would be read as "sold for nothing".
+    */
+    lastSalePrice: num(properties.Sale_Price) > 0 ? num(properties.Sale_Price) : null,
+    saleQualityCode: optionalText(properties.Sale_Quality),
     neighborhood: name,
   })
 

@@ -346,6 +346,10 @@ export function buildDemoData(
         : parcel.totalAssessment,
       parcelUpdatedAt: stale ? null : parcel.dateUpdated,
       parcelSource: 'imported',
+      // Straight from the county roll, like the rest of the parcel fields.
+      lastSaleDate: parcel.lastSaleDate,
+      lastSalePrice: parcel.lastSalePrice,
+      saleQualityCode: parcel.saleQualityCode,
       yearBuilt: intBetween(1908, 1968),
       squareFeet: intBetween(1180, 4200),
       notes: '',
@@ -393,6 +397,11 @@ export function buildDemoData(
           zoning: manual.pin ? pick(['RSF-6', 'RSF-5', 'TN-2', 'TC-1']) : null,
           propertyUse: pick(PROPERTY_USES),
           propertyUseCode: null,
+          // Entered by hand and never reconciled against the roll, so there is
+          // no county sale history behind them.
+          lastSaleDate: null,
+          lastSalePrice: null,
+          saleQualityCode: null,
           acreage: manual.pin ? Number(between(0.09, 0.4).toFixed(3)) : null,
           fairMarketValue: manual.pin ? Math.round(between(190000, 640000) / 500) * 500 : null,
           assessedValue: manual.pin ? Math.round(between(76000, 256000) / 500) * 500 : null,
@@ -418,14 +427,40 @@ export function buildDemoData(
   */
   const associationProperties = [...properties]
 
+  /*
+    When each lot joined, which is what the Connection Map and the plat grade
+    their threads by. These used to be seeded with no startDate at all, so every
+    membership looked identical and "which of these joined most recently" had no
+    answer to give.
+
+    The spread is deliberate rather than uniform. Most of the association
+    predates anybody currently on the board, a cluster joined when the
+    boundary was last extended, and a handful are recent. A flat random spread
+    would grade smoothly and teach a reader nothing, because real membership
+    does not arrive at a constant rate.
+  */
+  const FOUNDING_DAYS_AGO = 9_500
+
   associationProperties.forEach((property, index) => {
+    const era = index % 5
+    const joinedDaysAgo =
+      era === 0
+        ? intBetween(FOUNDING_DAYS_AGO - 400, FOUNDING_DAYS_AGO)
+        : era === 4
+          ? intBetween(60, 900)
+          : intBetween(2_400, 6_200)
+
     // relation() appends to `relations` itself, so this must not push again.
     relation(
       `rel-hoa-member-${String(index + 1).padStart(4, '0')}`,
       'rt-member-of',
       property.id,
       hoa.id,
-      { attributes: { role: 'member' }, createdDaysAgo: 300 }
+      {
+        startDate: date(-joinedDaysAgo),
+        attributes: { role: 'member' },
+        createdDaysAgo: 300,
+      }
     )
   })
 
@@ -1445,6 +1480,9 @@ export function buildDemoData(
           assessedValue: parcel.totalAssessment,
           parcelUpdatedAt: parcel.dateUpdated,
           parcelSource: 'imported',
+          lastSaleDate: parcel.lastSaleDate,
+          lastSalePrice: parcel.lastSalePrice,
+          saleQualityCode: parcel.saleQualityCode,
           yearBuilt: parcel.yearBuilt,
           squareFeet: null,
           neighborhood: parcel.neighborhood,

@@ -1,0 +1,98 @@
+[
+  {
+    "id": "commission",
+    "label": "County Commission districts",
+    "note": "Chatham County Commission, eight districts and who represents each.",
+    "areas": 5
+  },
+  {
+    "id": "aldermanic",
+    "label": "Aldermanic districts",
+    "note": "City of Savannah council districts.",
+    "areas": 5
+  },
+  {
+    "id": "state-house",
+    "label": "State House districts",
+    "note": "Georgia House of Representatives. Statewide layer, clipped to the area on the plat.",
+    "areas": 2
+  },
+  {
+    "id": "state-senate",
+    "label": "State Senate districts",
+    "note": "Georgia Senate. Statewide layer, clipped to the area on the plat.",
+    "areas": 1
+  },
+  {
+    "id": "congressional",
+    "label": "US Congressional districts",
+    "note": "Statewide layer, clipped to the area on the plat.",
+    "areas": 1
+  },
+  {
+    "id": "voting-precincts",
+    "label": "Voting precincts",
+    "note": "Chatham County precincts, with the polling place for each.",
+    "areas": 27
+  },
+  {
+    "id": "police-precincts",
+    "label": "Police precincts",
+    "note": "",
+    "areas": 2
+  },
+  {
+    "id": "fire-districts",
+    "label": "Fire service districts",
+    "note": "Which station covers an address, and which department runs it.",
+    "areas": 258
+  },
+  {
+    "id": "sanitation",
+    "label": "Sanitation collection days",
+    "note": "City of Savannah residential refuse routes, one area per collection day.",
+    "areas": 20
+  },
+  {
+    "id": "school-board",
+    "label": "School board districts",
+    "note": "Savannah-Chatham County Public Schools board districts.",
+    "areas": 5
+  },
+  {
+    "id": "school-elementary",
+    "label": "Elementary attendance zones",
+    "note": "",
+    "areas": 10
+  },
+  {
+    "id": "school-middle",
+    "label": "Middle school attendance zones",
+    "note": "",
+    "areas": 4
+  },
+  {
+    "id": "school-high",
+    "label": "High school attendance zones",
+    "note": "",
+    "areas": 5
+  },
+  {
+    "id": "historic-local",
+    "label": "Local historic districts",
+    "note": "The areas the Historic Review Board has jurisdiction over.",
+    "areas": 8
+  },
+  {
+    "id": "historic-national",
+    "label": "National Register districts",
+    "note": "",
+    "areas": 13
+  },
+  {
+    "id": "neighborhood-associations",
+    "label": "Neighborhood associations",
+    "note": "A different layer from the neighborhoods the parcel harvest uses: 137 areas rather than 106, and it carries the association and its contact.",
+    "areas": 61
+  }
+]

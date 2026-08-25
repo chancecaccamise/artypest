@@ -1,6 +1,8 @@
 import type { Entity, LocationIndex, Relation } from '@/lib/data/types'
 import type { Point } from '@/lib/geocoding/types'
 import { isCurrent, type ResolvedGraph } from '@/lib/insights'
+import { RELATION_COLORS, relationColor } from '@/lib/relations/colors'
+import { relationDate } from '@/lib/relations/recency'
 
 /*
   Connection arcs. See docs/PLAT-VIEW-SPEC.md section 6.
@@ -24,6 +26,8 @@ export interface MapArc {
   to: Point
   /** Ended relations are drawn dashed, like the history divider elsewhere. */
   current: boolean
+  /** When the connection began, for the recency ramp. Null when unrecorded. */
+  startDate: string | null
 }
 
 export interface BuildArcsInput {
@@ -90,6 +94,7 @@ export function buildArcs({
       from: from.point,
       to: to.point,
       current: isCurrent(relation, today),
+      startDate: relationDate(relation),
     })
 
     if (arcs.length >= ARC_LIMIT) break
@@ -130,23 +135,13 @@ export function arcPath(
   return `M ${round(x1)},${round(y1)} Q ${round(controlX)},${round(controlY)} ${round(x2)},${round(y2)}`
 }
 
-/** Arc colour by relation type. Tokens only, never a generated scale. */
-export const ARC_COLORS: Record<string, string> = {
-  owns: 'var(--type-property)',
-  resides_at: 'var(--type-person)',
-  member_of: 'var(--type-association)',
-  vendor_for: 'var(--type-business)',
-  employed_by: 'var(--type-business)',
-  manages: 'var(--type-asset)',
-  governs: 'var(--type-association)',
-  adjacent_to: 'var(--rule-strong)',
-  related_to: 'var(--type-record)',
-  references: 'var(--type-document)',
-}
-
-export function arcColor(key: string): string {
-  return ARC_COLORS[key] ?? 'var(--rule-strong)'
-}
+/*
+  Arc colour moved to src/lib/relations/colors.ts when the Connection Map
+  started drawing threads in the same palette. Re-exported under the old names
+  so the plat's call sites read as they always did.
+*/
+export const ARC_COLORS = RELATION_COLORS
+export const arcColor = relationColor
 
 /** Relation type keys worth offering, ordered by how often a board asks. */
 export function arcableKeys(graph: ResolvedGraph, locations: LocationIndex): string[] {

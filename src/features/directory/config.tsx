@@ -304,6 +304,19 @@ const propertyConfig: DirectoryConfig = {
     },
     { key: 'assessedValue', label: 'Assessed value', format: 'currency', hiddenFromGrid: true },
     /*
+      The last transfer on the county roll. Shown in the grid, unlike the
+      valuation fields, because "when did this last change hands" is a question
+      a board asks while scanning a list rather than while reading one record.
+    */
+    { key: 'lastSaleDate', label: 'Last sale', format: 'date' },
+    /*
+      The price and the county's qualification code are not here on purpose.
+      They belong with the rest of the county's own record, on the Parcel record
+      card, where the code sits beside the number it qualifies. Listing them
+      here as editable fields would invite somebody to correct the county's roll
+      in a copy of it.
+    */
+    /*
       The parcel roll has no assessment-year field. This is when the county last
       touched the record, which is the closest thing it publishes.
     */
@@ -442,6 +455,13 @@ const associationConfig: DirectoryConfig = {
     { key: 'foundedYear', label: 'Founded', format: 'year' },
     { key: 'jurisdiction', label: 'Jurisdiction' },
     { key: 'meetingCadence', label: 'Meetings' },
+    /*
+      The parcel import files a condominium owners association as an
+      association, and the county publishes a mailing address for every owner.
+      Without a field for it that address would be filed onto a record that
+      never shows it.
+    */
+    { key: 'mailingAddress', label: 'Mailing address', hiddenFromGrid: true },
     { key: 'notes', label: 'Notes', format: 'longtext', internal: true, hiddenFromGrid: true },
   ],
   chips: (entity) => {

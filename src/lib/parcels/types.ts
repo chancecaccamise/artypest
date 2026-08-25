@@ -57,6 +57,30 @@ export interface ParcelRecord {
   legalDescription: string
   /** Zero-padded county code, for example `020`. See checkJurisdiction. */
   municipalityCode: string | null
+  /**
+   * The last recorded transfer, `YYYY-MM-DD`. Null when the county has recorded
+   * none. Real dates run from 1910 to the present.
+   */
+  lastSaleDate: string | null
+  /**
+   * What it sold for. Null, never zero, when no price was recorded: a third of
+   * the parcels with a transfer date have no price against it, because a gift,
+   * a family transfer and a foreclosure are all transfers with no
+   * consideration. Zero would read as "sold for nothing".
+   */
+  lastSalePrice: number | null
+  /**
+   * The county's sale qualification code, most often `Q` or `U`.
+   *
+   * A code, not a label, and carried raw for the same reason `propertyUseCode`
+   * is: the Board of Assessors publishes no domain for it. The two dominate the
+   * data, roughly 9,400 `Q` against 11,800 `U` across the harvested extent, and
+   * the convention elsewhere in Georgia is that one marks an arm's length sale
+   * usable as evidence of market value and the other does not. That reading is
+   * unconfirmed here, so a price should never be presented as a market value
+   * without showing this code beside it. See docs/SAGIS-API.md.
+   */
+  saleQualityCode: string | null
   /** ISO date. The county publishes epoch milliseconds and no assessment year. */
   dateUpdated: string | null
 }

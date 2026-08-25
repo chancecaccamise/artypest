@@ -486,3 +486,430 @@ One consequence worth knowing: a missing `/parcels/attributes.json` now answers
 200 with HTML rather than 404, exactly as the Vite dev server does. The
 content-type check in `loadParcelLayer` already covers that, which is the reason
 it was written.
+
+## 2026-08-24, threads and how old they are
+
+### Connection colour is shared between the two views
+
+**Chosen.** `src/lib/relations/colors.ts`, imported by the plat and by the
+Connection Map.
+
+**Rejected.** Leaving the Connection Map's single grey and the plat's typed
+palette as they were.
+
+**Why.** They are two drawings of the same relationships. The plat already drew
+`member_of` in the association colour while the Connection Map drew every
+connection in one grey, so a reader moving between them had nothing to carry
+across, and the Connection Map's threads were close to invisible against the
+panel. A purple thread now means "member of" in both.
+
+### Recency is graded within a group, not across the drawing
+
+**Chosen.** One ramp per fan on the Connection Map (everything hanging off one
+card), one ramp per connection type on the plat.
+
+**Rejected.** A single ramp across everything drawn.
+
+**Why.** This was built the obvious way first and it did not work. A single ramp
+spends its whole range on the widest gap anywhere on screen. On the map for a
+board member whose own address was recorded this year, all six association lots
+landed at the dim end, indistinguishable, which is precisely the comparison the
+feature exists to make. Siblings are what sit next to each other and invite
+comparison, so siblings are what get the contrast.
+
+The cost is that brightness is not comparable across two groups. The legend says
+so rather than leaving it to be guessed.
+
+### The ramp is linear in time, not in rank
+
+**Chosen.** Opacity scales with elapsed days between the oldest and newest date
+in the group, with a floor so the oldest is still legible.
+
+**Rejected.** Spreading first-to-last evenly across the ramp.
+
+**Why.** Rank order guarantees strong contrast, which is why it is tempting. It
+also makes a twenty-year gap and a twenty-day gap look identical, and invents a
+story of steady arrival that the data does not support. Seven lots that joined
+together and one that joined last year should look like seven and one.
+
+Below a fourteen-day span nothing is graded at all: two dates a day apart drawn
+at opposite ends of a ramp would be a lie with a gradient on it.
+
+### `startDate` only, never `createdAt`
+
+**Chosen.** An undated connection is drawn at a fixed middle strength and
+counted in the legend.
+
+**Rejected.** Falling back to `createdAt` when `startDate` is missing.
+
+**Why.** `createdAt` is when somebody typed the record in, which is a fact about
+the office and not about the neighbourhood. A lot that joined in 1998 and was
+entered last Tuesday would be drawn as the newest thing on the map. Middle
+strength is used because the floor would read as "oldest" and the ceiling as
+"newest", and neither is known.
+
+### The demo association's memberships were given join dates
+
+**Chosen.** Spread `startDate` values across `rel-hoa-member-*` in the fixture,
+clustered rather than uniform.
+
+**Why.** They carried none, so every membership graded identically and the
+feature had nothing to show. A uniform random spread would have graded smoothly
+and taught a reader nothing, because membership does not arrive at a constant
+rate: most of an association predates anybody currently on its board.
+
+These are invented demo values and get replaced by the client's real dates, as
+everything else in the fixture does.
+
+### The plat opens on the association's records, not on the county
+
+**Chosen.** Frame the plat on the lots the association actually tracks, once,
+when the harvested geometry has arrived. Switching a connection type on frames
+the arcs. Two controls: one back to the records, one out to every county lot.
+
+**Rejected.** Leaving the plat framed on the whole harvest, which is what
+`fitExtent` gives and what it had always done.
+
+**Why.** The plat draws 16,656 lots across 4.3 by 7.9 km. The association tracks
+about fifty, spanning 1.1 by 0.44 km, roughly a sixtieth of the drawing. A
+reader switching connections on saw nothing happen: the arcs were drawn,
+correctly coloured and correctly graded, at a zoom where an arc is shorter than
+its own stroke is wide.
+
+Worth recording that this was not caused by growing the parcel layer, which was
+the first suspicion. Measured against the previous harvest the association
+occupied about a sixteenth of the frame's long side, and about an eighteenth
+after. The plat had always opened too far out; sixteen thousand lots only made
+it more obvious.
+
+The county is still all there, one button away. `Maximize` was relabelled from
+"Fit the whole plat" to "Fit every lot the county recorded", because it is no
+longer the state you start in and the two now need telling apart.
+
+## 2026-08-24, connecting the database
+
+### Migrations are authored as files and pushed to the hosted project
+
+**Chosen.** No local Postgres. Migrations are written into
+`supabase/migrations/`, verified against a real Postgres, and applied with
+`supabase db push`.
+
+**Rejected.** Installing Docker for the full local stack, and editing the schema
+in the Supabase dashboard.
+
+**Why.** `CLAUDE.md` said "Never write against a remote Supabase project. Local
+only", which assumed a Docker stack. There is no container runtime on this
+machine, and 8.4GB free, so that rule described something that could not happen.
+Leaving it in place while working around it would be worse than changing it.
+
+What the rule was protecting is still protected: every schema change is a
+reviewed file in git, applied the same way to every environment. What is lost is
+`supabase db reset`, so there is no throwaway copy to break. `pnpm db:verify`
+exists to make up for that.
+
+The rule in `CLAUDE.md` now says schema changes are migration files and never
+dashboard edits, which is the part that actually matters.
+
+### The migrations are tested against Postgres compiled to WebAssembly
+
+**Chosen.** `@electric-sql/pglite` as a devDependency, and `supabase/schema.test.ts`
+runs every migration from empty on each `pnpm test`.
+
+**Rejected.** Pushing to the hosted project and finding out there.
+
+**Why.** This is a library outside the list in `CLAUDE.md`, which requires a
+reason logged here. The reason is that without it the first thing ever to
+execute these migrations would be the only copy of the client's data. PGlite is
+Postgres itself, not an emulation: the same parser, planner, and plpgsql. Only
+the `auth` schema is stubbed, and nothing this schema asserts depends on it.
+
+It earned its place immediately. It caught that `pgcrypto` was being created for
+no reason, and the seventeen tests it now runs include the audit triggers, which
+are the one part of the schema with real logic in them and the part whose
+failure is invisible until somebody needs the history.
+
+### No extensions
+
+**Chosen.** No `create extension` at all.
+
+**Why.** `gen_random_uuid()` has been core Postgres since 13 and Supabase runs
+15, so `pgcrypto` bought nothing. An extension that is not required is one more
+thing that has to be present for a restore to work.
+
+### The audit batch id comes from the transaction, not the application
+
+**Chosen.** `current_batch_id()` reads a session setting the application may
+set, and otherwise derives one id per transaction.
+
+**Why.** The parcel import needs to link Activity to exactly its own rows, which
+is what the setting is for. Everything else still wants grouping, and rows
+written by one transaction belong together, so the fallback is not a null.
+
+### Reference data ships as a migration, not as seed.sql
+
+**Chosen.** The org, the ten relation types, and the four reference lists are in
+`20260824120100_bootstrap.sql`, written idempotently.
+
+**Why.** `seed.sql` only runs on `supabase db reset`, and the hosted project is
+never reset: it receives migrations. Anything the application needs in order to
+function has to arrive the way the schema does. The org id is fixed rather than
+generated so the fixtures and the database describe the same organisation.
+
+## 2026-08-24, district overlays
+
+### Sixteen overlays, one shown at a time
+
+**Chosen.** A picker on the plat, one boundary set drawn at a time, listed in
+`scripts/sagis/overlays.mjs`.
+
+**Rejected.** Independent toggles per overlay.
+
+**Why.** The client asked for one at a time and they are right. A lot sits
+inside a commission district, a voting precinct, and a sanitation route
+simultaneously, and three sets of boundaries over a plat is a drawing nobody can
+read.
+
+### What the client asked for that does not exist
+
+The list came from walking all 1,334 layers SAGIS publishes across 165 services.
+Available and built: County Commission, Aldermanic, State House, State Senate,
+US Congressional, voting precincts, police precincts, fire service districts,
+sanitation collection days, school board districts, three sets of school
+attendance zones, local historic districts, National Register districts, and
+neighborhood associations.
+
+Not published anywhere, and so not built:
+
+- District Attorney, Recorder's Court, and Grand Jury districts. Searched for
+  jury, magistrate, superior, recorder, prosecutor: nothing. These read as
+  county-wide jurisdictions rather than districts that can be shaded.
+- Code Enforcement districts.
+- The MPC Monuments board. There is a monument survey point layer but no
+  jurisdiction boundary. Historic Review is covered by local historic districts.
+- The Tourism Leadership Council and Tourism Advisory Council, which are
+  advisory bodies rather than areas.
+
+Correcting an earlier answer in this file's spirit: voting precincts were
+reported as unavailable when only `OpenData/Boundaries` had been checked. They
+are published, at `OpenData/Community/MapServer/17`.
+
+### Sanitation is four layers folded into one overlay
+
+**Why.** The city publishes one layer per weekday rather than one layer with a
+day column. A reader wants "which day is this street collected", not four
+overlays they switch between to find out.
+
+### The service simplifies the geometry, and the harvest clips it
+
+**Chosen.** `maxAllowableOffset` of about two metres, and an envelope clip to
+the extent of the harvested parcels.
+
+**Why.** Statewide layers follow every marsh edge in Georgia. One congressional
+district arrived as 343KB of coastline for a plat showing four kilometres of
+Savannah. Simplifying and clipping took all sixteen overlays from 1.5MB to
+656KB, and the largest single file a browser fetches from 343KB to 183KB. Two
+metres is finer than a boundary drawn as a two pixel stroke can show.
+
+### Labels are pinned into the visible part of a district
+
+**Chosen.** The label sits at the mean of the district's vertices, slid to stay
+inside the part of the district that is on screen.
+
+**Rejected.** Labelling at the centroid and leaving it there.
+
+**Why.** A voting precinct is far larger than the plat's opening view, so its
+centroid is usually off screen and the label with it. That was the first
+version, and it drew 27 boundaries with 27 labels, none of them visible. A
+boundary a reader cannot identify is decoration.
+
+The mean of the vertices rather than the centre of the bounding box, because an
+L-shaped district has a box centre outside itself, and a label floating in the
+neighbouring district is worse than no label.
+
+## 2026-08-24, why the plat's colourings did nothing
+
+### Theming is given every PIN the plat draws
+
+**Chosen.** `pins` in `MapView` is the committed fixture merged with the
+harvested layer, the same union the projection draws.
+
+**Rejected.** Leaving it as `platPins()`.
+
+**Why.** `platPins()` is the 40 lots in the committed fixture. The plat draws
+16,656. So every colouring classified forty lots and dropped the other 16,616
+into "unknown": measured in the browser, picking Occupancy moved 2,084 of the
+2,124 lots on screen from one flat grey to a slightly different flat grey, and
+coloured 40. It looked like the control did nothing because very nearly nothing
+is what it did.
+
+### `propertyByPin` is keyed on a normalised PIN
+
+**Why.** It was keyed on the raw `data.pin` while every lookup asks with a
+normalised one, because the plat asks with the PIN off a parcel polygon. That
+works only while the county and the typist agree on spacing. A record entered as
+`20003-15001` was invisible to every colouring, and would have been invisible in
+a way nobody could have explained from the screen.
+
+### The county's property class is its own mode
+
+**Chosen.** A `property_class` colouring reading `propertyUseCode`, beside the
+existing `property_use`.
+
+**Rejected.** Filling `propertyUse` in from the county code when the association
+has not recorded one.
+
+**Why.** They are two different facts, and `CLAUDE.md` is explicit: zoning is
+the regulatory district, property use is what is actually there, and collapsing
+them breaks the "commercial use in a residential district" query, which needs
+the two to disagree. `propertyUse` is null on every county parcel because nobody
+has looked at those lots, and that is worth showing rather than papering over.
+
+The county code is on all 16,656 parcels across 17 classes, so this is the
+colouring that actually renders the whole plat: 82% R3, 12% C3. Buckets are
+labelled with the raw code because the Board of Assessors has not published the
+code table, and a guessed label is worse than an unexplained one.
+
+## 2026-08-25, sale history and associations as owners
+
+### The sale price is never zero, only absent
+
+**Chosen.** `lastSalePrice` is null when the county recorded no price.
+
+**Why.** Measured across the harvested extent: 94% of parcels carry a transfer
+date and only 62% carry a price, so a third of recorded transfers have none.
+That is a real kind of transfer, not a hole in the data: a gift, a family
+transfer and a foreclosure all move a property with no consideration. Zero would
+read as "sold for nothing" and would drag any average taken over the column
+down with it. The lowest real price on the roll is $1, which is a nominal
+transfer and a further reason not to treat small numbers as market evidence.
+
+### The qualification code is shown beside the price, never instead of it
+
+**Chosen.** `saleQualityCode` carried raw and rendered next to the number.
+
+**Why.** Roughly half of recorded sales carry `U` and half `Q`. The convention
+elsewhere in Georgia is that only one of the two is an arm's length sale usable
+as evidence of value, but the Board of Assessors publishes no code table, so
+that reading is unconfirmed here. `docs/SAGIS-API.md` already says not to invent
+labels for these codes. A reader comparing sale prices needs to see the code to
+know the number may not be a market price.
+
+### The price and the code have no form field
+
+**Chosen.** Both live on the Parcel record card and are `.optional()` in the
+schema, unlike every other property field.
+
+**Why.** They are the county's record, not the association's. Offering them as
+editable inputs invites somebody to correct the county's roll in a copy of it.
+The consequence is that the key is simply absent on a newly created property,
+and `nullable` alone rejects absent: this broke record creation until both were
+made optional as well. Worth knowing before adding another county-owned field.
+
+### Association is a third owner kind, and the token list was measured
+
+**Chosen.** `ASSOCIATION`, `ASSN`, `HOA`, `POA`, `CONDOMINIUM`, `CONDO`, matched
+as whole words, read before the business tokens and after the government ones.
+
+**Why each part:**
+
+- Whole words, because `HOA` prefix-matches `HOAGLAND` and `HOANG`, which are
+  real surnames in this county.
+- `ASSOCIATES` is excluded. `239 MADISON AVENUE ASSOCIATES, LLC` is a
+  partnership, and there are more of those here than there are associations.
+- Association is read before business, because incorporated associations carry
+  both tokens and reading the `INC` first files every condominium association in
+  the county as a company.
+- Government is read before association, because a housing authority is not a
+  homeowners association and must never be offered as one.
+- A condominium counts with or without the word association, because a
+  condominium regime is an owners' association whether or not the county wrote
+  it out.
+
+**Deliberately excluded.** Churches, temples and ministries, which is 135
+records. The association reference list is homeowners association, committee,
+civic club and property owners association, and a congregation is none of those,
+so they stay filed as businesses rather than being moved somewhere equally
+wrong. `CLUB`, `SOCIETY` and `LODGE` are excluded for the same reason and
+because there are four of them in total: the low confidence review is where
+those belong, not a rule.
+
+### Adding a third kind broke the second one, quietly
+
+`parseOwner` skipped person parsing with a check for `kind === 'business'`. A
+third kind fell through it, so every condominium association went to the person
+parser and `37 THE LOFTS CONDOMINIUM ASSOCIATION INC` came back as somebody
+surnamed 37. The check now reads `kind !== 'person'`, which is what it always
+meant.
+
+The import creates each kind with its own fields for the same reason. An
+association filed with `businessCategory` would carry a key its own form never
+shows and its schema does not know about. `associationDataSchema` gained a
+mailing address, because the county publishes one for every owner and the
+association form had nowhere to put it.
+
+## 2026-08-25, owner reconciliation, and where AI is allowed
+
+### Creating is allowed on a rule; linking needs more
+
+**Chosen.** A confident parse is enough to create a record. Linking an owner to
+an existing record needs either a byte-identical name or a confident parse
+behind it, and anything else waits for a person.
+
+**Why.** The two are not symmetric and treating them as one decision is how this
+feature would do harm. Creating a duplicate is visible and mergeable. Attaching
+somebody's house to a stranger is silent, and nothing on the screen afterwards
+says it happened. `src/lib/parcels/owner.ts` already says a confident wrong
+match is the worst thing this application can do; this is that rule applied to
+the bulk case.
+
+Measured on the real layer: 11,499 owners create, 1 links, 1,993 wait. The link
+count is low because the demo directory holds 61 records, not because the
+matching is weak.
+
+### A truncated name is never acted on, matched or not
+
+The county cuts the owner field at 40 characters before it reaches us, which is
+860 of the 1,993 in the review pile. The end of the name is gone and nothing
+downstream recovers it: creating from it files a record under half a name, and
+linking on it is a guess. Both wait.
+
+A consequence worth knowing: a name that is *exactly* 40 characters is
+indistinguishable from one that lost its end, so it is treated as truncated.
+`37 THE LOFTS CONDOMINIUM ASSOCIATION INC` is exactly 40 and goes to review. That
+is the conservative answer and it is the right one, but it means the review pile
+contains some complete names.
+
+### Owners are grouped, not listed per parcel
+
+1,286 owners here hold more than one lot and one holds 170. Deciding per parcel
+would ask the same question 170 times and risk 170 different answers, and would
+create 170 copies of the same company. One group is one decision and one record.
+
+### The candidates are indexed, not scanned
+
+`findOwnerMatch` walks the candidate list, which is right for the sixty parcels
+the parcel import handles and is 13,493 walks of several thousand records here.
+The bulk path indexes the directory once. Reconciling the whole layer takes
+69ms and applying it 77ms.
+
+### No LLM, for now
+
+**Chosen.** The review queue lists the names the rules could not read and leaves
+them to a person.
+
+**Rejected, and then removed.** A reading service was built: a Vercel function
+holding the API key server-side, proposing a kind and a readable name for names
+in the queue, never given the directory so that it structurally could not
+propose a link. It worked, and it was taken out at the client's request before
+it was ever connected to a key.
+
+**Why the removal is clean rather than dormant.** Leaving it in place would have
+meant an unused dependency, a serverless surface this project otherwise does not
+have, a second place to configure a secret, and a code path nobody exercises.
+Git history keeps it if it is wanted later.
+
+**What survives, and should, if it comes back.** The asymmetry above is the part
+worth keeping: a model may propose what a name *is*, never who it *matches*.
+Withholding the directory is what makes a wrong link impossible rather than
+merely discouraged. And it should only ever see the residue: the rules settle
+roughly 85% of the layer, and those names have no reason to leave the browser.

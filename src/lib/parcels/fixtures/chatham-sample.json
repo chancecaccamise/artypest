@@ -18,7 +18,10 @@
     "yearBuilt": 1950,
     "legalDescription": "297 298 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2018-05-07",
+    "lastSalePrice": 232500,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 07009",
@@ -39,7 +42,10 @@
     "yearBuilt": 1945,
     "legalDescription": "299 3OO PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2024-05-14",
+    "lastSalePrice": 460000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 07010",
@@ -60,7 +66,10 @@
     "yearBuilt": 1945,
     "legalDescription": "LOTS 301 & 302 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "1994-09-09",
+    "lastSalePrice": 69900,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 07011",
@@ -81,7 +90,10 @@
     "yearBuilt": null,
     "legalDescription": "LOTS 303 AND 304 PARKSIDE SUB  PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2022-02-07",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20084 07012",
@@ -102,7 +114,10 @@
     "yearBuilt": 1945,
     "legalDescription": "LOTS 305 AND 306 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2021-09-02",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20084 07013",
@@ -123,7 +138,10 @@
     "yearBuilt": null,
     "legalDescription": "LOTS 307 AND 308 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "1998-08-28",
+    "lastSalePrice": 89000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 07014",
@@ -144,7 +162,10 @@
     "yearBuilt": 1937,
     "legalDescription": "309 310 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2020-10-16",
+    "lastSalePrice": 404000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 08022",
@@ -165,7 +186,10 @@
     "yearBuilt": 1945,
     "legalDescription": "311 312 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2007-07-20",
+    "lastSalePrice": 175000,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20084 08023",
@@ -186,7 +210,10 @@
     "yearBuilt": 1945,
     "legalDescription": "313 314 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2020-06-19",
+    "lastSalePrice": 302500,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 08024",
@@ -207,7 +234,10 @@
     "yearBuilt": 1945,
     "legalDescription": "LOTS 315 AND 316 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2017-03-22",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20084 08025",
@@ -228,7 +258,10 @@
     "yearBuilt": 1945,
     "legalDescription": "317 & 318 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2020-01-08",
+    "lastSalePrice": 250000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 08026",
@@ -249,7 +282,10 @@
     "yearBuilt": 1946,
     "legalDescription": "LOT 319 AND 320 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2018-04-03",
+    "lastSalePrice": 245000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 08027",
@@ -270,7 +306,10 @@
     "yearBuilt": 1945,
     "legalDescription": "PAR A SUB OF LTS 321 + 322 OLYMP  US     SUB PIERP",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2022-02-16",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20084 08028",
@@ -291,7 +330,10 @@
     "yearBuilt": 1945,
     "legalDescription": "PAR B SUB OF 322 + 323 OLYMPUS  SUB PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "1982-08-01",
+    "lastSalePrice": 59755,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20084 08029",
@@ -312,7 +354,10 @@
     "yearBuilt": 1945,
     "legalDescription": "PAR C SUB LTS 17 + 18  OLYMPUS SUB PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2023-09-05",
+    "lastSalePrice": 489653,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 16001",
@@ -333,7 +378,10 @@
     "yearBuilt": 1956,
     "legalDescription": "LTS 406 407 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "1996-10-09",
+    "lastSalePrice": 47500,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 16002",
@@ -354,7 +402,10 @@
     "yearBuilt": 1957,
     "legalDescription": "LOTS 404 405 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2014-10-31",
+    "lastSalePrice": 150000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 16003",
@@ -375,7 +426,10 @@
     "yearBuilt": 1945,
     "legalDescription": "402 403 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2017-03-24",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20084 16004",
@@ -396,7 +450,10 @@
     "yearBuilt": 1945,
     "legalDescription": "400 401 PIERPOINT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2001-07-10",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20084 16005",
@@ -417,7 +474,10 @@
     "yearBuilt": 1945,
     "legalDescription": "398 399 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2010-04-27",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20084 16006",
@@ -438,7 +498,10 @@
     "yearBuilt": 1945,
     "legalDescription": "LOTS 396 AND 397 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2009-06-08",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20084 16007",
@@ -459,7 +522,10 @@
     "yearBuilt": 1945,
     "legalDescription": "LOTS 394 AND 395 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "1992-07-01",
+    "lastSalePrice": 49500,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20084 16008",
@@ -480,7 +546,10 @@
     "yearBuilt": 1945,
     "legalDescription": "LOTS 392 AND 393 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2009-10-21",
+    "lastSalePrice": 185000,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20084 17001",
@@ -501,7 +570,10 @@
     "yearBuilt": 1945,
     "legalDescription": "LOTS 390 AND 391 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2013-02-28",
+    "lastSalePrice": 199900,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 17002",
@@ -522,7 +594,10 @@
     "yearBuilt": 1950,
     "legalDescription": "LOTS 388 AND 389 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2017-10-13",
+    "lastSalePrice": 227000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 17003",
@@ -543,7 +618,10 @@
     "yearBuilt": null,
     "legalDescription": "386 & 387 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2019-05-28",
+    "lastSalePrice": 297000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 17004",
@@ -564,7 +642,10 @@
     "yearBuilt": 1945,
     "legalDescription": "382 383 384 385 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2016-09-30",
+    "lastSalePrice": 285000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 17005",
@@ -585,7 +666,10 @@
     "yearBuilt": 1974,
     "legalDescription": "380 381 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2020-02-11",
+    "lastSalePrice": 262000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20084 17006",
@@ -606,7 +690,10 @@
     "yearBuilt": null,
     "legalDescription": "LOTS 378 & 379 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2013-03-20",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 06007",
@@ -627,7 +714,10 @@
     "yearBuilt": null,
     "legalDescription": "LOT 126 AND EAST 14 FEET OF LOT  125    CANTY WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2021-09-15",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 06008",
@@ -648,7 +738,10 @@
     "yearBuilt": 1929,
     "legalDescription": "LOTS 122, 123, 124 & WESTERN  HALF OF LOT 25 CANTY",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2023-11-27",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 06009",
@@ -669,7 +762,10 @@
     "yearBuilt": null,
     "legalDescription": "LOTS 120 AND 121 CANTY WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2024-06-05",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 06010",
@@ -690,7 +786,10 @@
     "yearBuilt": 1931,
     "legalDescription": "LOTS 118, 119 & E 10 FT LOT 117  CANTY  WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "1996-08-08",
+    "lastSalePrice": 85000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20085 07013",
@@ -711,7 +810,10 @@
     "yearBuilt": 1938,
     "legalDescription": "142 E HALF 141 CANTY WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2013-02-05",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 07014",
@@ -732,7 +834,10 @@
     "yearBuilt": 1940,
     "legalDescription": "LOT 140 AND WEST 15 FEET OF LOT  141    CANTY WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2023-02-08",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 07015",
@@ -753,7 +858,10 @@
     "yearBuilt": 1930,
     "legalDescription": "LOT 139 AND EAST HALF LOT 138  CANTY WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2024-09-12",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 07016",
@@ -774,7 +882,10 @@
     "yearBuilt": 1930,
     "legalDescription": "LOTS 137 & W 15 FT OF LOT 138 CA  NTY WD CANTY WAR",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2007-05-21",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 07017",
@@ -795,7 +906,10 @@
     "yearBuilt": null,
     "legalDescription": "LOTS 135, 136 AND EAST HALF LOT  134    CANTY WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2017-04-07",
+    "lastSalePrice": 233500,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20085 07018",
@@ -816,7 +930,10 @@
     "yearBuilt": 1932,
     "legalDescription": "LOT 133 AND WEST HALF LOT 134  CANTY WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2011-02-17",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 07019",
@@ -837,7 +954,10 @@
     "yearBuilt": 1932,
     "legalDescription": "LOT 132 AND EAST 15 FEET OF LOT  131    CANTY WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2023-06-19",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 07020",
@@ -858,7 +978,10 @@
     "yearBuilt": 1932,
     "legalDescription": "LOT 130 AND WEST 15 FEET OF LOT  131    CANTY WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2009-02-21",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 07021",
@@ -879,7 +1002,10 @@
     "yearBuilt": 1935,
     "legalDescription": "LOT 129 AND EAST 15 FEET OF LOT  128    CANTY WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2023-12-08",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 07022",
@@ -900,7 +1026,10 @@
     "yearBuilt": 1930,
     "legalDescription": "EAST 30.6 FEET OF LOT 127 AND  WEST 15 FEET OF LOT",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2003-08-27",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 07023",
@@ -921,7 +1050,10 @@
     "yearBuilt": 1933,
     "legalDescription": "WEST 45 FEET OF LOT 127 CANTY WA  RD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2009-05-22",
+    "lastSalePrice": 231000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20085 08009",
@@ -942,7 +1074,10 @@
     "yearBuilt": 1945,
     "legalDescription": "257 258 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2018-11-16",
+    "lastSalePrice": 228500,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20085 08010",
@@ -963,7 +1098,10 @@
     "yearBuilt": 1945,
     "legalDescription": "LOTS 255 256 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "1995-11-14",
+    "lastSalePrice": 60000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20085 08011",
@@ -984,7 +1122,10 @@
     "yearBuilt": 1945,
     "legalDescription": "LOTS 253 AND 254 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2010-04-01",
+    "lastSalePrice": 174300,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 08012",
@@ -1005,7 +1146,10 @@
     "yearBuilt": 1916,
     "legalDescription": "251 252 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2017-08-09",
+    "lastSalePrice": 278500,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20085 08013",
@@ -1026,7 +1170,10 @@
     "yearBuilt": 1945,
     "legalDescription": "249 250 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2023-11-30",
+    "lastSalePrice": 665000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20085 08014",
@@ -1047,7 +1194,10 @@
     "yearBuilt": 1945,
     "legalDescription": "247 248 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "1997-08-06",
+    "lastSalePrice": 75000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20085 08015",
@@ -1068,7 +1218,10 @@
     "yearBuilt": null,
     "legalDescription": "LOTS 244, 245, 246 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": null,
+    "lastSalePrice": null,
+    "saleQualityCode": null
   },
   {
     "pin": "20085 08016",
@@ -1089,7 +1242,10 @@
     "yearBuilt": 1945,
     "legalDescription": "259 260 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "1997-07-21",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 09010",
@@ -1110,7 +1266,10 @@
     "yearBuilt": 1945,
     "legalDescription": "LTS 277 278 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2007-07-12",
+    "lastSalePrice": 290000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20085 09011",
@@ -1131,7 +1290,10 @@
     "yearBuilt": 1945,
     "legalDescription": "LOTS 275 AND 276 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2024-07-17",
+    "lastSalePrice": 362000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20085 09012",
@@ -1152,7 +1314,10 @@
     "yearBuilt": 1945,
     "legalDescription": "273 274 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2014-06-11",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 09013",
@@ -1173,7 +1338,10 @@
     "yearBuilt": 1928,
     "legalDescription": "271 272 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "1996-02-16",
+    "lastSalePrice": null,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 09014",
@@ -1194,7 +1362,10 @@
     "yearBuilt": 1945,
     "legalDescription": "269 270 PIERPONT WD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "1997-10-22",
+    "lastSalePrice": 45000,
+    "saleQualityCode": "U"
   },
   {
     "pin": "20085 09015",
@@ -1215,7 +1386,10 @@
     "yearBuilt": 1945,
     "legalDescription": "LOTS 267 AND 268 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "1999-09-01",
+    "lastSalePrice": 80000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20085 09016",
@@ -1236,7 +1410,10 @@
     "yearBuilt": 1945,
     "legalDescription": "LOTS 265, 266 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "1999-08-11",
+    "lastSalePrice": 65000,
+    "saleQualityCode": "Q"
   },
   {
     "pin": "20085 09017",
@@ -1257,6 +1434,9 @@
     "yearBuilt": 1945,
     "legalDescription": "LOTS 263 AND 264 PIERPONT WARD",
     "municipalityCode": "020",
-    "dateUpdated": "2025-05-06"
+    "dateUpdated": "2025-05-06",
+    "lastSaleDate": "2014-01-06",
+    "lastSalePrice": 269900,
+    "saleQualityCode": "Q"
   }
 ]

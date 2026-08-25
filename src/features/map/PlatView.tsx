@@ -10,10 +10,20 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { Crosshair, Maximize2, Minus, Plus } from 'lucide-react'
+import { Crosshair, LocateFixed, Maximize2, Minus, Plus } from 'lucide-react'
 
 import { arcColor, arcPath, type MapArc } from './arcs'
-import { buildProjection, shouldLabel, shouldLabelStreet, type ParcelPath } from './projection'
+import { buildRecencyScale } from '@/lib/relations/recency'
+import {
+  buildProjection,
+  frameTransform,
+  projectOverlay,
+  shouldLabel,
+  shouldLabelOverlay,
+  shouldLabelStreet,
+  type ParcelPath,
+} from './projection'
+import type { OverlayCollection } from '@/lib/overlays'
 import { useHarvestedParcels } from './use-harvested-parcels'
 import type { Theming } from './theming'
 import { Button } from '@/components/ui/button'
@@ -57,6 +67,13 @@ const READABLE_LOT_PX = 40
 
 /** How much of the viewport a lot fills when the plat navigates to it. */
 const FOCUS_FILL = 0.45
+
+/*
+  How much of the viewport an area fills when the plat frames a group of things.
+  Lower than FOCUS_FILL because the point of framing a group is the street
+  pattern around it: a lot with no context is a rectangle.
+*/
+const FRAME_FILL = 0.78
 
 /*
   The most lots drawn at once. The harvested layer holds 16,656, and at any zoom
@@ -109,6 +126,10 @@ export interface PlatViewProps {
   markers: PlatMarker[]
   selectedEntityId: string | null
   arcs: MapArc[]
+  /** Grade the arcs by how recent each connection is. */
+  gradeArcsByAge?: boolean
+  /** The district boundaries drawn under the lots. One at a time. */
+  overlay?: OverlayCollection | null
   onSelectPin: (pin: string | null) => void
   onSelectEntity: (entityId: string) => void
   /**
@@ -131,6 +152,8 @@ export function PlatView({
   markers,
   selectedEntityId,
   arcs,
+  gradeArcsByAge = false,
+  overlay = null,
   onSelectPin,
   onSelectEntity,
   labelForPin,
@@ -228,6 +251,69 @@ export function PlatView({
     [projection.parcels]
   )
 
+  /*
+    The viewport in pre-transform space, which is what projected bounds are
+    measured in. Shared by the lot culling and the overlay labels rather than
+    computed twice from the same three numbers.
+  */
+  const viewport = useMemo(() => {
+    const { k, x, y } = transform
+    return {
+      left: -x / k,
+      top: -y / k,
+      right: (size.width - x) / k,
+      bottom: (size.height - y) / k,
+    }
+  }, [transform, size.width, size.height])
+
+  /*
+    Recomputed when the reader picks a different boundary set or the plat
+    resizes, and not when they pan: the paths are in pre-transform space, like
+    the lots, so panning is a transform on the group rather than new geometry.
+  */
+  const projectedOverlay = useMemo(
+    () => (overlay ? projectOverlay(overlay, projection.project) : []),
+    [overlay, projection]
+  )
+
+  /*
+    Where each district's label goes.
+
+    Not simply the centroid. A voting precinct is far larger than the plat's
+    opening view, so its centroid is usually off screen and the label with it,
+    which leaves a reader looking at boundaries they cannot identify. The label
+    is pinned to the centroid where that is visible and slid to stay inside the
+    part of the district that is on screen where it is not.
+  */
+  const overlayLabels = useMemo(() => {
+    const inset = 44 / transform.k
+
+    return projectedOverlay.flatMap((area) => {
+      const [minX, minY, maxX, maxY] = area.bounds
+      const onScreen =
+        maxX >= viewport.left &&
+        minX <= viewport.right &&
+        maxY >= viewport.top &&
+        minY <= viewport.bottom
+      if (!onScreen) return []
+
+      // The overlap between the district and the view, kept off the very edge.
+      const left = Math.max(minX, viewport.left + inset)
+      const right = Math.min(maxX, viewport.right - inset)
+      const top = Math.max(minY, viewport.top + inset)
+      const bottom = Math.min(maxY, viewport.bottom - inset)
+      if (right < left || bottom < top) return []
+
+      return [
+        {
+          area,
+          x: Math.min(Math.max(area.centroid[0], left), right),
+          y: Math.min(Math.max(area.centroid[1], top), bottom),
+        },
+      ]
+    })
+  }, [projectedOverlay, viewport, transform.k])
+
   const visibleParcels = useMemo(() => {
     /*
       A small plat is drawn whole. Culling buys nothing at 40 lots, and it costs
@@ -239,12 +325,7 @@ export function PlatView({
       return { parcels: projection.parcels, capped: 0 }
     }
 
-    const { k, x, y } = transform
-    // The viewport in pre-transform space, which is what bounds are measured in.
-    const left = -x / k
-    const top = -y / k
-    const right = (size.width - x) / k
-    const bottom = (size.height - y) / k
+    const { left, top, right, bottom } = viewport
 
     /*
       One pass in area order: keep the first MAX_DRAWN_PARCELS that are on
@@ -262,7 +343,7 @@ export function PlatView({
     }
 
     return { parcels, capped: onScreen - parcels.length }
-  }, [projection.parcels, parcelsByArea, transform, size.width, size.height])
+  }, [projection.parcels, parcelsByArea, viewport])
 
   useEffect(() => {
     const svg = svgRef.current
@@ -384,6 +465,142 @@ export function PlatView({
     */
   }, [selectedPin, projection, size.width, size.height])
 
+  /*
+    Where the association's own records sit, in projected space.
+
+    The plat draws every lot the county recorded, which is 16,656 of them across
+    eight kilometres of city. The association tracks about fifty. Framed to the
+    whole drawing those fifty are a smudge a hundred pixels wide, and a reader
+    who switches connections on sees nothing happen: the arcs are drawn, at a
+    zoom where an arc is shorter than a stroke is wide.
+
+    So the plat opens on the records rather than on the county. The county is
+    still all there, one scroll out.
+  */
+  const recordBounds = useMemo(() => {
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    const grow = (x: number, y: number) => {
+      if (x < minX) minX = x
+      if (y < minY) minY = y
+      if (x > maxX) maxX = x
+      if (y > maxY) maxY = y
+    }
+
+    for (const marker of markers) {
+      const point = projection.project(marker.location.point)
+      if (point) grow(point[0], point[1])
+    }
+
+    // Whole lots rather than their centres, so a lot on the edge is not clipped.
+    for (const marker of markers) {
+      const pin = marker.location.pin
+      if (pin === null || pin === undefined) continue
+      const parcel = projection.parcelByPin.get(normalizePin(pin))
+      if (!parcel) continue
+      grow(parcel.bounds[0], parcel.bounds[1])
+      grow(parcel.bounds[2], parcel.bounds[3])
+    }
+
+    return minX === Infinity ? null : ([minX, minY, maxX, maxY] as const)
+  }, [markers, projection])
+
+  const arcBounds = useMemo(() => {
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    for (const arc of arcs) {
+      for (const point of [projection.project(arc.from), projection.project(arc.to)]) {
+        if (!point) continue
+        if (point[0] < minX) minX = point[0]
+        if (point[1] < minY) minY = point[1]
+        if (point[0] > maxX) maxX = point[0]
+        if (point[1] > maxY) maxY = point[1]
+      }
+    }
+
+    return minX === Infinity ? null : ([minX, minY, maxX, maxY] as const)
+  }, [arcs, projection])
+
+  /**
+   * Frame an area of the drawing, with room around it.
+   *
+   * The same arithmetic the select-a-lot effect does, pulled out so that
+   * opening the plat, switching connections on, and arriving at a record all
+   * frame things the same way rather than three slightly different ways.
+   */
+  const frame = useCallback(
+    (bounds: readonly [number, number, number, number]) => {
+      const svg = svgRef.current
+      const behaviour = zoomRef.current
+      if (!svg || !behaviour) return
+      if (size.width <= 1 || size.height <= 1) return
+
+      const { k, x, y } = frameTransform(
+        bounds,
+        size.width,
+        size.height,
+        FRAME_FILL,
+        MIN_ZOOM,
+        MAX_ZOOM
+      )
+      const next = zoomIdentity.translate(x, y).scale(k)
+
+      select(svg).call((selection) => behaviour.transform(selection, next))
+    },
+    [size.width, size.height]
+  )
+
+  /*
+    Open on the association's records, once, when there is something to open on.
+
+    Once, and only once: after that the view belongs to the reader. `framedOnce`
+    is a ref rather than state because changing it must not itself cause a
+    render that re-runs this.
+  */
+  const framedOnce = useRef(false)
+  useEffect(() => {
+    if (framedOnce.current) return
+    if (size.width <= 1 || size.height <= 1) return
+    /*
+      Nothing to zoom into while the plat is still the committed 40-lot fixture,
+      which is what it holds until the harvested geometry is fetched. Returning
+      without latching matters: latching here meant the flag was already set
+      when the 16,656 lots landed a moment later, so the plat opened on the
+      whole county after all and this effect never fired again.
+    */
+    if (projection.parcels.length <= CULL_THRESHOLD) return
+    if (!recordBounds) return
+
+    framedOnce.current = true
+    frame(recordBounds)
+  }, [recordBounds, frame, size.width, size.height, projection.parcels.length])
+
+  /*
+    Switching a connection type on is a request to look at those connections, so
+    the plat goes to them. Keyed on the set of relation ids rather than on the
+    arcs array, which is rebuilt on every pan.
+  */
+  const arcSignature = useMemo(
+    () => arcs.map((arc) => arc.relationId).join(','),
+    [arcs]
+  )
+  const lastArcSignature = useRef('')
+  useEffect(() => {
+    if (arcSignature === lastArcSignature.current) return
+    const previous = lastArcSignature.current
+    lastArcSignature.current = arcSignature
+    // Only when arcs appear or change, never when the last one is switched off.
+    if (arcSignature === '' || previous === arcSignature) return
+    if (!arcBounds) return
+    frame(arcBounds)
+  }, [arcSignature, arcBounds, frame])
+
   const zoomBy = useCallback((factor: number) => {
     const svg = svgRef.current
     const behaviour = zoomRef.current
@@ -398,11 +615,16 @@ export function PlatView({
     select(svg).call((selection) => behaviour.scaleBy(selection, factor))
   }, [])
 
+  /*
+    Every lot the county recorded, which is the whole harvest and not the
+    association. The plat no longer opens here, so this is the way back out to
+    the city rather than the default view.
+  */
   const fitToView = useCallback(() => {
     const svg = svgRef.current
     const behaviour = zoomRef.current
     if (!svg || !behaviour) return
-    // fitExtent already framed the plat, so identity is fit-to-view.
+    // fitExtent already framed the projection, so identity is the whole drawing.
     select(svg).call((selection) => behaviour.transform(selection, zoomIdentity))
   }, [])
 
@@ -432,6 +654,28 @@ export function PlatView({
       })
       .filter((marker): marker is PlatMarker & { screen: [number, number] } => marker !== null)
   }, [markers, projection])
+
+  /*
+    One ramp per kind of connection, not one for the plat.
+
+    Same reasoning as the Connection Map's per-fan ramps: a reader with "member
+    of" and "resides at" both switched on is comparing memberships to
+    memberships. A single ramp would spend its range on the gap between the two
+    types, and every membership would land in the same narrow band.
+  */
+  const arcScales = useMemo(() => {
+    const byKey = new Map<string, { id: string; startDate: string | null }[]>()
+    for (const arc of arcs) {
+      const row = { id: arc.relationId, startDate: arc.startDate }
+      const group = byKey.get(arc.relationKey)
+      if (group) group.push(row)
+      else byKey.set(arc.relationKey, [row])
+    }
+
+    const scales = new Map<string, ReturnType<typeof buildRecencyScale>>()
+    for (const [key, group] of byKey) scales.set(key, buildRecencyScale(group))
+    return scales
+  }, [arcs])
 
   const projectedArcs = useMemo(() => {
     return arcs
@@ -506,18 +750,50 @@ export function PlatView({
             ))}
           </g>
 
-          <g className="arcs" pointerEvents="none">
-            {projectedArcs.map(({ arc, d }) => (
+          {/*
+            Drawn over the lots and the streets so the boundary reads as the
+            region containing them, and under the connections and pins so the
+            association's own records stay on top of the county's geography.
+          */}
+          <g className="overlay" pointerEvents="none">
+            {projectedOverlay.map((area) => (
               <path
-                key={arc.relationId}
-                d={d}
-                fill="none"
-                stroke={arcColor(arc.relationKey)}
-                strokeWidth={1 / zoomLevel}
-                strokeDasharray={arc.current ? undefined : `${3 / zoomLevel} ${3 / zoomLevel}`}
-                opacity={arc.current ? 0.55 : 0.3}
+                key={`overlay-${area.name}`}
+                d={area.d}
+                fill="var(--survey)"
+                fillOpacity={0.06}
+                stroke="var(--survey)"
+                strokeWidth={2 / zoomLevel}
+                strokeLinejoin="round"
               />
             ))}
+          </g>
+
+          <g className="arcs" pointerEvents="none">
+            {projectedArcs.map(({ arc, d }) => {
+              /*
+                Ungraded, an arc sits at 0.55 so it reads over the lots without
+                burying them. Graded, that ceiling becomes what the most recent
+                connection gets and everything older is drawn back from it, so
+                switching Age on never makes the plat louder than it was.
+              */
+              const strength = gradeArcsByAge
+                ? (arcScales.get(arc.relationKey)?.strengthOf(arc.relationId) ?? 1)
+                : 1
+              const opacity = (arc.current ? 0.55 : 0.3) * strength
+
+              return (
+                <path
+                  key={arc.relationId}
+                  d={d}
+                  fill="none"
+                  stroke={arcColor(arc.relationKey)}
+                  strokeWidth={1 / zoomLevel}
+                  strokeDasharray={arc.current ? undefined : `${3 / zoomLevel} ${3 / zoomLevel}`}
+                  opacity={opacity}
+                />
+              )
+            })}
           </g>
 
           <g className="pins">
@@ -530,6 +806,25 @@ export function PlatView({
                 onSelect={onSelectEntity}
               />
             ))}
+          </g>
+
+          <g className="overlay-labels" pointerEvents="none">
+            {overlayLabels.map(({ area, x, y }) =>
+              shouldLabelOverlay(area, zoomLevel) ? (
+                <text
+                  key={`overlay-label-${area.name}`}
+                  x={x}
+                  y={y}
+                  textAnchor="middle"
+                  fontSize={13 / zoomLevel}
+                  fill="var(--survey)"
+                  letterSpacing={1 / zoomLevel}
+                  style={{ fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}
+                >
+                  {area.name}
+                </text>
+              ) : null
+            )}
           </g>
 
           <g className="labels" pointerEvents="none">
@@ -591,7 +886,24 @@ export function PlatView({
         >
           <Minus />
         </Button>
-        <Button size="icon-sm" variant="secondary" onClick={fitToView} aria-label="Fit the whole plat">
+        {recordBounds ? (
+          <Button
+            size="icon-sm"
+            variant="secondary"
+            onClick={() => frame(recordBounds)}
+            aria-label="Frame the association's records"
+            title="Frame the association's records"
+          >
+            <LocateFixed />
+          </Button>
+        ) : null}
+        <Button
+          size="icon-sm"
+          variant="secondary"
+          onClick={fitToView}
+          aria-label="Fit every lot the county recorded"
+          title="Fit every lot the county recorded"
+        >
           <Maximize2 />
         </Button>
       </div>

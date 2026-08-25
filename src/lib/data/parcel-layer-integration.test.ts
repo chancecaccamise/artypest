@@ -31,6 +31,9 @@ function parcel(pin: string, overrides: Partial<ParcelLayerRecord> = {}): Parcel
     legalDescription: 'LOT 4 PIERPONT WARD',
     municipalityCode: '020',
     dateUpdated: '2025-05-06',
+    lastSaleDate: '2019-04-01',
+    lastSalePrice: 385000,
+    saleQualityCode: 'Q',
     neighborhood: 'Thomas Square',
     ...overrides,
   }

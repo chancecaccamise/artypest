@@ -7,6 +7,7 @@ import type {
 } from '@/lib/data/types'
 import type { Point } from '@/lib/geocoding/types'
 import { isCurrent, relationKey, type ResolvedGraph } from '@/lib/insights'
+import { normalizePin } from '@/lib/parcels/pin'
 import { readString } from '@/lib/format'
 
 /*
@@ -356,8 +357,14 @@ export function resolveAllLocations(ctx: ResolveContext): LocationIndex {
     if (!isPlaceable(entity)) continue
 
     if (entity.type === 'property') {
+      /*
+        Normalised, because every lookup normalises. The plat asks with the PIN
+        off a parcel polygon, which has been through normalizePin, and a map
+        keyed on whatever was typed into the record answers nothing for
+        `20003-15001` when the county wrote `20003 15001`.
+      */
       const pin = readString(entity.data.pin)
-      if (pin) propertyByPin.set(pin, entity)
+      if (pin) propertyByPin.set(normalizePin(pin), entity)
     }
 
     const resolved = resolveLocation(entity, ctx)

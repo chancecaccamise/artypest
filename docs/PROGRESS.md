@@ -577,3 +577,404 @@ change; the parcels are culled and the streets are not. Coverage stops at the 27
 neighborhoods that were already on the map, so the west side (Carver Heights,
 Cuyler/Brownville, West Savannah) and everything south of DeRenne are still
 absent by choice, not by accident.
+
+## 2026-08-24: threads you can see, and how old they are
+
+**Did.** Made the Connection Map draw connections as threads a reader can trace,
+and gave both views a way to read how recent each connection is.
+
+*Threads have a colour now.* Every edge on the Connection Map was drawn in one
+grey, so a fan of eight lots under an association was eight identical lines. The
+plat had coloured its arcs by connection type since it was built. Both now read
+from `src/lib/relations/colors.ts`, so purple means "member of" on either
+screen.
+
+*Age, as brightness.* A new `Age` control on the Connection Map and a `Grade by
+age` checkbox on the plat. Brighter means more recent. The ramp is linear in
+elapsed time rather than in rank order, so seven lots that joined together stay
+clustered at the dim end and the one that joined last year stands out on its
+own. Ranking would have spread them evenly and implied a steady arrival that
+never happened. A span under a fortnight is not graded at all.
+
+*Graded within a group, which took a second attempt.* Built the obvious way,
+with one ramp across everything on screen, it failed at the exact case it was
+built for: on a board member's map, their own recently recorded address set the
+top of the range and all six association lots collapsed into the dim end. The
+ramp now runs per fan on the Connection Map and per connection type on the plat.
+Brightness is therefore not comparable across two groups, and the legend says so
+instead of leaving it to be inferred.
+
+*Order agrees with brightness.* Cards in a row sort oldest to newest, so
+leftmost is oldest is faintest, with ended connections still last and undated
+ones after the dated. Position is the easier of the two to compare across a wide
+row; brightness carries the size of the gaps.
+
+*The dates existed for almost everything except the example.* Ownership,
+residency, and board seats all carried `startDate`. The 48 property memberships
+did not: they were seeded with none at all, so every thread graded identically.
+They now carry clustered join dates spanning about 25 years.
+
+*What is deliberately not read.* `createdAt` is never used as a fallback. A lot
+that joined in 1998 and was typed in last Tuesday is an old relationship, and
+reading the creation date would draw it as the newest thing on the map. Undated
+connections sit at a fixed middle strength and are counted in the legend.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 448 tests, and a
+production build. 18 of those tests are new, covering the time-linear ramp, the
+undated and no-spread cases, chronological ordering, and the per-fan isolation
+that the first attempt got wrong. Checked in the running app against the seeded
+association: the fan grades floor to ceiling across a real span of years, and
+the plat legend reports Sep 2000 to Dec 2025.
+
+**A test that caught a real thing.** Asserting that memberships sort by date
+failed on one that sorts last despite being recent. It has an end date, and
+ended connections come after everything that is still true. The convention was
+right and the assertion was wrong.
+
+**Not done, and why.** Hovering a card does not yet light its whole thread and
+dim the rest, which is what a map with 71 direct connections needs. The
+association's own map is still a hairball at that size, which colour helps with
+but does not solve. Neither view offers a time filter: you can see that a
+connection is old, but not hide everything before a date.
+
+## 2026-08-24: the plat opens where the records are
+
+**Did.** Made the plat frame the association rather than the county.
+
+*The complaint and what it turned out to be.* Connections were switched on and
+nothing appeared to happen. They were being drawn the whole time: 45 arcs, right
+colours, right grading. The plat frames 4.3 by 7.9 km of city and the
+association's lots span 1.1 by 0.44 km, so the whole fan was about a sixtieth of
+the drawing, which is smaller than the lines are thick.
+
+*Not the parcel layer's fault, which was the first guess.* Measured against the
+previous harvest: the association occupied about a sixteenth of the frame's long
+side before and an eighteenth after. The plat had always opened on everything.
+Going from 10,399 lots to 16,656 made an existing problem visible rather than
+creating one.
+
+*What it does now.* Opens framed on the records the association tracks, once,
+when the harvested geometry lands. Switching a connection type on frames those
+arcs, because switching them on is a request to look at them. A new control
+returns to the records, and the old fit control, relabelled "Fit every lot the
+county recorded", goes back out to the whole harvest.
+
+*One bug found on the way.* The first version latched a "framed already" flag
+while the plat still held only the committed 40-lot fixture, which is what it
+draws until the harvested geometry is fetched. The flag was therefore set before
+the 16,656 lots arrived, and the plat opened on the county anyway. The guard now
+returns without latching until there is something real to frame.
+
+*The arithmetic moved.* `frameTransform` sits in `projection.ts` beside the rest
+of the projection maths, since it is the question `fitExtent` answers at build
+time asked again at zoom time. Opening the plat, switching connections on, and
+arriving at a record now frame things the same way instead of three slightly
+different ways.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 455 tests, and a
+production build. 7 of those are new, covering centring, the fill fraction, the
+zoom clamps at both ends, a degenerate one-point area, and the magnification
+that the whole change exists for. In the running app the plat now opens on
+Ardsley Park with street names legible, and switching "Member of" on draws the
+fan across the lots it belongs to.
+
+**Two of those tests failed first, and were wrong.** Both assumed framing was
+unclamped, and both were written with drawing-space numbers that ignored
+`fitExtent` having already normalised the harvest to viewport scale. The clamps
+and the projection were right.
+
+**Not done, and why.** The plat frames the records but does not follow them: a
+filter that narrows the visible set does not re-frame. The `Age` grading and the
+thread colours are unchanged by this work.
+
+## 2026-08-24: the database is connected, and the schema exists
+
+**Did.** Wired the app to the hosted Supabase project and wrote the first
+migration. The app still reads its demo data: connecting the database and
+reading from it are two separate moves, and this is the first.
+
+*The client.* `src/lib/supabase.ts` returns null rather than throwing when there
+are no credentials, because that is the state of every fresh clone and the whole
+test suite. It also refuses to start if the key it is handed looks like a
+service role key, since anything prefixed `VITE_` is compiled into the public
+bundle.
+
+*The schema.* Seven tables, and the three structural rules from `CLAUDE.md`
+enforced rather than remembered: one `entities` table with a type discriminator
+and a JSONB `data` column, one `relations` table with real foreign keys on both
+ends, and `org_id` plus row level security on every table including the lookup
+tables. The audit log is triggers, writing one row per changed field, and it
+covers relations as well as entities: "Unit 42 changed hands" is a relation, not
+a field.
+
+*Tested, before it touched anything real.* There is no Docker on this machine
+and the database is hosted, so without this the first thing to run these
+migrations would have been the client's only copy of their data. They now run on
+every `pnpm test` against Postgres compiled to WebAssembly. Seventeen tests
+cover the tables, RLS being on everywhere, every policy filtering on the org,
+the bootstrap being idempotent, the constraints, and the audit triggers: one row
+per changed field, both sides of each change recorded, no row at all for an
+update that changed nothing, `updated_at` never logged, soft delete audited as
+the field change it is, and one batch id grouping everything one action wrote.
+
+*What it caught immediately.* `pgcrypto` was being created for nothing:
+`gen_random_uuid()` has been core Postgres since 13. The extension is gone.
+
+*A rule that had to change.* `CLAUDE.md` said "Never write against a remote
+Supabase project. Local only." There is no container runtime on this machine and
+8.4GB free, so that described something that could not happen. It now says
+schema changes are migration files and never dashboard edits, which is the part
+that was actually protecting anything.
+
+*Visible.* Settings, Integrations now carries a Database panel that runs one
+real query and says what came back, telling apart "no credentials", "connected
+but the schema is not pushed yet", and "connected". Reading the browser console
+is not an answer for a board member.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 472 tests, and a
+production build.
+
+**One thing the move surfaced.** `src/test/setup.ts` assumed a browser, so the
+first node-environment test in the project failed during setup before a single
+assertion ran. It is guarded now.
+
+**Not done, and why.** No `SupabaseProvider`: the 30-method `DataProvider` is
+still the in-memory one, and the swap needs auth decided first, because RLS with
+no signed-in user correctly returns nothing. The 16,656 parcels are still served
+as static JSON rather than rows. `src/types/database.ts` is not generated yet:
+that needs the project linked, which needs credentials this machine does not
+have.
+
+## 2026-08-24: district overlays on the plat
+
+**Did.** Built the boundary overlays the client asked for: sixteen of them, one
+shown at a time, chosen from a picker on the plat.
+
+*What was actually available.* The client's list was checked against all 1,334
+layers SAGIS publishes across 165 services rather than guessed at. Built:
+County Commission, Aldermanic, State House, State Senate, US Congressional,
+voting precincts, police precincts, fire service districts, sanitation
+collection days, school board districts, elementary, middle and high school
+attendance zones, local historic districts, National Register districts, and
+neighborhood associations.
+
+Four items on the list are not published anywhere: District Attorney, Recorder's
+Court and Grand Jury districts, Code Enforcement districts, the MPC Monuments
+board, and the two tourism councils. The first read as county-wide
+jurisdictions and the last as advisory bodies, so there may be nothing to draw
+rather than something to go and find. Recorded in `DECISIONS.md` with what was
+searched for.
+
+*A correction.* Voting precincts were reported as unpublished a few days ago.
+Only `OpenData/Boundaries` had been checked. They exist, at
+`OpenData/Community/MapServer/17`, 87 of them.
+
+*Two of these are richer than expected.* The voting precinct layer carries the
+polling place and its address, so the overlay can say where a resident of that
+precinct actually votes. The neighborhood association layer carries the
+association's name and its contact, and records "No Active Neighborhood
+Association" where there is none, which is exactly the sort of thing a board
+wants to see on a map.
+
+*Sanitation is four layers folded into one.* The city publishes a layer per
+weekday rather than a day column. A reader wants to know which day a street is
+collected, not to switch between four overlays to find out.
+
+*Size.* Simplified by the service to about two metres and clipped to the
+harvested extent, sixteen overlays are 656KB, fetched one at a time and cached
+for the life of the page. Before that a single congressional district was 343KB
+of Georgia coastline.
+
+*The labels needed a second attempt.* The first version put each name at its
+district's centroid, which drew 27 boundaries with 27 labels and none of them
+visible: a voting precinct is far larger than the plat's opening view, so its
+centroid is off screen. Labels are now slid to stay inside the part of the
+district on screen, and positioned at the mean of the vertices rather than the
+centre of the bounding box, because an L-shaped district's box centre sits
+outside itself.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 489 tests, and a
+production build. 17 of those are new, covering the loader's absent, offline and
+served-index.html cases, per-id caching, and the projection: multipart
+districts, the vertex-mean label, and the size at which a district earns a name.
+Checked in the running app by switching between sanitation, neighborhood
+associations, and commission districts and reading the labels off the plat.
+
+**Not done, and why.** Selecting a lot does not tell you which district it falls
+in, which is the question an overlay invites. That is point in polygon against
+the active overlay and is the obvious next step. The point layers, fire stations
+and polling places, are harvested as boundaries only: they are pins rather than
+regions and want a separate toggle that can sit on top of an active overlay
+rather than competing with it.
+
+## 2026-08-24: the plat's colourings only ever coloured forty lots
+
+**Did.** Fixed "Colour lots by", which appeared to do nothing.
+
+*What was wrong.* `MapView` passed `platPins()` to the theming, which is the 40
+lots in the committed fixture, while the plat draws 16,656. Every colouring
+classified those forty and dropped the rest into "unknown". Measured in the
+browser before touching anything: of the 2,124 lots on screen, picking Occupancy
+coloured 40 and moved 2,084 from one flat grey to a slightly different one.
+
+*The fix.* `pins` is now the fixture merged with the harvested layer, the same
+union the projection draws. Occupancy and record completeness now colour all
+2,124 lots on screen, and zoning colours 1,877 of them, the remainder being lots
+the county has no zoning district for.
+
+*A second bug found on the way.* `propertyByPin` was keyed on the raw `data.pin`
+while every lookup asks with a normalised one. It works only while the county
+and whoever typed the record agree on spacing, so a lot entered as
+`20003-15001` was invisible to every colouring, in a way nobody could have
+diagnosed from the screen.
+
+*Property use is not broken, and was left alone.* It colours forty lots because
+the association has recorded a use for forty lots. `propertyUse` is the
+association's own reading of what is on a lot and is null for every county
+parcel, deliberately: nobody has looked at them.
+
+*What the client actually wanted is a new mode.* The county files its own class
+code for all 16,656 parcels across 17 classes, so "Property class, as the county
+has it" now colours the whole plat: 82% R3, 12% C3, and the commercial strip
+along a main road is visible at a glance. Kept separate from property use rather
+than filling one in from the other, because collapsing the two breaks the
+"commercial use in a residential district" question. Buckets carry the raw code,
+because the Board of Assessors has not published the code table and a guessed
+label is worse than an unexplained one.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 494 tests, and a
+production build. Five of those are new and guard the shape of the bug: a plat
+larger than the fixture colours all of it, a PIN is found whatever spacing it
+was typed with, the two commonest classes get different colours, and property
+use stays empty on county land on purpose.
+
+**Not done.** The class codes are still unlabelled. Asking the Board of
+Assessors for the code table has been an open question since the SAGIS
+investigation and this is now the second feature that would be better for it.
+
+## 2026-08-25: sale history on every parcel, and associations as owners
+
+**Did.** The first two of the four steps toward the client's per-parcel wish
+list: the sale fields the county publishes, and a third kind of owner.
+
+*Sale history.* `Sale_Price`, `Sale_YY`, `Sale_MM`, `Sale_DD` and
+`Sale_Quality` are harvested now, and land on every property record as
+`lastSaleDate`, `lastSalePrice` and `saleQualityCode`. 15,867 of the 16,656
+parcels carry a transfer date, running from 1912 to 2025, and 10,684 carry a
+price.
+
+The price is null and never zero. A third of recorded transfers have no price
+against them, because a gift, a family transfer and a foreclosure all move a
+property with no consideration, and zero would read as "sold for nothing". The
+card says "Transferred with no price recorded" rather than showing a blank.
+
+The qualification code is shown beside the price and never instead of it.
+Roughly half of sales carry `U` and half `Q`, only one of the two is an arm's
+length sale by the convention used elsewhere in Georgia, and the Board of
+Assessors publishes no code table, so the code is rendered literally next to the
+number it qualifies.
+
+*Associations.* `OwnerKind` has a third value, and the token list was chosen
+against the real owner field rather than imagined. Two traps found by looking:
+`HOA` prefix-matches `HOAGLAND` and `HOANG`, which are surnames here, and
+`ASSOCIATES, LLC` is a partnership rather than an association. Churches,
+temples and ministries stay filed as businesses, 135 records, because the
+association reference list is homeowners association, committee, civic club and
+property owners association and a congregation is none of those.
+
+*Where the parsing now happens.* The three producers of a parcel record, the
+harvest, the live service and the fixture generator, each build the sale date
+the same way, and the fixture was regenerated from the county rather than hand
+edited. Diffed against the previous one: identical except for the three new
+fields.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 512 tests, and a
+production build. 18 of those are new, covering impossible dates such as a 31st
+of February, absent transfers, the two owner-name traps, government beating
+association, and the committed sample never carrying a zero price.
+
+**Three bugs this surfaced, all mine, all caught by tests.**
+
+Adding a third owner kind broke the second: `parseOwner` skipped person parsing
+with `kind === 'business'`, so every condominium association went to the person
+parser and came back as somebody surnamed 37. It reads `kind !== 'person'` now.
+
+The import created associations with `businessCategory` and
+`stateFilingNumber`, keys their own form never shows. Each kind gets its own
+fields now, and `associationDataSchema` gained the mailing address the county
+publishes for every owner.
+
+Adding two schema fields with no form field broke record creation entirely.
+Every other property field has a form input, so the form always submits the key;
+these two are county-owned and deliberately have none, and `nullable` alone
+rejects an absent key. Both are `.optional()` now. Worth knowing before the next
+county-owned field is added.
+
+**An obsolete assertion, corrected rather than worked around.**
+`ARDSLEY PARK CIVIC ASSOCIATION` was asserted to be a business, which was the
+only right answer when there were two kinds. It is an association now.
+
+**Next, and not done.** Steps three and four: reconciling owners across the
+whole layer rather than one import at a time, and putting AI only on the
+low-confidence residue. Measured against the real data, the existing rules
+settle 86.4% of parcels confidently, 13.5% need judgement, and 5.9% are
+truncated at 40 characters upstream and cannot be recovered by anything.
+
+## 2026-08-25: owner reconciliation across the whole layer
+
+**Did.** Step three of the client's owner request: reconciling every owner name
+the county files against the directory.
+
+Step four, a reading service for the names the rules cannot settle, was built
+and then removed the same day at the client's request: no LLM is being connected
+for now. The Vercel function, the SDK dependency, and the client that called it
+are gone rather than left dormant. The reasoning worth keeping is recorded in
+`DECISIONS.md`, and git history has the code.
+
+*The screen.* Tools, Owner Reconciliation. It groups 16,592 lots into 13,493
+distinct owner names, decides what to do with each, and applies the safe ones as
+one audited batch. Measured on the real layer: 11,499 create, 1 links, 1,993
+wait for a person, of which 860 are truncated by the county at 40 characters and
+cannot be recovered by anything.
+
+*The rule the whole thing is built on.* Creating a record is safe and
+reversible; at worst there is a duplicate to merge. Linking a lot to an existing
+person is neither, and a wrong link is silent. So a confident parse is enough to
+create, linking needs a byte-identical name or a confident parse, and everything
+else waits. `owner.ts` has said since the SAGIS investigation that a confident
+wrong match is the worst thing this application can do; this is that applied to
+the bulk case.
+
+*Grouped, not per parcel.* 1,286 owners hold more than one lot and one holds
+170. Deciding per parcel would ask the same question 170 times and make 170
+copies of the same company.
+
+*Speed.* The parcel import walks the candidate list per owner, which is right
+for sixty parcels and would be 13,493 walks of several thousand records here.
+The directory is indexed once instead: 69ms to reconcile the layer and 77ms to
+apply it, writing 11,499 records and 14,379 ownerships under one batch id.
+
+*Ownership carries a date.* Each `owns` relation starts on the county's last
+recorded transfer, which is as close as the roll gets to when the ownership
+began. It also makes the plat's age grading work on ownership for free: the
+brightest thread becomes the lot that changed hands most recently.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 536 tests, and a
+production build. 24 of those are new, covering the link and create asymmetry,
+truncated names being acted on in neither direction, grouping and
+case-insensitivity, and running the apply twice without doubling anything.
+
+**A test that failed for the right reason.** `37 THE LOFTS CONDOMINIUM
+ASSOCIATION INC` is exactly 40 characters, so it is indistinguishable from a
+name that lost its end and correctly went to review rather than being created.
+The test was wrong, not the rule.
+
+**Said out loud on the screen.** Applying eleven thousand records in the demo is
+several times what this browser's storage holds. The work is correct on screen
+and will not survive a reload until Postgres is behind it, so the page says so
+before the button is pressed rather than after.
+
+**Not done, and why.** The review queue lists what needs a person and shows why,
+but has no way to act on a row from the screen: resolving one is a write and
+wants the same batching and audit the bulk apply already has. That is the next
+piece, and it needs no model to be useful.

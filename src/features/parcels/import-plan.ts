@@ -335,9 +335,29 @@ export async function applyImportPlan({
               mailingAddress: formatMailingAddress(row.parcel.ownerMailingAddress),
               // Recorded so it is obvious where this record came from.
               parcelSource: 'imported',
+              /*
+                Each kind gets its own fields. An association filed with
+                `businessCategory` would carry a key its own form never shows
+                and its schema does not know about, which is how a record ends
+                up with data nobody can see or edit.
+
+                `associationType` is deliberately left unset. The county says a
+                parcel is owned by a condominium association; it does not say
+                whether that is a homeowners association or a property owners
+                association, and guessing puts a wrong answer somewhere a human
+                would have to notice to correct.
+              */
               ...(row.ownerKind === 'person'
                 ? { email: null, phone: null, householdRole: 'owner' }
-                : { businessCategory: 'property_owner', stateFilingNumber: null }),
+                : row.ownerKind === 'association'
+                  ? {
+                      associationType: null,
+                      boardSeats: null,
+                      foundedYear: null,
+                      jurisdiction: null,
+                      meetingCadence: null,
+                    }
+                  : { businessCategory: 'property_owner', stateFilingNumber: null }),
               notes: '',
             },
           })

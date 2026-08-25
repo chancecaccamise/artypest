@@ -278,3 +278,114 @@ describe('projection', () => {
     }
   })
 })
+
+/*
+  Colouring the whole plat, not just the committed fixture.
+
+  The bug this guards: `pins` was `platPins()`, the 40 lots in the committed
+  fixture, while the plat draws 16,656. Picking a colouring classified forty of
+  them and dropped the rest into "unknown", so on screen 2,084 of 2,124 lots
+  went from one flat grey to a slightly different flat grey and the control
+  looked broken.
+*/
+describe('colouring a plat larger than the committed fixture', () => {
+  const COUNTY_TODAY = new Date('2026-08-24T00:00:00.000Z')
+
+  /** A stand-in for the harvested layer: county parcels, keyed by their PIN. */
+  const countyParcels = Array.from({ length: 200 }, (_, index) => ({
+    pin: `20099 ${String(index).padStart(5, '0')}`,
+    propertyUseCode: index % 5 === 0 ? 'C3' : 'R3',
+    zoningDistrict: 'TN-2',
+  }))
+
+  const countyData = buildDemoData(COUNTY_TODAY, [])
+  const countyGraph = resolveGraph({
+    entities: [
+      ...countyData.entities,
+      ...countyParcels.map((parcel, index) => ({
+        id: `ent-county-${String(index)}`,
+        orgId: countyData.org.id,
+        type: 'property' as const,
+        name: parcel.pin,
+        data: {
+          pin: parcel.pin,
+          propertyUse: null,
+          propertyUseCode: parcel.propertyUseCode,
+          zoning: parcel.zoningDistrict,
+        },
+        folderId: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+        archivedAt: null,
+      })),
+    ],
+    relations: countyData.relations,
+    relationTypes: countyData.relationTypes,
+  })
+  const countyLocations = resolveAllLocations({
+    graph: countyGraph,
+    centroidForPin,
+    geocode: geocodeSync,
+    today: COUNTY_TODAY,
+  })
+  const countyPins = countyParcels.map((parcel) => normalizePin(parcel.pin))
+
+  const countyTheming = (mode: (typeof THEMATIC_MODES)[number]) =>
+    buildTheming({
+      mode,
+      graph: countyGraph,
+      propertyByPin: countyLocations.propertyByPin,
+      pins: countyPins,
+      referenceItems: countyData.referenceItems,
+      today: COUNTY_TODAY,
+    })
+
+  it('finds a county lot by its PIN, whatever spacing the record was typed with', () => {
+    /*
+      propertyByPin used to be keyed on the raw value while every lookup asked
+      with a normalised one. It happens to work when the county writes them the
+      same way, and stops working the moment anybody types one in by hand.
+    */
+    expect(countyLocations.propertyByPin.get('20099 00000')).toBeDefined()
+    expect(countyLocations.propertyByPin.get(normalizePin(' 20099  00000 '))).toBeDefined()
+  })
+
+  it('colours every county lot by the class the county filed', () => {
+    const theme = countyTheming('property_class')
+    const unknown = countyPins.filter((pin) => theme.colorForPin(pin).includes('rule-strong'))
+
+    expect(unknown).toHaveLength(0)
+    // Two codes in the stand-in, and both are counted.
+    expect(theme.legend.map((bucket) => bucket.key).sort()).toEqual(['C3', 'R3'])
+    expect(theme.legend.find((bucket) => bucket.key === 'R3')?.count).toBe(160)
+    expect(theme.legend.find((bucket) => bucket.key === 'C3')?.count).toBe(40)
+  })
+
+  it('gives the two most common classes different colours', () => {
+    const theme = countyTheming('property_class')
+    const first = countyPins.find((pin) => pin.endsWith('00000')) ?? ''
+    const second = countyPins.find((pin) => pin.endsWith('00001')) ?? ''
+
+    expect(theme.colorForPin(first)).not.toBe(theme.colorForPin(second))
+  })
+
+  it('leaves property use empty, because that is the association\'s own reading', () => {
+    /*
+      Not a bug and deliberately not filled in from the county code. `zoning` is
+      the regulatory district and `propertyUse` is what is actually there, and
+      collapsing them breaks the "commercial use in a residential district"
+      question that needs the two to disagree.
+    */
+    const theme = countyTheming('property_use')
+    const notSet = theme.legend.find((bucket) => bucket.key === '')
+
+    expect(notSet?.count).toBe(countyPins.length)
+  })
+
+  it('colours every county lot by zoning, which the county does fill in', () => {
+    const theme = countyTheming('zoning')
+    const unknown = countyPins.filter((pin) => theme.colorForPin(pin).includes('rule-strong'))
+    expect(unknown).toHaveLength(0)
+  })
+})

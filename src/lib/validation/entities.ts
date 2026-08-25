@@ -111,6 +111,33 @@ export const propertyDataSchema = z.object({
   yearBuilt: optionalYear,
   squareFeet: optionalNumber,
   parcelSource: optionalText,
+  /** The last transfer the county recorded, `YYYY-MM-DD`. */
+  lastSaleDate: optionalDate,
+  /*
+    These two are `.optional()` as well as nullable, which the rest of this
+    schema is not.
+
+    Everything else here has a field in the property form, so the form always
+    submits the key, even when empty. These two deliberately have no field: they
+    are the county's own record, shown on the Parcel record card beside the code
+    that qualifies them, and offering them as editable inputs would invite
+    somebody to correct the county's roll in a copy of it. A key with no field
+    is simply absent from a newly created record, and `nullable` alone rejects
+    absent.
+  */
+
+  /**
+   * What it sold for. Absent rather than zero when no price was recorded: a
+   * third of recorded transfers carry none, because a gift, a family transfer
+   * and a foreclosure are transfers with no consideration.
+   */
+  lastSalePrice: optionalNumber.optional(),
+  /**
+   * The county's sale qualification code, usually `Q` or `U`. A code, not a
+   * label: the Board of Assessors publishes no table for it, and the price
+   * should not be read as a market value without it. See docs/SAGIS-API.md.
+   */
+  saleQualityCode: optionalText.optional(),
   notes: optionalText,
 })
 
@@ -130,6 +157,14 @@ export const associationDataSchema = z.object({
   foundedYear: optionalYear,
   jurisdiction: optionalText,
   meetingCadence: optionalText,
+  /*
+    How to reach it. Added when the parcel import learned to file a condominium
+    owners association as an association rather than as a company: the county
+    publishes a mailing address for every owner, and dropping it because the
+    schema had no room for it would have thrown away the only contact detail on
+    the record.
+  */
+  mailingAddress: optionalText,
   notes: optionalText,
 })
 

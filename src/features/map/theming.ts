@@ -26,6 +26,7 @@ export const THEMATIC_MODES = [
   'occupancy',
   'completeness',
   'property_use',
+  'property_class',
   'zoning',
   'open_items',
 ] as const
@@ -36,7 +37,8 @@ export const THEMATIC_MODE_LABELS: Record<ThematicMode, string> = {
   none: 'No colouring',
   occupancy: 'Occupancy',
   completeness: 'Record completeness',
-  property_use: 'Property use',
+  property_use: 'Property use, as recorded',
+  property_class: 'Property class, as the county has it',
   zoning: 'Zoning district',
   open_items: 'Open items',
 }
@@ -121,6 +123,8 @@ export function buildTheming(input: ThemingInput): Theming {
       return completenessTheming(input)
     case 'property_use':
       return referenceTheming(input, 'property_use', 'propertyUse')
+    case 'property_class':
+      return propertyClassTheming(input)
     case 'zoning':
       return referenceTheming(input, 'zoning', 'zoning')
     case 'open_items':
@@ -131,6 +135,67 @@ export function buildTheming(input: ThemingInput): Theming {
         colorForPin: () => NEUTRAL,
         legend: [],
       }
+  }
+}
+
+/* --------------------------------------------------- county property class -- */
+
+/*
+  The county's own class code, which every parcel carries.
+
+  Kept separate from `property_use` rather than filling it in, because they are
+  two different facts and CLAUDE.md is explicit about not collapsing them.
+  `propertyUse` is the association's reading of what is actually on a lot, and
+  it is null for every county parcel because nobody has looked at them.
+  `propertyUseCode` is what the Board of Assessors filed. Merging the two would
+  break the "commercial use in a residential district" question, which needs
+  them to disagree.
+
+  Buckets are the raw codes, most common first. The Board of Assessors has not
+  published the code table, so R3 is labelled R3 rather than guessed at. See
+  docs/PROGRESS.md.
+*/
+function propertyClassTheming({ propertyByPin, pins }: ThemingInput): Theming {
+  const counts = new Map<string, number>()
+  const byPin = new Map<string, string>()
+
+  for (const pin of pins) {
+    const property = propertyByPin.get(pin)
+    const code = property ? readString(property.data.propertyUseCode) : ''
+    byPin.set(pin, code)
+    if (code !== '') counts.set(code, (counts.get(code) ?? 0) + 1)
+  }
+
+  // Most common first, so the palette's clearest colours land on the codes a
+  // reader will actually see.
+  const ordered = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+
+  const colorByCode = new Map<string, string>()
+  ordered.forEach(([code], index) => {
+    colorByCode.set(code, CATEGORICAL[index % CATEGORICAL.length] ?? CATEGORICAL[0] ?? '')
+  })
+
+  const notSet = pins.filter((pin) => byPin.get(pin) === '').length
+
+  const legend: LegendBucket[] = ordered.map(([code, count]) => ({
+    key: code,
+    label: code,
+    color: colorByCode.get(code) ?? UNKNOWN,
+    count,
+  }))
+
+  if (notSet > 0) {
+    legend.push({ key: '', label: 'Not on file', color: 'var(--rule-strong)', count: notSet })
+  }
+
+  return {
+    mode: 'property_class',
+    colorForPin: (pin) => {
+      const code = byPin.get(pin)
+      if (code === undefined || code === '') return UNKNOWN
+      return tint(colorByCode.get(code) ?? UNKNOWN)
+    },
+    legend,
   }
 }
 

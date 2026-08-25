@@ -3,11 +3,20 @@
 /*
   Every variable the app reads is declared here, so reading one is typed rather
   than an `any` escape hatch. Keep this and .env.example in step.
-
-  When Supabase is wired up, add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.
 */
 interface ImportMetaEnv {
   readonly MODE: string
+  /**
+   * The Supabase project URL. Absent means no database, which is a working
+   * state: the app falls back to the in-memory demo data.
+   */
+  readonly VITE_SUPABASE_URL?: string
+  /**
+   * The anon, or publishable, key. Safe in a browser because row level security
+   * is on for every table. The service role key bypasses RLS and must never be
+   * put here: anything with a VITE_ prefix is compiled into the public bundle.
+   */
+  readonly VITE_SUPABASE_ANON_KEY?: string
   /**
    * `true` reads live county parcel data and uses the county address locator.
    * Anything else, including absent, uses the committed sample so the app runs

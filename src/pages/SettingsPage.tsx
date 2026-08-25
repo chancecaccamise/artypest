@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, Plug, Plus, RotateCcw } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 import { StatusBadge } from '@/components/ui/badge'
+import { DatabasePanel } from '@/features/settings/DatabasePanel'
 import { Button } from '@/components/ui/button'
 import { EmptyState, Notice } from '@/components/ui/empty-state'
 import { Checkbox, Field, Input, Select } from '@/components/ui/field'
@@ -218,6 +219,9 @@ function IntegrationsTab() {
   const live = parcelService.kind === 'sagis'
 
   return (
+    <div className="flex flex-col gap-4">
+      <DatabasePanel />
+
     <Panel>
       <PanelHeader
         title="SAGIS parcel data"
@@ -273,6 +277,7 @@ function IntegrationsTab() {
         </div>
       </PanelBody>
     </Panel>
+    </div>
   )
 }
 

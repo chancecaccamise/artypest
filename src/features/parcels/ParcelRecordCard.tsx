@@ -10,7 +10,7 @@ import { useReferenceLabels } from '@/hooks/use-reference-labels'
 import { parcelService } from '@/lib/parcels'
 import { buildParcelViewerUrl, deriveJurisdiction } from '@/lib/parcels/pin'
 import type { Entity, Org } from '@/lib/data/types'
-import { formatAcreage, formatCurrency, readNumber, readString } from '@/lib/format'
+import { formatAcreage, formatCurrency, formatDate, readNumber, readString } from '@/lib/format'
 
 /*
   The parcel record for one property, on the Details tab.
@@ -60,6 +60,9 @@ export function ParcelRecordCard({ property, org, onAddParcelRecord }: ParcelRec
   const fairMarketValue = numberValue(property, 'fairMarketValue')
   const countyUpdatedAt = value(property, 'parcelUpdatedAt')
   const propertyUseCode = value(property, 'propertyUseCode')
+  const lastSaleDate = value(property, 'lastSaleDate')
+  const lastSalePrice = numberValue(property, 'lastSalePrice')
+  const saleQualityCode = value(property, 'saleQualityCode')
 
   return (
     <Panel>
@@ -126,6 +129,34 @@ export function ParcelRecordCard({ property, org, onAddParcelRecord }: ParcelRec
           {/* 40% of fair market value, which is Georgia's assessment ratio. */}
           <Row label="Assessed value">
             {assessedValue === null ? <NotSet /> : formatCurrency(assessedValue)}
+          </Row>
+          <Row label="Last sale">
+            {lastSaleDate === '' ? <NotSet /> : formatDate(lastSaleDate)}
+          </Row>
+          {/*
+            The price and the county's qualification code, together and never
+            apart. Roughly half of recorded sales carry `U` and half `Q`, and
+            the convention elsewhere in Georgia is that only one of the two is
+            an arm's length sale usable as evidence of value. The Board of
+            Assessors publishes no table for it, so the code is rendered
+            literally and shown beside the number rather than being used to
+            decide whether to show the number at all.
+
+            A price is absent, not zero, on roughly a third of recorded
+            transfers: a gift, a family transfer and a foreclosure are all
+            transfers with no consideration.
+          */}
+          <Row label="Sale price">
+            {lastSalePrice === null ? (
+              <span className="text-ink-faint text-13">
+                {lastSaleDate === '' ? 'No sale on file' : 'Transferred with no price recorded'}
+              </span>
+            ) : (
+              <span className="flex flex-wrap items-baseline gap-1.5">
+                <span>{formatCurrency(lastSalePrice)}</span>
+                {saleQualityCode === '' ? null : <IdChip>{saleQualityCode}</IdChip>}
+              </span>
+            )}
           </Row>
         </dl>
       </PanelBody>

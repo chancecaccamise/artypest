@@ -47,14 +47,19 @@ pnpm lint             # eslint
 pnpm test             # vitest run
 pnpm verify           # typecheck && lint && test && build
 
-supabase start        # local Postgres + Studio in Docker
-supabase stop
-supabase db reset     # drop, re-run all migrations, re-seed
-supabase migration new <name>
-supabase gen types typescript --local > src/types/database.ts
+pnpm db:new <name>    # create a migration file
+pnpm db:verify        # run every migration against Postgres, in WASM, and test it
+pnpm db:link          # link this checkout to the hosted project
+pnpm db:push          # apply pending migrations to it
+pnpm db:diff          # what the hosted schema has that the migrations do not
+pnpm db:types         # regenerate src/types/database.ts from the linked project
 
 pnpm sagis:harvest    # download the parcel corridor from the county service
 ```
+
+`pnpm sagis:overlays` writes the sixteen district boundary sets to
+`public/overlays/`, 656KB committed, listed in `scripts/sagis/overlays.mjs`. One
+is drawn at a time.
 
 `pnpm sagis:harvest` writes ~24MB. The 13MB in `public/parcels/` is committed,
 because the deployed site is static files with no database behind it yet and has
@@ -118,8 +123,16 @@ docs/
 ### Security
 
 - Never commit secrets. `.env.local` is gitignored. Use `.env.example` with placeholder values.
+- Only the anon key ever reaches the browser. Anything prefixed `VITE_` is compiled
+  into the public bundle, so the service role key must never be one.
 - RLS enabled on every table from the migration that creates it, not retrofitted later.
-- Never write against a remote Supabase project. Local only.
+- **Schema changes are migration files, never edits made in the Supabase dashboard.**
+  This replaces the earlier "local only" rule, which assumed a Docker stack that
+  does not exist on this machine. The database is hosted, so the protection is
+  that every change is a reviewed file in `supabase/migrations/` applied with
+  `pnpm db:push`, and `pnpm db:verify` runs them against a real Postgres first.
+  A change made in the dashboard is a change no other environment will ever get.
+  See `docs/DECISIONS.md`.
 
 ### Code
 

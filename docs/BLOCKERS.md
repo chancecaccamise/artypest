@@ -83,14 +83,21 @@ their own merits and logged in `DECISIONS.md`. d3-force still is not installed.
 
 ### Docker is not installed
 
-**Impact.** Medium, deferred. `supabase start` needs Docker, so the local
-Postgres stack cannot run on this machine yet.
+**Resolved 2026-08-24, by not needing it.**
+
+**Impact.** Was medium. `supabase start` needs Docker, so the local Postgres
+stack cannot run on this machine.
 
 **What was done instead.** Not a blocker right now, because the app deliberately
 runs on the in-memory provider. `supabase init` was run and `supabase/config.toml`
 exists, so the directory is ready when Docker is.
 
-**To unblock.** Install Docker Desktop, then `pnpm exec supabase start`.
+**How it was resolved.** The database is hosted, so migrations are authored as
+files and applied with `pnpm db:push` rather than tested against a local stack.
+`pnpm db:verify` runs every migration against Postgres compiled to WebAssembly,
+which needs no container and covers what `supabase db reset` would have. Docker
+is still the only way to get `db reset` and Studio locally, so this is worth
+revisiting if either becomes necessary. See `docs/DECISIONS.md`.
 
 ### The Supabase CLI is a devDependency, not a global binary
 

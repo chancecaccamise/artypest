@@ -57,7 +57,15 @@ describe('plat view', () => {
 
     expect(await screen.findByRole('button', { name: 'Zoom in' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Zoom out' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Fit the whole plat' })).toBeInTheDocument()
+    /*
+      Renamed from "Fit the whole plat" when the plat stopped opening on the
+      whole plat. It now opens on the association's records, so fitting the
+      county is the way back out rather than the state you start in, and the
+      label has to say which of the two it does.
+    */
+    expect(
+      screen.getByRole('button', { name: 'Fit every lot the county recorded' })
+    ).toBeInTheDocument()
   })
 
   it('selects a lot when its parcel is clicked, and shows what is on it', async () => {

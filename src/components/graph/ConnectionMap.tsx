@@ -11,8 +11,16 @@ import {
 } from 'lucide-react'
 
 import { entityTypeColor } from '@/components/ui/badge'
-import { ENTITY_TYPES, ENTITY_TYPE_LABELS, type Entity, type EntityType } from '@/lib/data/types'
+import {
+  ENTITY_TYPES,
+  ENTITY_TYPE_LABELS,
+  type Entity,
+  type EntityType,
+  type Relation,
+} from '@/lib/data/types'
 import { isCurrent, type ResolvedGraph } from '@/lib/insights'
+import { relationColor } from '@/lib/relations/colors'
+import { buildRecencyScale, compareByDate, type RecencyScale } from '@/lib/relations/recency'
 import { cn } from '@/lib/utils'
 
 /*
@@ -54,6 +62,10 @@ export interface MapNode {
   entity: Entity
   /** The relation as read from the node one step closer to the focus. */
   relationLabel: string
+  /** Which kind of connection this is, for the thread's colour. */
+  relationKey: string
+  /** The row itself, so the thread can be dated and ordered without a lookup. */
+  relation: Relation
   /** False when the relation has ended: drawn faded, like the history divider. */
   current: boolean
   ring: 1 | 2
@@ -66,6 +78,8 @@ export interface ConnectionMapProps {
   focus: Entity
   /** Types the reader has switched off. */
   hiddenTypes: Set<EntityType>
+  /** Grade the threads by how recent each connection is. */
+  gradeByAge?: boolean
   onFocusChange: (entity: Entity) => void
 }
 
@@ -74,7 +88,13 @@ interface Placement {
   y: number
 }
 
-export function ConnectionMap({ graph, focus, hiddenTypes, onFocusChange }: ConnectionMapProps) {
+export function ConnectionMap({
+  graph,
+  focus,
+  hiddenTypes,
+  gradeByAge = false,
+  onFocusChange,
+}: ConnectionMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [viewportWidth, setViewportWidth] = useState(960)
 
@@ -102,6 +122,8 @@ export function ConnectionMap({ graph, focus, hiddenTypes, onFocusChange }: Conn
 
   const nodes = useMemo(() => [...firstRing, ...secondRing], [firstRing, secondRing])
 
+  const scales = useMemo(() => buildFanScales(nodes), [nodes])
+
   return (
     <div ref={containerRef} className="w-full overflow-x-auto">
       <div
@@ -122,15 +144,26 @@ export function ConnectionMap({ graph, focus, hiddenTypes, onFocusChange }: Conn
               node.ring === 1 ? layout.focus : layout.placements.get(node.parentId)
             if (!to || !from) return null
 
+            /*
+              Colour says what kind of connection this is, and it is the same
+              colour the plat draws it in. Brightness says how recent it is,
+              within this card's own fan. Ended connections are pulled back
+              further still, because "this used to be true" should never be the
+              loudest thing on the map.
+            */
+            const strength = gradeByAge
+              ? (scales.get(node.parentId)?.strengthOf(node.relation.id) ?? 1)
+              : 1
+
             return (
               <path
                 key={`edge-${node.entity.id}`}
                 d={edgePath(from, to)}
                 fill="none"
-                stroke={node.current ? 'var(--rule-strong)' : 'var(--rule)'}
-                strokeWidth={node.ring === 1 ? 1.25 : 1}
+                stroke={relationColor(node.relationKey)}
+                strokeWidth={1.5}
                 strokeDasharray={node.ring === 2 ? '3 3' : undefined}
-                opacity={node.current ? 1 : 0.6}
+                opacity={node.current ? strength : Math.max(0.22, strength * 0.6)}
               />
             )
           })}
@@ -329,6 +362,42 @@ function chunk<T>(list: T[], size: number): T[][] {
   return rows
 }
 
+/* ------------------------------------------------------------ fan scales -- */
+
+/**
+ * One recency ramp per fan, a fan being everything hanging off one card.
+ *
+ * Not one ramp for the whole map, which is the obvious thing and the wrong one.
+ * A reader looking at eight lots under an association is asking which of those
+ * eight joined last, and a single map-wide ramp answers a question nobody
+ * asked: it spends the whole range on the gap between the oldest thread
+ * anywhere on screen and the newest anywhere on screen. When the newest happens
+ * to be the focus record's own address, every one of the eight lands on the
+ * dim end and they are indistinguishable from each other.
+ *
+ * The cost is that brightness compares within a fan and not across two of them,
+ * which the legend says out loud. That is the right trade: siblings are what
+ * sit next to each other and invite comparison.
+ */
+export function buildFanScales(nodes: readonly MapNode[]): Map<string, RecencyScale> {
+  const byParent = new Map<string, MapNode[]>()
+
+  for (const node of nodes) {
+    const group = byParent.get(node.parentId)
+    if (group) group.push(node)
+    else byParent.set(node.parentId, [node])
+  }
+
+  const scales = new Map<string, RecencyScale>()
+  for (const [parentId, group] of byParent) {
+    scales.set(
+      parentId,
+      buildRecencyScale(group.map((node) => node.relation))
+    )
+  }
+  return scales
+}
+
 /* ----------------------------------------------------------------- rings -- */
 
 export function buildRings(
@@ -355,16 +424,28 @@ export function buildRings(
       entity: other,
       // Bidirectionality is a read concern: one row, read from this end.
       relationLabel: outgoing ? type.label : type.reverseLabel,
+      relationKey: type.key,
+      relation,
       current: isCurrent(relation),
       ring: 1,
       parentId: focus.id,
     })
   }
 
+  /*
+    Ended connections last, then oldest to newest, then by name.
+
+    Chronological order is half of the answer to "which of these lots joined
+    first". The other half is how bright the thread is, and the two agree:
+    leftmost is oldest is faintest. Position is the easier of the two to compare
+    across a wide row, so it carries the ordering and brightness carries the
+    size of the gaps. Undated connections sort to the end of their group, which
+    is where compareByDate puts them.
+  */
   firstRing.sort(
     (a, b) =>
       Number(b.current) - Number(a.current) ||
-      a.entity.type.localeCompare(b.entity.type) ||
+      compareByDate(a.relation, b.relation) ||
       a.entity.name.localeCompare(b.entity.name)
   )
 
@@ -388,12 +469,24 @@ export function buildRings(
       secondRing.push({
         entity: other,
         relationLabel: outgoing ? type.label : type.reverseLabel,
+        relationKey: type.key,
+        relation,
         current: isCurrent(relation),
         ring: 2,
         parentId: parent.entity.id,
       })
     }
   }
+
+  // The same order within each parent's group, so a row of eight member lots
+  // reads left to right in the order they joined.
+  secondRing.sort(
+    (a, b) =>
+      a.parentId.localeCompare(b.parentId) ||
+      Number(b.current) - Number(a.current) ||
+      compareByDate(a.relation, b.relation) ||
+      a.entity.name.localeCompare(b.entity.name)
+  )
 
   return { firstRing, secondRing }
 }

@@ -2,7 +2,17 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
 
+/*
+  This file is the setup for every test, and not every test runs in a browser.
+  The schema suite runs the migrations against Postgres and declares
+  `@vitest-environment node`, where `window` and `localStorage` do not exist, so
+  everything below is guarded rather than assumed. Without the guard the node
+  tests fail during setup, before a single assertion runs.
+*/
+const inBrowser = typeof window !== 'undefined'
+
 afterEach(() => {
+  if (!inBrowser) return
   cleanup()
   /*
     Work is saved to localStorage now, so a test that creates a record would
@@ -18,7 +28,7 @@ afterEach(() => {
   the operating system what it prefers.
 */
 
-if (!('ResizeObserver' in globalThis)) {
+if (inBrowser && !('ResizeObserver' in globalThis)) {
   class ResizeObserverStub implements ResizeObserver {
     observe(): void {}
     unobserve(): void {}
@@ -27,7 +37,7 @@ if (!('ResizeObserver' in globalThis)) {
   globalThis.ResizeObserver = ResizeObserverStub
 }
 
-if (!window.matchMedia) {
+if (inBrowser && !window.matchMedia) {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
     matches: false,
     media: query,
@@ -40,6 +50,6 @@ if (!window.matchMedia) {
   })) as typeof window.matchMedia
 }
 
-if (!Element.prototype.scrollTo) {
+if (inBrowser && !Element.prototype.scrollTo) {
   Element.prototype.scrollTo = vi.fn() as typeof Element.prototype.scrollTo
 }
