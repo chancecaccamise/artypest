@@ -318,6 +318,8 @@ describe('colouring a plat larger than the committed fixture', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
         deletedAt: null,
         archivedAt: null,
+        reviewedAt: null,
+        reviewedBy: null,
       })),
     ],
     relations: countyData.relations,

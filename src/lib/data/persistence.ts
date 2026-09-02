@@ -22,8 +22,15 @@ import type { AuditEntry, Entity, Org, ReferenceItem, Relation } from './types'
 
 const STORAGE_KEY = 'artypest.overlay.v1'
 
-/** Bumped when the shape changes, which discards an overlay we cannot read. */
-const SCHEMA_VERSION = 1
+/*
+  Bumped when the shape changes, which discards an overlay we cannot read.
+
+  2: entities carry `reviewedAt` and `reviewedBy`, audit rows carry `source`.
+  A version 1 overlay would restore records with no hand mark and audit rows
+  with no provenance, which would read as "checked by nobody, written by
+  nobody" rather than as missing.
+*/
+const SCHEMA_VERSION = 2
 
 export interface Overlay {
   version: number

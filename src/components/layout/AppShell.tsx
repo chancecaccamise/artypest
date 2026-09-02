@@ -5,8 +5,11 @@ import { X } from 'lucide-react'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { Button } from '@/components/ui/button'
+import { WorkLogPanel } from '@/features/review/WorkLogPanel'
+import { useMediaQuery } from '@/hooks/use-media-query'
 
 const COLLAPSE_KEY = 'artypest.sidebar-collapsed'
+const WORK_LOG_KEY = 'artypest.work-log-open'
 
 /*
   The shell. One scroll container for the page body, so the sidebar and header
@@ -19,6 +22,21 @@ export function AppShell() {
   const [collapsed, setCollapsed] = useState(
     () => window.localStorage.getItem(COLLAPSE_KEY) === 'true'
   )
+  /*
+    Open state outlives the page, because a reader working a paper list keeps
+    the log open for the whole sitting and having to reopen it on every
+    navigation is the reason they would stop using it.
+  */
+  const [workLogOpen, setWorkLogOpen] = useState(
+    () => window.localStorage.getItem(WORK_LOG_KEY) === 'true'
+  )
+  /*
+    Which placement the log gets. In CSS this would be two copies behind
+    `hidden` and `lg:hidden`, and both would mount, both would run their
+    queries, and both would sit in the accessibility tree under the same name.
+    One panel, one place.
+  */
+  const dockWorkLog = useMediaQuery('(min-width: 1024px)')
   const location = useLocation()
 
   /*
@@ -34,6 +52,10 @@ export function AppShell() {
     window.localStorage.setItem(COLLAPSE_KEY, String(collapsed))
   }, [collapsed])
 
+  useEffect(() => {
+    window.localStorage.setItem(WORK_LOG_KEY, String(workLogOpen))
+  }, [workLogOpen])
+
   // A route change returns the reader to the top of the page.
   useEffect(() => {
     document.getElementById('main')?.scrollTo({ top: 0 })
@@ -47,6 +69,20 @@ export function AppShell() {
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [sheetOpen])
+
+  /*
+    Escape closes the sheet, which covers the page. It deliberately does not
+    close the docked panel: that one is part of the layout, and dismissing it
+    with the same key that dismisses a dialog would lose somebody's place.
+  */
+  useEffect(() => {
+    if (!workLogOpen || dockWorkLog) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setWorkLogOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [workLogOpen, dockWorkLog])
 
   return (
     <div className="bg-paper flex h-svh overflow-hidden">
@@ -89,13 +125,46 @@ export function AppShell() {
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Header onOpenNav={() => setOpenedAt(location.pathname)} />
-        <main id="main" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto focus:outline-none">
-          <div className="mx-auto w-full max-w-[100rem] px-3 py-4 sm:px-5 sm:py-6">
-            <Outlet />
-          </div>
-        </main>
+        <Header
+          onOpenNav={() => setOpenedAt(location.pathname)}
+          workLogOpen={workLogOpen}
+          onToggleWorkLog={() => setWorkLogOpen((open) => !open)}
+        />
+
+        <div className="flex min-h-0 flex-1">
+          <main
+            id="main"
+            tabIndex={-1}
+            className="min-h-0 min-w-0 flex-1 overflow-y-auto focus:outline-none"
+          >
+            <div className="mx-auto w-full max-w-[100rem] px-3 py-4 sm:px-5 sm:py-6">
+              <Outlet />
+            </div>
+          </main>
+
+          {/*
+            Docked, not floated. The log is read against the list it is a log
+            of, so covering that list would defeat it.
+          */}
+          {workLogOpen && dockWorkLog ? (
+            <WorkLogPanel onClose={() => setWorkLogOpen(false)} />
+          ) : null}
+        </div>
       </div>
+
+      {/* Below lg there is no room for both, so it becomes a sheet. */}
+      {workLogOpen && !dockWorkLog ? (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div
+            className="bg-ink/40 absolute inset-0"
+            onClick={() => setWorkLogOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="relative">
+            <WorkLogPanel variant="sheet" onClose={() => setWorkLogOpen(false)} />
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -4,10 +4,17 @@ import { Link } from 'react-router-dom'
 import { entityHref } from '@/components/layout/nav-config'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
+import { ReviewToggle, reviewEdgeStyle } from '@/features/review/ReviewMark'
 import { readString } from '@/lib/format'
 import { initialsFor } from '@/lib/photos'
 import { cn } from '@/lib/utils'
-import { ENTITY_TYPES, type Entity, type EntityType } from '@/lib/data/types'
+import {
+  ENTITY_TYPES,
+  type Entity,
+  type EntityType,
+  type ReviewState,
+  type ReviewStatus,
+} from '@/lib/data/types'
 
 /*
   A person as a card rather than a table row.
@@ -28,6 +35,8 @@ export type ConnectionCounts = Partial<Record<EntityType, number>>
 export interface PersonCardProps {
   person: Entity
   counts: ConnectionCounts
+  reviewState: ReviewState
+  reviewStatus: ReviewStatus | undefined
   onEdit: (person: Entity) => void
   onArchive: (person: Entity) => void
   onDelete: (person: Entity) => void
@@ -85,6 +94,8 @@ function Avatar({ person }: { person: Entity }) {
 export function PersonCard({
   person,
   counts,
+  reviewState,
+  reviewStatus,
   onEdit,
   onArchive,
   onDelete,
@@ -105,6 +116,9 @@ export function PersonCard({
         person.archivedAt === null ? '' : 'opacity-70',
         className
       )}
+      // The same leading rule the table rows carry, so a grid of cards and a
+      // list of rows are read the same way.
+      style={reviewEdgeStyle(reviewState)}
     >
       <div className="flex flex-1 flex-col gap-3 p-3">
         <div className="flex items-start gap-3">
@@ -181,6 +195,14 @@ export function PersonCard({
       </div>
 
       <div className="border-rule flex items-center gap-1 border-t px-2 py-1.5">
+        <ReviewToggle
+          entityId={person.id}
+          state={reviewState}
+          status={reviewStatus}
+          compact
+          className="mr-1 py-1"
+        />
+
         <Tooltip label="Open this person">
           <Link
             to={href}

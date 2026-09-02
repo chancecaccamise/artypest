@@ -107,6 +107,10 @@ export async function applyOwnerPlan({
     (group) => group.verdict === 'link' || group.verdict === 'create'
   )
 
+  /*
+    Declared as an import. Reconciliation reads the county's owner strings, not
+    a folder on somebody's desk, so the records it creates carry no hand mark.
+  */
   const { batchId, result } = await provider.runBatch(async () => {
     const counts = { ownersCreated: 0, ownersLinked: 0, relationsCreated: 0, relationsSkipped: 0 }
 
@@ -174,7 +178,7 @@ export async function applyOwnerPlan({
     }
 
     return counts
-  })
+  }, 'import')
 
   return { batchId, ...result }
 }

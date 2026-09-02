@@ -10,8 +10,10 @@ import {
   useDeleteEntity,
   useRelations,
   useRestoreEntity,
+  useReviewIndex,
 } from '@/hooks/use-data'
 import type { Entity, EntityType } from '@/lib/data/types'
+import { stateFor } from '@/lib/review/status'
 
 /*
   The people directory as cards.
@@ -25,6 +27,7 @@ import type { Entity, EntityType } from '@/lib/data/types'
 export function PersonGrid({ people }: { people: Entity[] }) {
   const relations = useRelations()
   const entities = useAllEntities()
+  const reviewIndex = useReviewIndex()
 
   const archive = useArchiveEntity()
   const restore = useRestoreEntity()
@@ -76,6 +79,8 @@ export function PersonGrid({ people }: { people: Entity[] }) {
             key={person.id}
             person={person}
             counts={countsById.get(person.id) ?? {}}
+            reviewState={stateFor(reviewIndex.data, person.id)}
+            reviewStatus={reviewIndex.data?.byEntity.get(person.id)}
             onEdit={setEditing}
             onArchive={(target) => {
               if (target.archivedAt === null) archive.mutate(target.id)

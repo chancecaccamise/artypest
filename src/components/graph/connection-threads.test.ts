@@ -32,6 +32,8 @@ function entity(id: string, type: Entity['type'], name: string): Entity {
     updatedAt: '2020-01-01T00:00:00.000Z',
     deletedAt: null,
     archivedAt: null,
+    reviewedAt: null,
+    reviewedBy: null,
   }
 }
 

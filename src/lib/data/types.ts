@@ -60,6 +60,15 @@ export interface Entity {
   deletedAt: string | null
   /** Archive. The record is real and kept, just out of the active working set. */
   archivedAt: string | null
+  /*
+    When a person last checked this record against a source they trust, and who
+    that person was. Real columns rather than keys inside `data`, because
+    "everything nobody has checked yet" is a query the working list runs on
+    every page load, and because review is the same question for all seven
+    types. See docs/REVIEW-SPEC.md.
+  */
+  reviewedAt: string | null
+  reviewedBy: string | null
 }
 
 export interface RelationType {
@@ -113,6 +122,20 @@ export interface DataSnapshot {
 
 export type AuditAction = 'insert' | 'update' | 'delete'
 
+/**
+ * Who or what wrote an audit row.
+ *
+ * This is the whole basis of the hand mark. `hand` is a person at a keyboard
+ * changing one record; `import` is a bulk write from the county roll, however
+ * many records it touched and whoever pressed the button; `system` is seeded
+ * or derived data that nobody ever claimed.
+ *
+ * Attributing an import to the person who ran it would be true and useless:
+ * the question the association actually asks is whether a human has read this
+ * record, not whether a human started the job that wrote it.
+ */
+export type AuditSource = 'hand' | 'import' | 'system'
+
 /** One row per changed field, so history reads as a field-level diff. */
 export interface AuditEntry {
   id: string
@@ -125,6 +148,8 @@ export interface AuditEntry {
   newValue: string | null
   changedBy: string | null
   changedAt: string
+  /** Hand, import, or system. See AuditSource. */
+  source: AuditSource
   /**
    * Groups the rows written by one user action, so the Activity feed can link
    * back to "the batch this came from". Postgres will set it per statement.
@@ -220,6 +245,46 @@ export interface LocationIndex {
   unplaced: Entity[]
 }
 
+/*
+  The hand mark.
+
+  Three states, in the order a reader meets them:
+
+    unchecked  nobody has read this record against anything
+    checked    a person read it and said it was right
+    recheck    a person checked it, and the county has written to it since
+
+  `recheck` is the state that makes the other two worth storing. Without it a
+  check is a claim about a record that quietly stops being true the next time
+  the parcel import runs, and a stale green tick is worse than no tick.
+*/
+export type ReviewState = 'unchecked' | 'checked' | 'recheck'
+
+export interface ReviewStatus {
+  entityId: string
+  state: ReviewState
+  reviewedAt: string | null
+  reviewedBy: string | null
+  /** Field names the import has written since the check. Empty unless `recheck`. */
+  changedSince: string[]
+}
+
+/**
+ * Review status for every record that has ever been checked.
+ *
+ * Absent from `byEntity` means `unchecked`, which is the overwhelming majority:
+ * the map ships 16,656 county lots and the association has read a few dozen of
+ * them. Holding a row per checked record rather than per record is the
+ * difference between a few kilobytes and a few megabytes.
+ */
+export interface ReviewIndex {
+  byEntity: Map<string, ReviewStatus>
+  /** Active, undeleted records that are checked and current, per type. */
+  checkedByType: Record<EntityType, number>
+  /** Active, undeleted records checked but written to since, per type. */
+  recheckByType: Record<EntityType, number>
+}
+
 export interface ListEntitiesOptions {
   type?: EntityType
   search?: string
@@ -231,6 +296,11 @@ export interface ListEntitiesOptions {
   sortDir?: 'asc' | 'desc'
   /** Matches against keys inside the JSONB `data` column. */
   dataFilters?: Record<string, string>
+  /**
+   * Narrows to one hand-mark state. This is what turns the directory into a
+   * work queue: filter to `unchecked`, work down the list, watch it shrink.
+   */
+  review?: ReviewState
 }
 
 export interface ListActivityOptions {
@@ -242,6 +312,12 @@ export interface ListActivityOptions {
   /** Inclusive ISO date, `YYYY-MM-DD`. */
   to?: string
   batchId?: string
+  /**
+   * Inclusive ISO timestamp. Distinct from `from`, which is a calendar date:
+   * the work log asks for "since 9:12 this morning", not "since today".
+   */
+  since?: string
+  source?: AuditSource
   page?: number
   pageSize?: number
 }
@@ -293,6 +369,20 @@ export interface DataProvider {
     point: [longitude: number, latitude: number] | null
   ): Promise<Entity>
 
+  /**
+   * Marks a record as checked by hand, or clears the mark.
+   *
+   * Goes through the same write path as any other field change, so the check
+   * is audited, appears in History as "Teresa Vaughn checked this record", and
+   * shows up in the work log without the log needing a store of its own.
+   */
+  setReviewed(entityId: string, reviewed: boolean): Promise<Entity>
+  /** Hand-mark state for every record that has one. */
+  listReviewIndex(): Promise<ReviewIndex>
+
+  /** The signed-in person, as the audit log records them. */
+  getActor(): Promise<string>
+
   /** Audit history for one record, newest first. */
   listAuditEntries(recordId: string): Promise<AuditEntry[]>
   /** The global feed, newest first, with the subject entity resolved. */
@@ -316,5 +406,8 @@ export interface DataProvider {
    * Runs `work` as one audited batch and returns the batch id alongside the
    * result, so the parcel import can link to exactly its own rows in Activity.
    */
-  runBatch<T>(work: () => Promise<T>): Promise<{ batchId: string; result: T }>
+  runBatch<T>(
+    work: () => Promise<T>,
+    source?: AuditSource
+  ): Promise<{ batchId: string; result: T }>
 }

@@ -57,6 +57,8 @@ function property(data: Record<string, unknown>, id = 'prop-1'): Entity {
     updatedAt: '2026-01-01T00:00:00.000Z',
     deletedAt: null,
     archivedAt: null,
+    reviewedAt: null,
+    reviewedBy: null,
   }
 }
 
@@ -72,6 +74,8 @@ function person(name: string, id = 'per-1'): Entity {
     updatedAt: '2026-01-01T00:00:00.000Z',
     deletedAt: null,
     archivedAt: null,
+    reviewedAt: null,
+    reviewedBy: null,
   }
 }
 

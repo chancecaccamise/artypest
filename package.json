@@ -21,7 +21,7 @@
     "db:push": "supabase db push",
     "db:diff": "supabase db diff",
     "db:new": "supabase migration new",
-    "db:verify": "vitest run src/lib/data/schema.test.ts",
+    "db:verify": "vitest run supabase/schema.test.ts",
     "sagis:overlays": "node scripts/sagis/harvest-overlays.mjs"
   },
   "dependencies": {

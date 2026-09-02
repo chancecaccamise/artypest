@@ -6,6 +6,7 @@ import { formatMailingAddress } from '@/lib/parcels/types'
 
 import type {
   AuditEntry,
+  AuditSource,
   Entity,
   EntityType,
   Org,
@@ -205,6 +206,10 @@ export function buildDemoData(
       updatedAt: stamp(-updatedDaysAgo, intBetween(8, 18), intBetween(0, 59)),
       deletedAt: lifecycle.deletedAt ?? null,
       archivedAt: lifecycle.archivedAt ?? null,
+      // Unmarked by default. The demo's hand marks are seeded in one block
+      // below, so what has been checked is visible in one place.
+      reviewedAt: null,
+      reviewedBy: null,
     }
     entities.push(row)
     return row
@@ -250,7 +255,8 @@ export function buildDemoData(
     newValue: string | null,
     changedBy: string,
     daysAgo: number,
-    hour = 10
+    hour = 10,
+    source: AuditSource = 'hand'
   ): void {
     auditSeq += 1
     auditEntries.push({
@@ -264,6 +270,7 @@ export function buildDemoData(
       newValue,
       changedBy,
       changedAt: stamp(-daysAgo, hour, intBetween(0, 59)),
+      source,
       batchId: null,
     })
   }
@@ -1303,6 +1310,96 @@ export function buildDemoData(
     5,
     14
   )
+
+  /* -------------------------------------------------------- hand marks -- */
+
+  /*
+    Who has read what.
+
+    The association's own records are mostly checked: somebody typed them in
+    from a folder and knows what is in them. The county roll is not, and that
+    asymmetry is the whole point of the mark. A demo where everything is ticked
+    would say nothing, and neither would one where nothing is.
+
+    Marks are stamped here rather than at each entity() call so the demo's
+    answer to "how much of this has anybody actually read" is legible in one
+    place, and so the audit rows that back the marks are written beside them.
+  */
+  function markChecked(row: Entity, daysAgo: number, by: string): void {
+    const at = stamp(-daysAgo, intBetween(9, 17), intBetween(0, 59))
+    row.reviewedAt = at
+    row.reviewedBy = by
+    audit('entities', row.id, 'update', 'reviewedAt', null, at, by, daysAgo, intBetween(9, 17))
+  }
+
+  // Every person the association put in by hand. A resident record exists
+  // because somebody spoke to a resident.
+  for (const row of people) {
+    markChecked(row, intBetween(4, 300), pick(ACTORS))
+  }
+
+  // Roughly three quarters of the association's own lots. The rest are the
+  // backlog: real, listed, and nobody has been through them yet.
+  properties.forEach((row, index) => {
+    if (index % 4 === 3) return
+    markChecked(row, intBetween(2, 260), pick(ACTORS))
+  })
+
+  for (const row of [...vendorEntities, ...assetEntities, ...documentEntities]) {
+    markChecked(row, intBetween(6, 320), pick(ACTORS))
+  }
+
+  /*
+    The stale ones, which are the state worth seeing.
+
+    Each was checked and then written to by the county roll afterwards, so the
+    mark it carries is out of date and the record says so rather than keeping a
+    tick it no longer earns. Import rows are dated after the check on purpose:
+    that ordering is the entire rule.
+  */
+  const RECHECK_SEEDS: { property: Entity; field: string; from: string; to: string }[] = [
+    {
+      property: at(properties, 4),
+      field: 'data.assessedValue',
+      from: '318400',
+      to: '341200',
+    },
+    {
+      property: at(properties, 9),
+      field: 'data.zoning',
+      from: 'R-6',
+      to: 'TN-2',
+    },
+    {
+      property: at(properties, 16),
+      field: 'data.fairMarketValue',
+      from: '742000',
+      to: '801500',
+    },
+    {
+      property: at(properties, 30),
+      field: 'data.situsAddress',
+      from: '1204 E Henry St',
+      to: '1204 E Henry Street',
+    },
+  ]
+
+  for (const seed of RECHECK_SEEDS) {
+    // Checked first, then overwritten by the roll a fortnight later.
+    markChecked(seed.property, 18, pick(ACTORS))
+    audit(
+      'entities',
+      seed.property.id,
+      'update',
+      seed.field,
+      seed.from,
+      seed.to,
+      'SAGIS parcel import',
+      4,
+      6,
+      'import'
+    )
+  }
 
   /* ---------------------------------------------------------- reference -- */
 

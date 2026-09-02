@@ -3,6 +3,7 @@ import { render, type RenderOptions, type RenderResult } from '@testing-library/
 import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 
+import { WorkSessionProvider } from '@/features/review/session'
 import { RoleProvider } from '@/lib/role'
 import { ThemeProvider } from '@/lib/theme'
 
@@ -34,7 +35,9 @@ export function renderWithProviders(
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <RoleProvider>
-            <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+            <WorkSessionProvider>
+              <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+            </WorkSessionProvider>
           </RoleProvider>
         </ThemeProvider>
       </QueryClientProvider>

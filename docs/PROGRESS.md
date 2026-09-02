@@ -978,3 +978,65 @@ before the button is pressed rather than after.
 but has no way to act on a row from the screen: resolving one is a write and
 wants the same batching and audit the bulk apply already has. That is the next
 piece, and it needs no model to be useful.
+
+---
+
+## The hand mark and the work log
+
+Built from a client note: a panel keeping a running tab of what the analyst has
+entered, so the last entry is visible while a printed list is being worked, and
+a way to see at a glance whether a record has had a person's attention.
+
+**What a reader sees.** A moss rule down the leading edge of every checked row
+and card, with a badge that is also the control. Amber where a person checked a
+record and the county has written to it since. Nothing at all on the records
+nobody has been through, which is most of them, and deliberately the quiet
+state. On a record's own page, a small moss dot beside each field somebody typed
+rather than imported. A **Checked** filter on every directory, which is what
+turns a list into a work queue: filter to "not checked yet", work down it, watch
+it shrink.
+
+**The panel.** Opens from a header button that carries the session count, docks
+beside the list on a laptop, and becomes a sheet on a phone. It pins where you
+were, so the question you come back with after looking at a piece of paper is
+answered without scrolling; a progress meter for whatever list you are working,
+with a link to what is left; and the running list itself, newest first, folded
+so one save is one line and a four-hundred-lot import is one line rather than
+four hundred.
+
+**Two things this made me reconsider mid-build.**
+
+*Ties.* When a check and an import land in the same millisecond, nothing in the
+data says which came first. It was resolving in favour of the check. It now
+resolves in favour of a recheck: of the two ways to be wrong, a green tick on a
+record the county has rewritten is the one that costs something.
+
+*Writes that change nothing.* The trigger claiming the mark on every hand write
+also claimed it for updates that moved no value, which broke a schema invariant
+the audit log already held and, worse, meant a re-save or a script could
+manufacture a claim that a person had read something. It now compares the row
+against itself with the bookkeeping columns removed, which is the same
+comparison the audit trigger makes a few statements later.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 590 tests, and a
+production build. 54 of those are new: the state rules, field provenance,
+folding audit rows into log entries, the provider's behaviour under a hand write
+and under an import, eleven driving the real pages through the router, and seven
+running the trigger and the view against Postgres in `pnpm db:verify`.
+
+**`pnpm db:verify` was testing nothing.** It pointed at
+`src/lib/data/schema.test.ts`, which does not exist; the schema suite is
+`supabase/schema.test.ts`. Repointed, and the migration's own behaviour added to
+it, so the trigger and the `entity_review` view are exercised rather than
+assumed.
+
+**Not applied to the hosted database.** The migration is written, and it applies
+and behaves correctly against Postgres in the test suite, but `pnpm db:push` has
+not been run: pushing schema to a hosted project is the client's call, not mine.
+
+**Not done, and why.** The Plat View does not shade lots by whether they have
+been checked. It would be genuinely useful, a map of the backlog, but it is a
+second rendering pass over 16,656 polygons and belongs with the map work rather
+than bolted to this. The dashboard has no coverage widget for the same reason:
+it is a different audience asking a different question, and the panel answers
+the analyst's.

@@ -913,3 +913,126 @@ worth keeping: a model may propose what a name *is*, never who it *matches*.
 Withholding the directory is what makes a wrong link impossible rather than
 merely discouraged. And it should only ever see the residue: the rules settle
 roughly 85% of the layer, and those names have no reason to leave the browser.
+
+---
+
+## The hand mark and the work log
+
+The client's note: a panel keeping a running tab of what the analyst has done,
+so they can see the last entry while working a printed list, and some visual
+expression of what has had "the human touch". Both are built. The decisions
+underneath them are these.
+
+### A check is a claim about a record at a moment, not a flag
+
+`entities.reviewed_at` records when a person last read a record. What the screen
+shows is not that column but a comparison: the check against the last time the
+county roll wrote to the same record. Three states come out of it, and the third
+is the one that makes the other two worth storing.
+
+| State | Means |
+| ----- | ----- |
+| Not checked | Nobody has read this against anything |
+| Checked | A person read it, and nothing has overwritten them since |
+| Recheck | They did, and the county has written to it since |
+
+Without `recheck`, a check is a claim that quietly stops being true the next
+time `pnpm sagis:harvest` feeds an import, and a stale green tick is worse than
+no tick: it is a statement the association did not make. Derived rather than
+stored, so an import cannot leave one behind by forgetting to invalidate
+anything. It is `entity_review` in Postgres and `buildReviewIndex` in
+`src/lib/review/status.ts`, and both are tested against the same cases.
+
+**A tie counts as needing a recheck.** Two writes stamped the same instant carry
+no evidence of which came first. Of the two ways to be wrong, only one costs
+something.
+
+### Provenance is a column on the audit log, not an inference about the actor
+
+`audit_entries.source` is `hand`, `import`, or `system`, set from
+`artypest.audit_source` the same way `batch_id` and the actor already are.
+
+Attributing an import to whoever pressed the button would be true and useless.
+The association is not asking whether a human started the job that wrote a row;
+it is asking whether a human has read the record. Without this column there is
+no way to tell the sixteen thousand county lots nobody has opened from the few
+dozen somebody has, which is the only distinction the mark exists to draw.
+
+`hand` is the default because it is the safe one. A write nobody declared is a
+person at a keyboard, and mistaking a hand edit for an import only under-claims
+the mark. The other way round it would tick sixteen thousand lots.
+
+### Editing a record checks it, but a write that changes nothing does not
+
+Somebody who opens a record, changes something, and saves it has read it, and
+requiring a second click afterwards is the reason a mark like this stops getting
+used. So a hand write claims the mark, in a trigger, for the same reason the
+audit log is in a trigger.
+
+But only when something actually moved. An update that changes no value already
+leaves no trace in the audit log, and it must leave none here: a re-save, an
+idempotent upsert, or a script touching every row must never be able to
+manufacture a claim that a person read something. `claim_hand_review` compares
+the row against itself with the bookkeeping columns removed, which is the same
+comparison the audit trigger makes field by field a few statements later.
+
+### Two marks, because there are two questions
+
+The **record mark** answers "has anyone read this lot": a 2px moss rule down the
+leading edge of the row or card, plus a badge that is also the control that sets
+it. The **field mark** answers the next question, asked once somebody is already
+looking at one record: of these eleven fields, which did we type and which came
+off the roll? A small moss dot beside the label, read from the audit log by
+`fieldSources` rather than stored beside each value, because a second copy of
+something the log already records is a second copy that can disagree.
+
+**Marked on the positive state, never shaded on the negative.** The plat carries
+16,656 county lots against a few dozen the association has read. Tinting the
+unread ones would tint almost the whole screen and say nothing. The ink goes
+where the work went.
+
+**Colour is never the only carrier.** Each state has its own glyph and its own
+words. A board member printing a list in greyscale, or not distinguishing moss
+from amber, can still tell them apart, and every mark carries the whole sentence
+as its accessible name rather than only the verb.
+
+### The work log is a reading of the audit trail, not a second store
+
+Everything the panel shows is already recorded: the log has the timestamp, the
+actor, and now the source. A parallel store of "what I did today" would be a
+second copy, and it would be the wrong one, because it is the copy nothing else
+writes to. It would also not survive a reload, which is exactly when somebody
+working a paper list needs it.
+
+What the panel does add is the reading: audit rows folded back into moves. A
+save that changed six fields is six rows and one thing the reader did. Hand rows
+group by record and instant, because one save writes one row per changed field
+all stamped with the same moment, in the temporary provider and in Postgres,
+where `now()` is fixed for the transaction. Import rows group by batch instead,
+so a four-hundred-lot import is one line rather than four hundred.
+
+### A session is a sitting, and it is one shared boundary
+
+Stored, defaulting to the start of today, resettable by hand, rolling forward at
+midnight so "this session" does not quietly become "this week". Not an idle
+timeout: a reader can say when they sat down and a timer cannot, and a
+twenty-minute phone call is not the end of a session.
+
+It lives in a context rather than being read from storage wherever it is needed,
+because two readings of the same boundary can disagree. The count in the header
+and the list in the panel are the same claim, and starting a fresh session has
+to move both at once.
+
+### The panel is docked, not floated
+
+The log is read against the list it is a log of, so covering that list would
+defeat it. Below `lg` there is no room for both and it becomes a sheet. It is
+rendered once and placed by `useMediaQuery` rather than twice behind `hidden`
+and `lg:hidden`: two copies would both mount, both run their queries, and both
+sit in the accessibility tree under the same name.
+
+### `pnpm db:verify` pointed at a file that does not exist
+
+It ran `vitest run src/lib/data/schema.test.ts`. The schema suite is
+`supabase/schema.test.ts`, so the script had been passing by testing nothing.
+Repointed, and the hand mark's Postgres behaviour added to it.

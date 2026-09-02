@@ -28,6 +28,8 @@ function entity(type: Entity['type'], name: string, data: Record<string, unknown
     updatedAt: '2026-01-01T00:00:00.000Z',
     deletedAt: null,
     archivedAt: null,
+    reviewedAt: null,
+    reviewedBy: null,
   }
 }
 

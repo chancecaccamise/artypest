@@ -7,6 +7,7 @@ import './index.css'
 import App from './App'
 import { initializeData } from '@/lib/data'
 import { loadParcelLayer } from '@/lib/parcels/parcel-layer'
+import { WorkSessionProvider } from '@/features/review/session'
 import { RoleProvider } from '@/lib/role'
 import { ThemeProvider } from '@/lib/theme'
 
@@ -52,9 +53,11 @@ async function start() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <RoleProvider>
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
+            <WorkSessionProvider>
+              <BrowserRouter>
+                <App />
+              </BrowserRouter>
+            </WorkSessionProvider>
           </RoleProvider>
         </ThemeProvider>
       </QueryClientProvider>

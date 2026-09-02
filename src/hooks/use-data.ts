@@ -38,6 +38,8 @@ export const queryKeys = {
   users: ['users'] as const,
   locations: ['locations'] as const,
   location: (entityId: string) => ['location', entityId] as const,
+  reviewIndex: ['review-index'] as const,
+  actor: ['actor'] as const,
 }
 
 /** Anything a write can invalidate. Broad on purpose: correctness over churn. */
@@ -54,6 +56,8 @@ function invalidateAll(client: ReturnType<typeof useQueryClient>) {
     // things resolve to, so the map is invalidated with everything else.
     client.invalidateQueries({ queryKey: ['locations'] }),
     client.invalidateQueries({ queryKey: ['location'] }),
+    // Every hand edit stamps the mark, so the marks move whenever anything does.
+    client.invalidateQueries({ queryKey: ['review-index'] }),
   ])
 }
 
@@ -125,6 +129,32 @@ export function useActivity(options: ListActivityOptions) {
 
 export function useActors() {
   return useQuery({ queryKey: queryKeys.actors, queryFn: () => data.listActors() })
+}
+
+/** The signed-in person, as the audit log records them. */
+export function useActor() {
+  return useQuery({ queryKey: queryKeys.actor, queryFn: () => data.getActor() })
+}
+
+/*
+  Who has read what.
+
+  One query for the whole index rather than one per row: a fifty-row page of
+  properties would otherwise be fifty lookups, and the answer for row three
+  depends on the same single pass over the audit log as the answer for row
+  forty-one.
+*/
+export function useReviewIndex() {
+  return useQuery({ queryKey: queryKeys.reviewIndex, queryFn: () => data.listReviewIndex() })
+}
+
+export function useSetReviewed() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ entityId, reviewed }: { entityId: string; reviewed: boolean }) =>
+      data.setReviewed(entityId, reviewed),
+    onSuccess: () => invalidateAll(client),
+  })
 }
 
 export function useReferenceItems(list?: ReferenceList) {

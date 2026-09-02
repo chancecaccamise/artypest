@@ -9,13 +9,14 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Field, Input, Select } from '@/components/ui/field'
 import { Panel, PanelBody } from '@/components/ui/panel'
 import { SkeletonRows } from '@/components/ui/skeleton'
-import { groupByDay } from '@/features/directory/HistoryTab'
+import { groupByDay, isReviewRow } from '@/features/directory/HistoryTab'
 import { useActivity, useActors } from '@/hooks/use-data'
 import {
   ENTITY_TYPES,
   ENTITY_TYPE_LABELS,
   type ActivityEntry,
   type AuditAction,
+  type AuditSource,
   type EntityType,
 } from '@/lib/data/types'
 import { formatAuditValue, formatDayHeader, formatFieldName, formatTime } from '@/lib/format'
@@ -26,6 +27,16 @@ const ACTIONS: { value: AuditAction; label: string }[] = [
   { value: 'insert', label: 'Created' },
   { value: 'update', label: 'Changed' },
   { value: 'delete', label: 'Removed' },
+]
+
+/*
+  "Everything a person typed" and "everything the county wrote" are two
+  different feeds, and telling them apart is most of what makes this page
+  useful after a large import.
+*/
+const SOURCES: { value: AuditSource; label: string }[] = [
+  { value: 'hand', label: 'Entered by hand' },
+  { value: 'import', label: 'From the county roll' },
 ]
 
 /*
@@ -46,6 +57,7 @@ export function ActivityPage() {
   const from = params.get('from') ?? ''
   const to = params.get('to') ?? ''
   const batchId = params.get('batch') ?? ''
+  const source = params.get('source') ?? ''
 
   const query = useActivity({
     page,
@@ -56,6 +68,7 @@ export function ActivityPage() {
     from: from || undefined,
     to: to || undefined,
     batchId: batchId || undefined,
+    source: (source || undefined) as AuditSource | undefined,
   })
 
   const setParam = useCallback(
@@ -72,7 +85,7 @@ export function ActivityPage() {
   const days = useMemo(() => groupByDay(query.data?.rows ?? []), [query.data])
   const total = query.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const hasFilters = Boolean(entityType || action || actor || from || to || batchId)
+  const hasFilters = Boolean(entityType || action || actor || from || to || batchId || source)
 
   return (
     <>
@@ -122,6 +135,17 @@ export function ActivityPage() {
             <Select value={action} onChange={(event) => setParam('action', event.target.value)}>
               <option value="">All actions</option>
               {ACTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label="Source" className="w-[11.5rem]">
+            <Select value={source} onChange={(event) => setParam('source', event.target.value)}>
+              <option value="">Anything</option>
+              {SOURCES.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -219,6 +243,7 @@ const ACTION_VERB: Record<AuditAction, string> = {
 
 function ActivityRow({ entry }: { entry: ActivityEntry }) {
   const isUpdate = entry.action === 'update' && entry.fieldName !== null
+  const isCheck = isReviewRow(entry)
 
   return (
     <li className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-2 text-13">
@@ -227,7 +252,13 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
       </span>
 
       <span className="text-ink font-medium">{entry.changedBy ?? 'System'}</span>
-      <span className="text-ink-muted">{ACTION_VERB[entry.action]}</span>
+      <span className={isCheck ? 'text-moss font-medium' : 'text-ink-muted'}>
+        {isCheck
+          ? entry.newValue === null
+            ? 'cleared the check on'
+            : 'checked'
+          : ACTION_VERB[entry.action]}
+      </span>
 
       {entry.entityType ? (
         <TypeBadge type={entry.entityType}>{ENTITY_TYPE_LABELS[entry.entityType].singular}</TypeBadge>
@@ -241,7 +272,7 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
         <span className="text-ink-muted">a record that has since been removed</span>
       )}
 
-      {isUpdate ? (
+      {isUpdate && !isCheck ? (
         <span className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
           <span className="text-ink-muted">{formatFieldName(entry.fieldName)}</span>
           <span className="text-ink-muted line-through decoration-1">
@@ -256,6 +287,12 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
 
       {entry.tableName === 'relations' ? (
         <span className="text-ink-faint text-xs">connection</span>
+      ) : null}
+
+      {entry.source === 'import' ? (
+        <span className="border-rule text-ink-faint rounded-[3px] border px-1 py-px text-2xs">
+          from the county roll
+        </span>
       ) : null}
     </li>
   )

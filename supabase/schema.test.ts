@@ -180,7 +180,13 @@ describe('the audit log, which is triggers and never application code', () => {
        where record_id = $1 and action = 'update' order by field_name`,
       [entityId]
     )
-    expect(rows.rows.map((row) => row.field_name)).toEqual(['data', 'name'])
+    /*
+      `reviewed_at` rides along because a person who opened this record, changed
+      it, and saved it has read it, and the hand mark is a real column that the
+      audit trigger sees move like any other. It is one row, and it renders as
+      "checked this record" rather than as a diff.
+    */
+    expect(rows.rows.map((row) => row.field_name)).toEqual(['data', 'name', 'reviewed_at'])
     expect(rows.rows.find((row) => row.field_name === 'name')).toMatchObject({
       old_value: '1402 E 49th St',
       new_value: '1402 E 49th Street',
@@ -315,5 +321,156 @@ describe('the constraints that stop bad data', () => {
       `insert into reference_items (org_id, list, value, label) values ($1, 'wards', 'x', 'X')`,
       [ORG]
     )
+  })
+})
+
+/*
+  The hand mark.
+
+  Every case here has a twin in src/lib/review/status.test.ts and
+  src/lib/data/review-provider.test.ts, which is the point: the temporary
+  provider and the schema that replaces it answer the same questions the same
+  way, so swapping one for the other changes nothing a reader can see.
+
+  Run on its own database, because these tests deliberately set
+  `artypest.audit_source` and leaving that set would change the meaning of
+  every row written after them.
+*/
+describe('the hand mark', () => {
+  let marks: PGlite
+  let lot = ''
+  let parcel = ''
+
+  beforeAll(async () => {
+    // ORG is seeded by the bootstrap migration, so there is nothing to insert.
+    marks = await freshDatabase()
+  }, 60_000)
+
+  async function stateOf(id: string): Promise<string> {
+    const rows = await marks.query<{ state: string }>(
+      `select state from entity_review where entity_id = $1`,
+      [id]
+    )
+    return rows.rows[0]?.state ?? 'missing'
+  }
+
+  it('is claimed by a hand write, and says who made it', async () => {
+    await marks.exec(`
+      select set_config('artypest.actor', 'teresa@example.org', false);
+      select set_config('artypest.audit_source', 'hand', false);
+    `)
+    const inserted = await marks.query<{ id: string }>(
+      `insert into entities (org_id, type, name) values ($1, 'property', '1207 E Washington Ave')
+       returning id`,
+      [ORG]
+    )
+    lot = inserted.rows[0]?.id ?? ''
+
+    const row = await marks.query<{ reviewed_by: string; marked: boolean }>(
+      `select reviewed_by, (reviewed_at is not null) as marked from entities where id = $1`,
+      [lot]
+    )
+    expect(row.rows[0]).toEqual({ reviewed_by: 'teresa@example.org', marked: true })
+    expect(await stateOf(lot)).toBe('checked')
+  })
+
+  /*
+    The distinction the whole feature rests on. Whoever pressed the button ran
+    the import; they did not read the four hundred lots it wrote.
+  */
+  it('is not claimed by an import, however many rows it wrote', async () => {
+    await marks.exec(`select set_config('artypest.audit_source', 'import', false)`)
+    const inserted = await marks.query<{ id: string }>(
+      `insert into entities (org_id, type, name) values ($1, 'property', '1204 E Henry St')
+       returning id`,
+      [ORG]
+    )
+    parcel = inserted.rows[0]?.id ?? ''
+
+    const row = await marks.query<{ unmarked: boolean }>(
+      `select (reviewed_at is null) as unmarked from entities where id = $1`,
+      [parcel]
+    )
+    expect(row.rows[0]?.unmarked).toBe(true)
+    expect(await stateOf(parcel)).toBe('unchecked')
+  })
+
+  it('ends when the county writes to the record after the check', async () => {
+    await marks.exec(`select set_config('artypest.audit_source', 'import', false)`)
+    await marks.query(`update entities set data = '{"zoning":"TN-2"}'::jsonb where id = $1`, [lot])
+
+    expect(await stateOf(lot)).toBe('recheck')
+
+    // And the import must not have quietly renewed somebody else's claim.
+    const row = await marks.query<{ reviewed_by: string }>(
+      `select reviewed_by from entities where id = $1`,
+      [lot]
+    )
+    expect(row.rows[0]?.reviewed_by).toBe('teresa@example.org')
+  })
+
+  it('is renewed by checking again', async () => {
+    await marks.exec(`
+      select set_config('artypest.audit_source', 'hand', false);
+      select set_config('artypest.actor', 'daniel@example.org', false);
+    `)
+    await marks.query(`update entities set reviewed_at = now() where id = $1`, [lot])
+
+    expect(await stateOf(lot)).toBe('checked')
+    const row = await marks.query<{ reviewed_by: string }>(
+      `select reviewed_by from entities where id = $1`,
+      [lot]
+    )
+    expect(row.rows[0]?.reviewed_by).toBe('daniel@example.org')
+  })
+
+  /*
+    A re-save, an idempotent upsert, or a script touching every row must never
+    be able to manufacture a claim that a person read something.
+  */
+  it('is not claimed by a write that changed nothing', async () => {
+    await marks.query(`update entities set reviewed_at = null where id = $1`, [lot])
+    const before = await marks.query<{ n: number }>(
+      `select count(*)::int as n from audit_entries where record_id = $1`,
+      [lot]
+    )
+
+    await marks.query(`update entities set name = name where id = $1`, [lot])
+
+    const row = await marks.query<{ cleared: boolean; anonymous: boolean }>(
+      `select (reviewed_at is null) as cleared, (reviewed_by is null) as anonymous
+       from entities where id = $1`,
+      [lot]
+    )
+    expect(row.rows[0]).toEqual({ cleared: true, anonymous: true })
+
+    const after = await marks.query<{ n: number }>(
+      `select count(*)::int as n from audit_entries where record_id = $1`,
+      [lot]
+    )
+    expect(after.rows[0]?.n).toBe(before.rows[0]?.n)
+  })
+
+  it('records where every audit row came from', async () => {
+    const row = await marks.query<{ hand: number; imported: number }>(
+      `select
+         count(*) filter (where source = 'hand')::int as hand,
+         count(*) filter (where source = 'import')::int as imported
+       from audit_entries where record_id = $1`,
+      [lot]
+    )
+    expect(row.rows[0]?.hand).toBeGreaterThan(0)
+    expect(row.rows[0]?.imported).toBeGreaterThan(0)
+  })
+
+  /*
+    reviewed_by only ever moves alongside reviewed_at, so auditing it would put
+    a second, emptier row beside every check.
+  */
+  it('does not audit reviewed_by beside reviewed_at', async () => {
+    const row = await marks.query<{ n: number }>(
+      `select count(*)::int as n from audit_entries where field_name = 'reviewed_by'`
+    )
+    expect(row.rows[0]?.n).toBe(0)
   })
 })

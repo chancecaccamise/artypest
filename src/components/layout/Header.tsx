@@ -1,18 +1,27 @@
-import { Menu, Monitor, Moon, Sun } from 'lucide-react'
+import { ClipboardList, Menu, Monitor, Moon, Sun } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/field'
-import { useOrg } from '@/hooks/use-data'
+import { useActivity, useActor, useOrg } from '@/hooks/use-data'
+import { useWorkSession } from '@/features/review/session'
+import { buildWorkLog, recordCount, recordsChecked } from '@/features/review/work-log'
 import { ROLES, ROLE_LABELS, useRole } from '@/lib/role'
 import { THEMES, useTheme, type Theme } from '@/lib/theme'
 import { SearchBar } from './SearchBar'
 
 const THEME_ICON: Record<Theme, typeof Sun> = { light: Sun, dark: Moon, system: Monitor }
 
-export function Header({ onOpenNav }: { onOpenNav: () => void }) {
+export interface HeaderProps {
+  onOpenNav: () => void
+  workLogOpen: boolean
+  onToggleWorkLog: () => void
+}
+
+export function Header({ onOpenNav, workLogOpen, onToggleWorkLog }: HeaderProps) {
   const org = useOrg()
   const { theme, setTheme } = useTheme()
   const { role, setRole } = useRole()
+  const sessionCount = useSessionCount()
 
   const cycleTheme = () => {
     const index = THEMES.indexOf(theme)
@@ -60,6 +69,27 @@ export function Header({ onOpenNav }: { onOpenNav: () => void }) {
           ))}
         </Select>
 
+        {/*
+          The count is the reason this is a header control rather than a menu
+          item: "eleven so far" is worth seeing without opening anything, and
+          it is what makes somebody open it.
+        */}
+        <Button
+          variant={workLogOpen ? 'primary' : 'secondary'}
+          size="sm"
+          onClick={onToggleWorkLog}
+          aria-pressed={workLogOpen}
+          aria-label={
+            sessionCount === 0
+              ? 'Work log. Nothing recorded this session.'
+              : `Work log. ${recordCount(sessionCount)} this session.`
+          }
+          title="Work log"
+        >
+          <ClipboardList />
+          <span className="hidden font-mono sm:inline">{sessionCount}</span>
+        </Button>
+
         <Button
           variant="secondary"
           size="icon-sm"
@@ -72,4 +102,19 @@ export function Header({ onOpenNav }: { onOpenNav: () => void }) {
       </div>
     </header>
   )
+}
+
+/*
+  How many records this reader has been through since they sat down.
+
+  Reads the same rows the panel does, through the same query key, so opening
+  the log costs nothing and the badge can never disagree with the list it
+  stands for.
+*/
+function useSessionCount(): number {
+  const actor = useActor()
+  const { since } = useWorkSession()
+  const activity = useActivity({ actor: actor.data, since, pageSize: 500 })
+
+  return recordsChecked(buildWorkLog(activity.data?.rows ?? []))
 }

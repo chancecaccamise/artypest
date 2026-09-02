@@ -20,6 +20,7 @@ import { HistoryTab } from '@/features/directory/HistoryTab'
 import { NotesTab } from '@/features/directory/NotesTab'
 import { RecordsTab } from '@/features/directory/RecordsTab'
 import { DIRECTORY_CONFIGS } from '@/features/directory/config'
+import { ReviewToggle, reviewSentence } from '@/features/review/ReviewMark'
 import {
   useArchiveEntity,
   useDeleteEntity,
@@ -27,9 +28,11 @@ import {
   useRelations,
   useOrg,
   useRestoreEntity,
+  useReviewIndex,
 } from '@/hooks/use-data'
 import { ENTITY_TYPE_LABELS, type EntityType } from '@/lib/data/types'
 import { formatDateTime } from '@/lib/format'
+import { stateFor } from '@/lib/review/status'
 import { useRole } from '@/lib/role'
 
 const TABS: TabDefinition[] = [
@@ -52,6 +55,7 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
   /** For the connection count on the tab strip. */
   const relationsQuery = useRelations(id)
   const org = useOrg()
+  const reviewIndex = useReviewIndex()
 
   const archiveEntity = useArchiveEntity()
   const restoreEntity = useRestoreEntity()
@@ -156,6 +160,8 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
 
   const chips = config.chips(entity)
   const archived = entity.archivedAt !== null
+  const reviewState = stateFor(reviewIndex.data, entity.id)
+  const reviewStatus = reviewIndex.data?.byEntity.get(entity.id)
 
   return (
     <>
@@ -174,11 +180,30 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
           </span>
         }
         subtitle={
-          <span className="font-mono text-xs">Last changed {formatDateTime(entity.updatedAt)}</span>
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+            <span className="font-mono">Last changed {formatDateTime(entity.updatedAt)}</span>
+            <span className="text-ink-faint" aria-hidden="true">
+              &middot;
+            </span>
+            <span>{reviewSentence(reviewState, reviewStatus)}</span>
+          </span>
         }
         actions={
           canEdit ? (
-            <div className="relative" ref={menuRef}>
+            <div className="flex items-center gap-2">
+              {/*
+                Checking is the most repeated action of the whole reconciliation
+                job, so it sits in the open beside the record rather than inside
+                the menu. Everything in the menu is done once per record; this
+                is done to every record.
+              */}
+              <ReviewToggle
+                entityId={entity.id}
+                state={reviewState}
+                status={reviewStatus}
+                className="h-9 px-3 text-sm"
+              />
+              <div className="relative" ref={menuRef}>
               <Button
                 variant="secondary"
                 onClick={() => setMenuOpen((open) => !open)}
@@ -241,7 +266,8 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
                     Delete
                   </MenuItem>
                 </div>
-              ) : null}
+                ) : null}
+              </div>
             </div>
           ) : null
         }

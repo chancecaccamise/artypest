@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { MapPin } from 'lucide-react'
 
@@ -8,7 +8,8 @@ import { LocationSourceNote } from '@/features/map/LocationSourceNote'
 import { ParcelRecordCard } from '@/features/parcels/ParcelRecordCard'
 import { DIRECTORY_CONFIGS, type FieldDef } from '@/features/directory/config'
 import { PhotoPanel } from '@/features/directory/PhotoPanel'
-import { useLocation, useSetManualLocation } from '@/hooks/use-data'
+import { HandFieldDot } from '@/features/review/ReviewMark'
+import { useAuditEntries, useLocation, useSetManualLocation } from '@/hooks/use-data'
 import { useReferenceLabels } from '@/hooks/use-reference-labels'
 import type { Entity, Org } from '@/lib/data/types'
 import {
@@ -19,6 +20,7 @@ import {
   readNumber,
   readString,
 } from '@/lib/format'
+import { fieldSources } from '@/lib/review/provenance'
 import { useRole } from '@/lib/role'
 import { cn } from '@/lib/utils'
 
@@ -84,6 +86,14 @@ export function DetailsTab({ entity, org, onAddParcelRecord }: DetailsTabProps) 
   const location = useLocation(entity.id)
   const clearLocation = useSetManualLocation()
 
+  /*
+    Which of these values a person typed, as against which came off the county
+    roll. Read from the same audit rows the History tab renders, under the same
+    query key, so opening this tab costs no extra fetch.
+  */
+  const audit = useAuditEntries(entity.id)
+  const sources = useMemo(() => fieldSources(audit.data ?? []), [audit.data])
+
   const fields = config.fields.filter((field) => {
     if (field.hiddenFromGrid) return false
     if (field.internal && !canSeeNotes) return false
@@ -95,7 +105,17 @@ export function DetailsTab({ entity, org, onAddParcelRecord }: DetailsTabProps) 
       {/* A face is how a board member recognises a resident, so it leads. */}
       {entity.type === 'person' && canEdit ? <PhotoPanel entity={entity} /> : null}
       <Panel>
-        <PanelHeader title="Details" />
+        <PanelHeader
+          title="Details"
+          meta={
+            [...sources.values()].includes('hand') ? (
+              <span className="flex items-center gap-1.5">
+                <span className="bg-moss inline-block size-1.5 rounded-full" aria-hidden="true" />
+                entered by hand
+              </span>
+            ) : null
+          }
+        />
         <PanelBody>
           <dl className="grid gap-x-8 gap-y-3 md:grid-cols-2">
             {fields.map((field) => (
@@ -106,7 +126,12 @@ export function DetailsTab({ entity, org, onAddParcelRecord }: DetailsTabProps) 
                   field.format === 'longtext' && 'md:col-span-2'
                 )}
               >
-                <dt className="label-caps text-[0.6875rem]">{field.label}</dt>
+                <dt className="label-caps flex items-center gap-1.5 text-[0.6875rem]">
+                  {field.label}
+                  {sources.get(field.key) === 'hand' ? (
+                    <HandFieldDot label={field.label} />
+                  ) : null}
+                </dt>
                 <dd className="text-ink text-sm">
                   {renderValue(field, entity.data[field.key], labelFor)}
                 </dd>

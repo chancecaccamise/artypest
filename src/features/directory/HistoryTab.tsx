@@ -84,8 +84,32 @@ const ACTION_VERB: Record<AuditEntry['action'], string> = {
   delete: 'removed',
 }
 
+/*
+  A check is stored as a change to `reviewed_at`, because that is what it is and
+  because the Postgres trigger will write exactly that row. Rendering it as the
+  raw diff, "changed Reviewed at not set to 3 September 2026", says nothing a
+  board member wants. Rendering it as a sentence says all of it.
+*/
+export function isReviewRow(entry: AuditEntry): boolean {
+  return entry.action === 'update' && entry.fieldName === 'reviewedAt'
+}
+
 export function AuditLine({ entry }: { entry: AuditEntry }) {
   const isUpdate = entry.action === 'update' && entry.fieldName !== null
+
+  if (isReviewRow(entry)) {
+    return (
+      <li className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-2 text-13">
+        <span className="text-ink-faint w-16 shrink-0 font-mono text-xs">
+          {formatTime(entry.changedAt)}
+        </span>
+        <span className="text-ink font-medium">{entry.changedBy ?? 'System'}</span>
+        <span className="text-moss font-medium">
+          {entry.newValue === null ? 'cleared the check on this record' : 'checked this record'}
+        </span>
+      </li>
+    )
+  }
 
   return (
     <li className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-2 text-13">
@@ -114,6 +138,12 @@ export function AuditLine({ entry }: { entry: AuditEntry }) {
           {entry.tableName === 'relations' ? 'a connection' : 'this record'}
         </span>
       )}
+
+      {entry.source === 'import' ? (
+        <span className="border-rule text-ink-faint rounded-[3px] border px-1 py-px text-2xs">
+          from the county roll
+        </span>
+      ) : null}
     </li>
   )
 }

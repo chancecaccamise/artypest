@@ -30,6 +30,8 @@ function entity(id: string, name: string, data: Record<string, unknown> = {}): E
     updatedAt: NOW,
     deletedAt: null,
     archivedAt: null,
+    reviewedAt: null,
+    reviewedBy: null,
   }
 }
 

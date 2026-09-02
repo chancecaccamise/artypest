@@ -3,11 +3,13 @@ import { centroidForPin } from '../geo'
 import { geocodeSync } from '../geocoding'
 import { resolveGraph } from '../insights'
 import { resolveAllLocations, resolveLocation, type ResolveContext } from '../locations/resolve'
+import { buildReviewIndex, reviewStateOf } from '../review/status'
 import { buildDemoData, type DemoData } from './fixtures'
 import { ENTITY_TYPES } from './types'
 import type {
   ActivityEntry,
   AuditEntry,
+  AuditSource,
   DataProvider,
   Entity,
   EntityInput,
@@ -28,6 +30,7 @@ import type {
   RelationInput,
   RelationType,
   ResolvedLocation,
+  ReviewIndex,
 } from './types'
 
 /*
@@ -86,6 +89,13 @@ class MemoryProvider implements DataProvider {
   /** Set while runBatch is in flight, so every audit row it causes is grouped. */
   private currentBatchId: string | null = null
 
+  /*
+    What is writing right now. Hand unless a batch says otherwise, which is the
+    safe default: a write nobody declared is a person at a keyboard, and
+    mistaking a hand edit for an import only under-claims the hand mark.
+  */
+  private currentSource: AuditSource = 'hand'
+
 
   constructor(data: DemoData) {
     this.org = clone(data.org)
@@ -139,12 +149,22 @@ class MemoryProvider implements DataProvider {
       sortBy = 'name',
       sortDir = 'asc',
       dataFilters,
+      review,
     } = options
 
     let rows = this.entities.filter((entity) => this.matchesInclude(entity, include))
 
     if (type) {
       rows = rows.filter((entity) => entity.type === type)
+    }
+
+    if (review) {
+      // In Postgres this is a join against the entity_review view. Here it is
+      // one pass over the audit log, done once rather than per row.
+      const lastImport = this.lastImportByRecord()
+      rows = rows.filter(
+        (entity) => reviewStateOf(entity, lastImport.get(entity.id) ?? null) === review
+      )
     }
 
     if (dataFilters) {
@@ -217,6 +237,13 @@ class MemoryProvider implements DataProvider {
       updatedAt: now,
       deletedAt: null,
       archivedAt: null,
+      /*
+        A record typed in by hand is checked by the act of typing it: the person
+        entering it is the source. A record an import created is not, however
+        many fields it filled in.
+      */
+      reviewedAt: this.currentSource === 'hand' ? now : null,
+      reviewedBy: this.currentSource === 'hand' ? CURRENT_USER : null,
     }
 
     this.entities.push(entity)
@@ -228,15 +255,18 @@ class MemoryProvider implements DataProvider {
   updateEntity(id: string, patch: EntityPatch): Promise<Entity> {
     const entity = this.requireEntity(id)
     const now = new Date().toISOString()
+    let changed = false
 
     if (patch.name !== undefined && patch.name !== entity.name) {
       this.recordAudit('entities', id, 'update', 'name', entity.name, patch.name, now)
       entity.name = patch.name
+      changed = true
     }
 
     if (patch.folderId !== undefined && patch.folderId !== entity.folderId) {
       this.recordAudit('entities', id, 'update', 'folderId', entity.folderId, patch.folderId, now)
       entity.folderId = patch.folderId
+      changed = true
     }
 
     if (patch.data !== undefined) {
@@ -247,13 +277,57 @@ class MemoryProvider implements DataProvider {
         const after = toAuditValue(patch.data[key])
         if (before !== after) {
           this.recordAudit('entities', id, 'update', `data.${key}`, before, after, now)
+          changed = true
         }
       }
       entity.data = { ...patch.data }
     }
 
+    /*
+      A person who opened this record, changed something, and saved it has read
+      it. An import has not, however many fields it filled in, which is the
+      whole distinction the mark carries.
+
+      Conditional on something having actually moved, so a re-save that changes
+      nothing leaves no trace, exactly as it leaves none in the audit log. A
+      write that moves no value must never be able to manufacture a claim that
+      somebody read the record.
+
+      Written as an audited field change rather than quietly, because Postgres
+      does exactly this: `reviewed_at` is a real column, the trigger sees it
+      move, and the row it writes is what puts "checked this record" into the
+      history and into the work log.
+    */
+    if (changed && this.currentSource === 'hand') {
+      this.markReviewed(entity, now)
+    }
+
     entity.updatedAt = now
     return Promise.resolve(clone(entity))
+  }
+
+  setReviewed(entityId: string, reviewed: boolean): Promise<Entity> {
+    const entity = this.requireEntity(entityId)
+    const now = new Date().toISOString()
+
+    if (reviewed) {
+      this.markReviewed(entity, now)
+    } else if (entity.reviewedAt !== null) {
+      this.recordAudit('entities', entity.id, 'update', 'reviewedAt', entity.reviewedAt, null, now)
+      entity.reviewedAt = null
+      entity.reviewedBy = null
+    }
+
+    entity.updatedAt = now
+    return Promise.resolve(clone(entity))
+  }
+
+  listReviewIndex(): Promise<ReviewIndex> {
+    return Promise.resolve(buildReviewIndex(this.entities, this.auditEntries))
+  }
+
+  getActor(): Promise<string> {
+    return Promise.resolve(CURRENT_USER)
   }
 
   archiveEntity(id: string): Promise<Entity> {
@@ -382,7 +456,18 @@ class MemoryProvider implements DataProvider {
   }
 
   listActivity(options: ListActivityOptions = {}): Promise<Page<ActivityEntry>> {
-    const { entityType, action, actor, from, to, batchId, page = 1, pageSize = 100 } = options
+    const {
+      entityType,
+      action,
+      actor,
+      from,
+      to,
+      batchId,
+      since,
+      source,
+      page = 1,
+      pageSize = 100,
+    } = options
 
     let rows = this.auditEntries.map((entry) => this.resolveActivity(entry))
 
@@ -390,6 +475,9 @@ class MemoryProvider implements DataProvider {
     if (action) rows = rows.filter((entry) => entry.action === action)
     if (actor) rows = rows.filter((entry) => entry.changedBy === actor)
     if (batchId) rows = rows.filter((entry) => entry.batchId === batchId)
+    if (source) rows = rows.filter((entry) => entry.source === source)
+    // A moment, not a day: the work log starts partway through this morning.
+    if (since) rows = rows.filter((entry) => entry.changedAt >= since)
     // Dates are inclusive on both ends, compared on the date part only.
     if (from) rows = rows.filter((entry) => entry.changedAt.slice(0, 10) >= from)
     if (to) rows = rows.filter((entry) => entry.changedAt.slice(0, 10) <= to)
@@ -459,15 +547,21 @@ class MemoryProvider implements DataProvider {
 
   /* -------------------------------------------------------------- batch -- */
 
-  async runBatch<T>(work: () => Promise<T>): Promise<{ batchId: string; result: T }> {
+  async runBatch<T>(
+    work: () => Promise<T>,
+    source: AuditSource = 'hand'
+  ): Promise<{ batchId: string; result: T }> {
     const batchId = nextId('batch')
-    const previous = this.currentBatchId
+    const previousBatch = this.currentBatchId
+    const previousSource = this.currentSource
     this.currentBatchId = batchId
+    this.currentSource = source
     try {
       const result = await work()
       return { batchId, result }
     } finally {
-      this.currentBatchId = previous
+      this.currentBatchId = previousBatch
+      this.currentSource = previousSource
     }
   }
 
@@ -554,8 +648,33 @@ class MemoryProvider implements DataProvider {
       newValue,
       changedBy: CURRENT_USER,
       changedAt,
+      source: this.currentSource,
       batchId: this.currentBatchId,
     })
+  }
+
+  /**
+   * Stamps the hand mark and audits the stamp.
+   *
+   * Re-checking an already-checked record still writes a row: "checked again
+   * on the 3rd" is the answer to "how current is this", and swallowing it
+   * would make a fresh check indistinguishable from a stale one.
+   */
+  private markReviewed(entity: Entity, now: string): void {
+    this.recordAudit('entities', entity.id, 'update', 'reviewedAt', entity.reviewedAt, now, now)
+    entity.reviewedAt = now
+    entity.reviewedBy = CURRENT_USER
+  }
+
+  /** Last import write per record. One pass, shared by the filter and the index. */
+  private lastImportByRecord(): Map<string, string> {
+    const latest = new Map<string, string>()
+    for (const entry of this.auditEntries) {
+      if (entry.source !== 'import') continue
+      const seen = latest.get(entry.recordId)
+      if (seen === undefined || entry.changedAt > seen) latest.set(entry.recordId, entry.changedAt)
+    }
+    return latest
   }
 
   /*

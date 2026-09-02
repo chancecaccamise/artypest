@@ -281,6 +281,11 @@ export async function applyImportPlan({
 }: ApplyOptions): Promise<ApplyResult> {
   const effectiveStart = startDate ?? new Date().toISOString().slice(0, 10)
 
+  /*
+    Declared as an import, which is what keeps the county roll from claiming
+    the hand mark. Whoever pressed the button ran the job; they did not read
+    four hundred lots.
+  */
   const { batchId, result } = await provider.runBatch(async () => {
     const counts = {
       propertiesCreated: 0,
@@ -381,7 +386,7 @@ export async function applyImportPlan({
     }
 
     return counts
-  })
+  }, 'import')
 
   return { batchId, ...result }
 }
