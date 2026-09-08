@@ -10,7 +10,7 @@ import { useOverlay } from './use-overlay'
 import { RecencyLegend } from '@/components/graph/RecencyLegend'
 import { buildRecencyScale } from '@/lib/relations/recency'
 import { UnplacedTray } from './UnplacedTray'
-import { arcColor, arcableKeys, buildArcs, undrawnCounts } from './arcs'
+import { arcColor, arcableKeys, buildArcs, toggleAllArcKeys, undrawnCounts } from './arcs'
 import { THEMATIC_MODES, THEMATIC_MODE_LABELS, buildTheming, type ThematicMode } from './theming'
 import { ConnectionMap } from '@/components/graph/ConnectionMap'
 import { Button } from '@/components/ui/button'
@@ -41,13 +41,31 @@ import { cn } from '@/lib/utils'
 
 export type MapMode = 'plat' | 'split'
 
+/** The default when no link asked for connections. Shared, so never mutated. */
+const NO_ARC_KEYS: ReadonlySet<string> = new Set()
+
+/**
+ * What a link into the plat asks it to draw.
+ *
+ * `focus` is the Connection Map's "Open in Plat View": this record's
+ * connections and nothing else. `all` is the same drawing without the
+ * narrowing, for a link that means "show me the whole picture".
+ */
+export type InitialConnections = 'focus' | 'all'
+
 export interface MapViewProps {
   /** Record to select on open, from the route. */
   initialEntityId?: string | null
+  /** Connections to switch on when the map opens. Null leaves them off. */
+  initialConnections?: InitialConnections | null
   onSelectionChange?: (entityId: string | null) => void
 }
 
-export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
+export function MapView({
+  initialEntityId,
+  initialConnections = null,
+  onSelectionChange,
+}: MapViewProps) {
   const { graph, isLoading: graphLoading } = useGraph()
   const locationsQuery = useLocations()
   const referenceQuery = useReferenceItems()
@@ -58,9 +76,26 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
   const [thematicMode, setThematicMode] = useState<ThematicMode>('none')
   const [typeFilter, setTypeFilter] = useState<EntityType | ''>('')
   const [dataFilter, setDataFilter] = useState('')
-  const [arcKeys, setArcKeys] = useState<Set<string>>(new Set())
-  const [focusArcsOnSelection, setFocusArcsOnSelection] = useState(true)
+  /*
+    Null means the reader has not touched the connections row yet, so the
+    drawing follows whatever link opened the page. The moment they switch a
+    kind on or off, their choice replaces it and the address bar stops having
+    an opinion.
+
+    Derived rather than seeded in an effect, because the kinds worth switching
+    on are not known until the graph and the locations have both loaded, and an
+    effect that waits for them would set state during a render pass that has
+    already drawn an empty plat.
+  */
+  const [chosenArcKeys, setChosenArcKeys] = useState<Set<string> | null>(null)
+  const [focusArcsOnSelection, setFocusArcsOnSelection] = useState(initialConnections !== 'all')
   const [gradeArcsByAge, setGradeArcsByAge] = useState(false)
+  /*
+    On by default. A one pixel arc at half opacity, over parcel boundaries drawn
+    in the same weight, is legible on the laptop it was designed on and gone on
+    the screen a board meeting is run from.
+  */
+  const [boldArcs, setBoldArcs] = useState(true)
   const overlay = useOverlay()
   const [placing, setPlacing] = useState<Entity | null>(null)
 
@@ -174,6 +209,13 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
     [graph, locations]
   )
 
+  const arcKeys = useMemo(
+    () =>
+      chosenArcKeys ??
+      (initialConnections === null ? NO_ARC_KEYS : new Set(availableArcKeys)),
+    [chosenArcKeys, initialConnections, availableArcKeys]
+  )
+
   const arcs = useMemo(() => {
     if (!graph || !locations) return []
     return buildArcs({
@@ -190,21 +232,23 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
     [arcs]
   )
 
+  /* The same focus the arcs are built with, so the note counts what is missing
+     from the drawing on screen rather than from the association as a whole. */
   const undrawn = useMemo(
     () =>
       graph && locations
-        ? undrawnCounts(graph, locations, arcKeys)
+        ? undrawnCounts(graph, locations, arcKeys, focusArcsOnSelection ? selectedId : null)
         : { unplacedEnd: 0, sameLocation: 0 },
-    [graph, locations, arcKeys]
+    [graph, locations, arcKeys, focusArcsOnSelection, selectedId]
   )
 
+  const arcsShown = arcKeys.size > 0
+
   const toggleArcKey = (key: string) => {
-    setArcKeys((previous) => {
-      const next = new Set(previous)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
+    const next = new Set(arcKeys)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    setChosenArcKeys(next)
   }
 
   const handlePlace = useCallback(
@@ -354,10 +398,26 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
 
         {/* Arc filter, off by default */}
         <div className="border-rule flex flex-wrap items-center gap-2 border-b px-3 py-2">
-          <span className="label-caps flex items-center gap-1.5 text-[0.6875rem]">
-            <Spline className="size-3.5" aria-hidden="true" />
-            Connections
-          </span>
+          {/*
+            One button, not a row of chips to work out.
+
+            This row used to open with the word "Connections" set as a caption,
+            followed by chips named after relation types. It read as a legend
+            rather than as a control, so the plat's best feature was reachable
+            only by a reader who already knew the chips were buttons. The chips
+            are still here to narrow down with, after the question "show me
+            what connects to what" has been answered in one click.
+          */}
+          <Button
+            size="sm"
+            variant={arcsShown ? 'primary' : 'secondary'}
+            aria-pressed={arcsShown}
+            onClick={() => setChosenArcKeys(toggleAllArcKeys(arcKeys, availableArcKeys))}
+            disabled={availableArcKeys.length === 0}
+          >
+            <Spline className="size-3.5" />
+            {arcsShown ? 'Hide connections' : 'Show connections'}
+          </Button>
 
           {availableArcKeys.map((key) => {
             const active = arcKeys.has(key)
@@ -386,7 +446,7 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
             )
           })}
 
-          {arcKeys.size > 0 ? (
+          {arcsShown ? (
             <>
               <Checkbox
                 label="Only the selected record"
@@ -395,42 +455,52 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
                 className="ml-2"
               />
               <Checkbox
+                label="Bold lines"
+                checked={boldArcs}
+                onChange={(event) => setBoldArcs(event.target.checked)}
+              />
+              <Checkbox
                 label="Grade by age"
                 checked={gradeArcsByAge}
                 onChange={(event) => setGradeArcsByAge(event.target.checked)}
               />
-              <Button size="sm" variant="ghost" onClick={() => setArcKeys(new Set())}>
-                Clear
-              </Button>
             </>
           ) : (
             <span className="text-ink-faint text-xs">
-              Off by default. Switch a type on to draw it across the plat.
+              {availableArcKeys.length === 0
+                ? 'Nothing to draw yet: a connection needs both records placed on the map.'
+                : 'Off by default. Show connections draws every kind at once, or pick a single kind.'}
             </span>
           )}
         </div>
 
-        {arcKeys.size > 0 && gradeArcsByAge ? (
+        {arcsShown && gradeArcsByAge ? (
           <div className="border-rule border-b px-3 py-2">
             <RecencyLegend scale={arcScale} groupedBy="type" />
           </div>
         ) : null}
 
-        {arcKeys.size > 0 && (undrawn.unplacedEnd > 0 || undrawn.sameLocation > 0) ? (
+        {arcsShown && (undrawn.unplacedEnd > 0 || undrawn.sameLocation > 0) ? (
           <div className="border-rule border-b px-3 py-2">
             <Notice tone="info">
               <span>
                 {undrawn.sameLocation > 0 ? (
                   <>
-                    {undrawn.sameLocation} of these connections join two records that resolve to
-                    the same spot, usually an owner living in the lot they own, so there is no line
-                    to draw.{' '}
+                    {undrawn.sameLocation === 1
+                      ? 'One of these connections joins'
+                      : `${String(undrawn.sameLocation)} of these connections join`}{' '}
+                    two records that resolve to the same spot, usually an owner living in the lot
+                    they own, so there is no line to draw.{' '}
                   </>
                 ) : null}
                 {undrawn.unplacedEnd > 0 ? (
                   <>
-                    {undrawn.unplacedEnd} more have one end with no location, and are listed in the
-                    unplaced records below.
+                    {undrawn.unplacedEnd === 1 ? 'One' : undrawn.unplacedEnd}
+                    {undrawn.sameLocation > 0 ? ' more' : ''}
+                    {undrawn.unplacedEnd === 1
+                      ? ' has one end with no location, and is listed'
+                      : ' have one end with no location, and are listed'}{' '}
+                    in the unplaced records below.
                   </>
                 ) : null}
               </span>
@@ -448,6 +518,7 @@ export function MapView({ initialEntityId, onSelectionChange }: MapViewProps) {
           <div className="border-rule h-[26rem] border-b lg:h-[38rem] lg:border-r lg:border-b-0">
             <PlatView
               gradeArcsByAge={gradeArcsByAge}
+              boldArcs={boldArcs}
               overlay={overlay.collection}
               theming={theming}
               litPins={litPins}

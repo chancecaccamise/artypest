@@ -1,7 +1,7 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { PageHeader } from '@/components/layout/PageHeader'
-import { MapView } from '@/features/map/MapView'
+import { MapView, type InitialConnections } from '@/features/map/MapView'
 import { PhaseTag } from '@/components/ui/phase-note'
 
 /*
@@ -15,6 +15,20 @@ import { PhaseTag } from '@/components/ui/phase-note'
 export function PlatPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
+  /*
+    `?connections=focus` is how the Connection Map hands a record over: draw
+    this record's connections over the parcels and nothing else.
+
+    A query parameter rather than router state, because the whole point of
+    putting the selection in the route was that a view of one lot is a link. A
+    view of one lot and its connections has to be one too, or it cannot be
+    pasted into a board packet.
+  */
+  const requested = searchParams.get('connections')
+  const initialConnections: InitialConnections | null =
+    requested === 'focus' || requested === 'all' ? requested : null
 
   return (
     <>
@@ -26,6 +40,7 @@ export function PlatPage() {
 
       <MapView
         initialEntityId={id ?? null}
+        initialConnections={initialConnections}
         onSelectionChange={(entityId) => {
           // The selection is in the route, so a view of one lot is a link.
           navigate(entityId ? `/plat/${entityId}` : '/plat', { replace: true })

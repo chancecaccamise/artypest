@@ -7,7 +7,7 @@ import { buildRecencyScale } from '@/lib/relations/recency'
 
 import { buildDemoData } from '@/lib/data/fixtures'
 
-import { buildFanScales, buildRings } from './ConnectionMap'
+import { buildFanScales, buildRings, threadStyle } from './ConnectionMap'
 
 /*
   The threads on the Connection Map: what colour they are, and what order the
@@ -250,5 +250,51 @@ describe('the seeded association, end to end', () => {
 
     const dates = live.map((node) => node.relation.startDate ?? '')
     expect([...dates].sort()).toEqual(dates)
+  })
+})
+
+describe('how heavily a thread is drawn', () => {
+  const current = { current: true, ring: 1 } as const
+  const ended = { current: false, ring: 1 } as const
+  const secondRing = { current: true, ring: 2 } as const
+
+  it('draws bold lines thicker, with a halo behind them', () => {
+    const plain = threadStyle(current, 1, false)
+    const bold = threadStyle(current, 1, true)
+
+    expect(bold.strokeWidth).toBeGreaterThan(plain.strokeWidth)
+    expect(plain.halo).toBeNull()
+    expect(bold.halo?.strokeWidth).toBeGreaterThan(bold.strokeWidth)
+  })
+
+  it('lifts the age ramp rather than flattening it', () => {
+    /*
+      The bug this exists to prevent. Clamping every thread to a minimum
+      opacity would make the oldest lots in a fan identical to each other,
+      which is exactly what grading by age is for.
+    */
+    const oldest = threadStyle(current, 0.3, true).opacity
+    const middle = threadStyle(current, 0.6, true).opacity
+    const newest = threadStyle(current, 1, true).opacity
+
+    expect(oldest).toBeLessThan(middle)
+    expect(middle).toBeLessThan(newest)
+    // The faintest thread on a bold map is still clearly on the page.
+    expect(oldest).toBeGreaterThan(threadStyle(current, 0.3, false).opacity)
+    expect(oldest).toBeGreaterThan(0.5)
+  })
+
+  it('keeps an ended connection quieter than a current one of the same age', () => {
+    for (const bold of [false, true]) {
+      expect(threadStyle(ended, 1, bold).opacity).toBeLessThan(
+        threadStyle(current, 1, bold).opacity
+      )
+    }
+  })
+
+  it('keeps the second ring dashed either way, so one step out still reads as one step out', () => {
+    expect(threadStyle(secondRing, 1, false).strokeDasharray).toBeDefined()
+    expect(threadStyle(secondRing, 1, true).strokeDasharray).toBeDefined()
+    expect(threadStyle(current, 1, true).strokeDasharray).toBeUndefined()
   })
 })

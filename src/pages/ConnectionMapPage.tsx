@@ -1,10 +1,15 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Clock, Search } from 'lucide-react'
+import { ArrowLeft, Clock, Map as MapIcon, Search, Spline } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 import { entityHref } from '@/components/layout/nav-config'
-import { ConnectionMap, TypeFilterBar, buildRings } from '@/components/graph/ConnectionMap'
+import {
+  ConnectionMap,
+  MapToggle,
+  TypeFilterBar,
+  buildRings,
+} from '@/components/graph/ConnectionMap'
 import { RecencyLegend } from '@/components/graph/RecencyLegend'
 import { TypeBadge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
@@ -31,6 +36,12 @@ export function ConnectionMapPage() {
 
   const [hiddenTypes, setHiddenTypes] = useState<Set<EntityType>>(new Set())
   const [gradeByAge, setGradeByAge] = useState(false)
+  /*
+    On by default. A hairline thread is legible on the laptop it was designed on
+    and invisible on the screen a board meeting is run from, and the map is
+    worth nothing if the lines between the cards cannot be followed.
+  */
+  const [boldLines, setBoldLines] = useState(true)
   const [search, setSearch] = useState('')
 
   /** With no record in the route, start at the association: everything hangs off it. */
@@ -151,6 +162,20 @@ export function ConnectionMapPage() {
                 Back to the association
               </Link>
             ) : null}
+            {/*
+              The same connections, drawn over the parcels instead of in a
+              tree, narrowed to this record. The plat can already draw every
+              connection in the association at once, which is the right default
+              for the plat and the wrong thing to hand a board member who came
+              here asking about one resident.
+            */}
+            <Link
+              to={`/plat/${focus.id}?connections=focus`}
+              className={cn(buttonVariants({ size: 'sm', variant: 'secondary' }))}
+            >
+              <MapIcon className="size-3.5" />
+              Open in Plat View
+            </Link>
             <Link
               to={entityHref(focus.type, focus.id)}
               className={cn(buttonVariants({ size: 'sm', variant: 'secondary' }))}
@@ -203,20 +228,20 @@ export function ConnectionMapPage() {
           </Field>
 
           <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setGradeByAge((on) => !on)}
-              aria-pressed={gradeByAge}
-              className={cn(
-                'flex items-center gap-1.5 rounded-[3px] border px-2 py-1 text-xs font-semibold transition-colors duration-[120ms]',
-                gradeByAge
-                  ? 'border-ink-muted text-ink'
-                  : 'border-rule text-ink-faint'
-              )}
+            <MapToggle
+              pressed={boldLines}
+              onClick={() => setBoldLines((on) => !on)}
+              icon={Spline}
             >
-              <Clock className="size-3.5" aria-hidden="true" />
+              Bold lines
+            </MapToggle>
+            <MapToggle
+              pressed={gradeByAge}
+              onClick={() => setGradeByAge((on) => !on)}
+              icon={Clock}
+            >
               Age
-            </button>
+            </MapToggle>
             <TypeFilterBar counts={counts} hiddenTypes={hiddenTypes} onToggle={toggleType} />
           </div>
         </div>
@@ -251,6 +276,7 @@ export function ConnectionMapPage() {
                 focus={focus}
                 hiddenTypes={hiddenTypes}
                 gradeByAge={gradeByAge}
+                boldLines={boldLines}
                 onFocusChange={(entity) => navigate(`/map/${entity.id}`)}
               />
             </>
@@ -261,7 +287,9 @@ export function ConnectionMapPage() {
           <span>
             Threads are coloured by the kind of connection, the same colours the plat draws them
             in. Solid is a direct connection, dashed is one step further out, and faded cards are
-            relationships that have ended. Switch Age on to grade them by how recent they are.
+            relationships that have ended. Switch Age on to grade them by how recent they are, and
+            Bold lines off to draw them as hairlines. Open in Plat View draws these same
+            connections over the parcel map, limited to this record.
           </span>
           <span className="font-mono text-xs">click a card to re-centre</span>
         </PanelFooter>

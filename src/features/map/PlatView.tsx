@@ -12,7 +12,7 @@ import {
 } from 'react'
 import { Crosshair, LocateFixed, Maximize2, Minus, Plus } from 'lucide-react'
 
-import { arcColor, arcPath, type MapArc } from './arcs'
+import { arcColor, arcPath, arcStroke, type MapArc } from './arcs'
 import { buildRecencyScale } from '@/lib/relations/recency'
 import {
   buildProjection,
@@ -76,6 +76,17 @@ const FOCUS_FILL = 0.45
 const FRAME_FILL = 0.78
 
 /*
+  As close as framing a set of connections is allowed to get.
+
+  Two records on neighbouring lots are metres apart, and framing that pair to
+  fill the viewport lands at the ceiling, 25000%, where one lot fills the screen
+  and the connection it was drawn to show has no context at all. A reader who
+  asked to see a resident's connections wants the blocks they run across. They
+  can still zoom further by hand.
+*/
+const ARC_FRAME_MAX_ZOOM = 40
+
+/*
   The most lots drawn at once. The harvested layer holds 16,656, and at any zoom
   where a reader is looking at lots rather than at the shape of the city far
   fewer than this are on screen, so the cap only bites when fully zoomed out.
@@ -128,6 +139,8 @@ export interface PlatViewProps {
   arcs: MapArc[]
   /** Grade the arcs by how recent each connection is. */
   gradeArcsByAge?: boolean
+  /** Draw the arcs heavily enough to follow across the plat. */
+  boldArcs?: boolean
   /** The district boundaries drawn under the lots. One at a time. */
   overlay?: OverlayCollection | null
   onSelectPin: (pin: string | null) => void
@@ -153,6 +166,7 @@ export function PlatView({
   selectedEntityId,
   arcs,
   gradeArcsByAge = false,
+  boldArcs = true,
   overlay = null,
   onSelectPin,
   onSelectEntity,
@@ -535,7 +549,7 @@ export function PlatView({
    * frame things the same way rather than three slightly different ways.
    */
   const frame = useCallback(
-    (bounds: readonly [number, number, number, number]) => {
+    (bounds: readonly [number, number, number, number], maxZoom = MAX_ZOOM) => {
       const svg = svgRef.current
       const behaviour = zoomRef.current
       if (!svg || !behaviour) return
@@ -547,7 +561,7 @@ export function PlatView({
         size.height,
         FRAME_FILL,
         MIN_ZOOM,
-        MAX_ZOOM
+        maxZoom
       )
       const next = zoomIdentity.translate(x, y).scale(k)
 
@@ -585,21 +599,41 @@ export function PlatView({
     Switching a connection type on is a request to look at those connections, so
     the plat goes to them. Keyed on the set of relation ids rather than on the
     arcs array, which is rebuilt on every pan.
+
+    Latched only once the framing actually happened, and against the projection
+    it happened in. Both matter now that a link can arrive with connections
+    already on: the arcs then exist before the container has been measured and
+    before the harvested geometry has landed, and the old version latched on
+    that first pass and never framed at all. The projection is memoised on the
+    size and the geometry, not on the transform, so this does not refire on a
+    pan or a zoom.
   */
   const arcSignature = useMemo(
     () => arcs.map((arc) => arc.relationId).join(','),
     [arcs]
   )
-  const lastArcSignature = useRef('')
+  const lastArcFrame = useRef<{ signature: string; projection: unknown }>({
+    signature: '',
+    projection: null,
+  })
   useEffect(() => {
-    if (arcSignature === lastArcSignature.current) return
-    const previous = lastArcSignature.current
-    lastArcSignature.current = arcSignature
-    // Only when arcs appear or change, never when the last one is switched off.
-    if (arcSignature === '' || previous === arcSignature) return
+    // Switching the last one off leaves the view where the reader had it.
+    if (arcSignature === '') {
+      lastArcFrame.current = { signature: '', projection }
+      return
+    }
+    if (
+      arcSignature === lastArcFrame.current.signature &&
+      projection === lastArcFrame.current.projection
+    ) {
+      return
+    }
     if (!arcBounds) return
-    frame(arcBounds)
-  }, [arcSignature, arcBounds, frame])
+    if (size.width <= 1 || size.height <= 1) return
+
+    lastArcFrame.current = { signature: arcSignature, projection }
+    frame(arcBounds, ARC_FRAME_MAX_ZOOM)
+  }, [arcSignature, arcBounds, frame, projection, size.width, size.height])
 
   const zoomBy = useCallback((factor: number) => {
     const svg = svgRef.current
@@ -772,15 +806,15 @@ export function PlatView({
           <g className="arcs" pointerEvents="none">
             {projectedArcs.map(({ arc, d }) => {
               /*
-                Ungraded, an arc sits at 0.55 so it reads over the lots without
-                burying them. Graded, that ceiling becomes what the most recent
-                connection gets and everything older is drawn back from it, so
-                switching Age on never makes the plat louder than it was.
+                Graded, the ceiling becomes what the most recent connection
+                gets and everything older is drawn back from it, so switching
+                Age on never makes the plat louder than it was. The weights
+                themselves live in arcs.ts, next to the geometry.
               */
               const strength = gradeArcsByAge
                 ? (arcScales.get(arc.relationKey)?.strengthOf(arc.relationId) ?? 1)
                 : 1
-              const opacity = (arc.current ? 0.55 : 0.3) * strength
+              const stroke = arcStroke({ current: arc.current, strength, bold: boldArcs })
 
               return (
                 <path
@@ -788,9 +822,10 @@ export function PlatView({
                   d={d}
                   fill="none"
                   stroke={arcColor(arc.relationKey)}
-                  strokeWidth={1 / zoomLevel}
-                  strokeDasharray={arc.current ? undefined : `${3 / zoomLevel} ${3 / zoomLevel}`}
-                  opacity={opacity}
+                  strokeWidth={stroke.strokeWidth / zoomLevel}
+                  strokeLinecap="round"
+                  strokeDasharray={scaleDash(stroke.strokeDasharray, zoomLevel)}
+                  opacity={stroke.opacity}
                 />
               )
             })}
@@ -927,6 +962,19 @@ export function PlatView({
 /** `20032 63001` reads as `63001` on the drawing. The full PIN is in the panel. */
 function shortPin(pin: string): string {
   return pin.slice(6)
+}
+
+/*
+  Dash lengths are quoted in screen pixels and drawn inside the zoom transform,
+  so they are divided the same way stroke widths are. Without this a dashed arc
+  turns solid on the way in and vanishes on the way out.
+*/
+function scaleDash(pattern: string | undefined, zoomLevel: number): string | undefined {
+  if (pattern === undefined) return undefined
+  return pattern
+    .split(' ')
+    .map((part) => Number(part) / zoomLevel)
+    .join(' ')
 }
 
 /* ---------------------------------------------------------------- parcel -- */

@@ -27,6 +27,26 @@ export const NEWEST_STRENGTH = 1
 export const UNDATED_STRENGTH = 0.55
 
 /*
+  The floor a bold drawing starts its ramp at.
+
+  Bold lifts the ramp, it does not flatten it. Clamping every line to a minimum
+  is the obvious version and the wrong one: in a fan of eight lots it makes the
+  oldest four identical, and telling those apart is the whole reason the ramp
+  exists. So the range is shifted instead, and still runs oldest to newest over
+  a band that starts somewhere visible.
+
+  It lives here, next to the ramp it shifts, because the plat and the Connection
+  Map are two drawings of the same relationships. When they each had their own
+  number, a connection drawn bold in one view was drawn faint in the other.
+*/
+export const BOLD_FLOOR = 0.5
+
+/** A strength on the ramp, shifted into the band a bold drawing uses. */
+export function boldStrength(strength: number): number {
+  return BOLD_FLOOR + strength * (1 - BOLD_FLOOR)
+}
+
+/*
   Below this the ramp is not telling the truth: two dates a day apart would be
   drawn as far apart as two dates a decade apart. A set this tight is reported
   as having no spread and every thread is drawn at full strength.

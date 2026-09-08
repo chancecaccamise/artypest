@@ -20,7 +20,12 @@ import {
 } from '@/lib/data/types'
 import { isCurrent, type ResolvedGraph } from '@/lib/insights'
 import { relationColor } from '@/lib/relations/colors'
-import { buildRecencyScale, compareByDate, type RecencyScale } from '@/lib/relations/recency'
+import {
+  boldStrength,
+  buildRecencyScale,
+  compareByDate,
+  type RecencyScale,
+} from '@/lib/relations/recency'
 import { cn } from '@/lib/utils'
 
 /*
@@ -32,6 +37,11 @@ import { cn } from '@/lib/utils'
   neighbours connect to in turn, on a dashed line, so a two-step relationship
   ("the treasurer works for the landscaping vendor") is visible without
   clicking through.
+
+  How heavily those lines are drawn is the reader's call, because it depends on
+  the screen. A hairline reads well on a laptop a foot away and disappears on a
+  board room projector, so Bold lines exists and is on by default: a line
+  nobody can follow is a map nobody can read.
 
   The layout is computed, not physics-simulated. A force-directed graph
   reshuffles every time it is opened, and a board member comparing two lots
@@ -80,6 +90,8 @@ export interface ConnectionMapProps {
   hiddenTypes: Set<EntityType>
   /** Grade the threads by how recent each connection is. */
   gradeByAge?: boolean
+  /** Draw the threads heavily enough to follow across the room. */
+  boldLines?: boolean
   onFocusChange: (entity: Entity) => void
 }
 
@@ -93,6 +105,7 @@ export function ConnectionMap({
   focus,
   hiddenTypes,
   gradeByAge = false,
+  boldLines = true,
   onFocusChange,
 }: ConnectionMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -155,16 +168,33 @@ export function ConnectionMap({
               ? (scales.get(node.parentId)?.strengthOf(node.relation.id) ?? 1)
               : 1
 
+            const thread = threadStyle(node, strength, boldLines)
+            const d = edgePath(from, to)
+            const stroke = relationColor(node.relationKey)
+
             return (
-              <path
-                key={`edge-${node.entity.id}`}
-                d={edgePath(from, to)}
-                fill="none"
-                stroke={relationColor(node.relationKey)}
-                strokeWidth={1.5}
-                strokeDasharray={node.ring === 2 ? '3 3' : undefined}
-                opacity={node.current ? strength : Math.max(0.22, strength * 0.6)}
-              />
+              <g key={`edge-${node.entity.id}`}>
+                {thread.halo ? (
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={thread.halo.strokeWidth}
+                    strokeDasharray={thread.strokeDasharray}
+                    strokeLinecap={thread.strokeLinecap}
+                    opacity={thread.halo.opacity}
+                  />
+                ) : null}
+                <path
+                  d={d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={thread.strokeWidth}
+                  strokeDasharray={thread.strokeDasharray}
+                  strokeLinecap={thread.strokeLinecap}
+                  opacity={thread.opacity}
+                />
+              </g>
             )
           })}
         </svg>
@@ -291,6 +321,48 @@ function MapCard({
       {content}
     </button>
   )
+}
+
+/* --------------------------------------------------------------- threads -- */
+
+export interface ThreadStyle {
+  strokeWidth: number
+  /** Set on ring 2 only: dashed means "one step further out". */
+  strokeDasharray?: string
+  strokeLinecap: 'butt' | 'round'
+  opacity: number
+  /** A wider, fainter copy drawn underneath, so the line has an edge to it. */
+  halo: { strokeWidth: number; opacity: number } | null
+}
+
+/*
+  Bold lines lifts the ramp rather than flattening it: `boldStrength` is shared
+  with the plat, which draws the same connections as arcs.
+
+  The shift happens before the ended-connection discount, so a thread that has
+  ended is never drawn louder than a current one of the same age no matter how
+  bold the drawing gets.
+*/
+const ENDED_FLOOR_PLAIN = 0.22
+const ENDED_FLOOR_BOLD = 0.4
+
+export function threadStyle(
+  node: Pick<MapNode, 'current' | 'ring'>,
+  strength: number,
+  boldLines: boolean
+): ThreadStyle {
+  const graded = boldLines ? boldStrength(strength) : strength
+  const opacity = node.current
+    ? graded
+    : Math.max(boldLines ? ENDED_FLOOR_BOLD : ENDED_FLOOR_PLAIN, graded * 0.6)
+
+  return {
+    strokeWidth: boldLines ? 2.75 : 1.5,
+    strokeDasharray: node.ring === 2 ? (boldLines ? '7 5' : '3 3') : undefined,
+    strokeLinecap: boldLines ? 'round' : 'butt',
+    opacity,
+    halo: boldLines ? { strokeWidth: 8, opacity: opacity * 0.16 } : null,
+  }
 }
 
 /* ---------------------------------------------------------------- layout -- */
@@ -538,3 +610,34 @@ export function TypeFilterBar({ counts, hiddenTypes, onToggle }: TypeFilterBarPr
   )
 }
 
+/* --------------------------------------------------------------- toggles -- */
+
+export interface MapToggleProps {
+  pressed: boolean
+  onClick: () => void
+  icon: LucideIcon
+  children: React.ReactNode
+}
+
+/**
+ * A switch in the map's control row, shaped like the type filter chips.
+ *
+ * Shared rather than written twice, so a reader scanning that row sees one kind
+ * of control and not two that happen to look similar.
+ */
+export function MapToggle({ pressed, onClick, icon: Icon, children }: MapToggleProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={pressed}
+      className={cn(
+        'flex items-center gap-1.5 rounded-[3px] border px-2 py-1 text-xs font-semibold transition-colors duration-[120ms]',
+        pressed ? 'border-ink-muted text-ink' : 'border-rule text-ink-faint'
+      )}
+    >
+      <Icon className="size-3.5" aria-hidden="true" />
+      {children}
+    </button>
+  )
+}

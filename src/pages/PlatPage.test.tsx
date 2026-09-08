@@ -4,8 +4,10 @@ import { beforeAll, describe, expect, it } from 'vitest'
 
 import App from '@/App'
 import { data } from '@/lib/data'
+import { arcableKeys, buildArcs, undrawnCounts } from '@/features/map/arcs'
 import { PARCELS } from '@/lib/geo'
 import type { Entity } from '@/lib/data/types'
+import { resolveGraph } from '@/lib/insights'
 import { normalizePin } from '@/lib/parcels/pin'
 import { renderWithProviders } from '@/test/render'
 
@@ -20,6 +22,8 @@ const FIRST_PIN = normalizePin(PARCELS.features[0]?.properties.pin ?? '')
 
 let plattedProperty: Entity
 let unplacedRecord: Entity
+/** A record with at least one connection the plat can actually draw a line for. */
+let connectedRecord: Entity
 
 beforeAll(async () => {
   const locations = await data.listLocations()
@@ -31,6 +35,27 @@ beforeAll(async () => {
   const unplaced = locations.unplaced[0]
   if (!unplaced) throw new Error('The seeded data places everything, so the tray cannot be tested')
   unplacedRecord = unplaced
+
+  const graph = resolveGraph({
+    entities: await data.listAllEntities(),
+    relations: await data.listRelations(),
+    relationTypes: await data.listRelationTypes(),
+  })
+  const keys = new Set(arcableKeys(graph, locations))
+
+  /*
+    Picked rather than named, because most connections have no line to draw:
+    an owner who lives in the lot they own sits on the same point at both ends.
+    Hard-coding a resident here would tie the test to which of them happens to
+    live somewhere else this week.
+  */
+  const found = graph.entities.find(
+    (entity) =>
+      entity.deletedAt === null &&
+      buildArcs({ graph, locations, keys, focusEntityId: entity.id }).length > 0
+  )
+  if (!found) throw new Error('No record in the seeded data has a connection the plat can draw')
+  connectedRecord = found
 })
 
 describe('plat view', () => {
@@ -266,5 +291,80 @@ describe('location provenance on a record', () => {
 
     expect(await screen.findByText('derived')).toBeInTheDocument()
     expect(screen.getByText(borrowed.explanation)).toBeInTheDocument()
+  })
+})
+
+describe('from the Connection Map to the plat', () => {
+  it('hands the record over with its connections already drawn, and only its own', async () => {
+    const user = userEvent.setup()
+    const { container } = renderWithProviders(<App />, { route: `/map/${connectedRecord.id}` })
+
+    await user.click(await screen.findByRole('link', { name: 'Open in Plat View' }))
+
+    // Switched on by arriving, not by hunting for the button once here.
+    expect(await screen.findByRole('button', { name: 'Hide connections' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(container.querySelectorAll('.arcs path').length).toBeGreaterThan(0)
+    })
+    expect(screen.getByLabelText('Only the selected record')).toBeChecked()
+
+    // Every arc on the drawing touches the record that was handed over.
+    const locations = await data.listLocations()
+    const graph = resolveGraph({
+      entities: await data.listAllEntities(),
+      relations: await data.listRelations(),
+      relationTypes: await data.listRelationTypes(),
+    })
+    const drawn = buildArcs({
+      graph,
+      locations,
+      keys: new Set(arcableKeys(graph, locations)),
+      focusEntityId: connectedRecord.id,
+    })
+    expect(container.querySelectorAll('.arcs path')).toHaveLength(drawn.length)
+  })
+
+  it('counts what is missing from this record rather than from the association', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<App />, { route: `/map/${connectedRecord.id}` })
+
+    await user.click(await screen.findByRole('link', { name: 'Open in Plat View' }))
+    await screen.findByRole('button', { name: 'Hide connections' })
+
+    const locations = await data.listLocations()
+    const graph = resolveGraph({
+      entities: await data.listAllEntities(),
+      relations: await data.listRelations(),
+      relationTypes: await data.listRelationTypes(),
+    })
+    const keys = new Set(arcableKeys(graph, locations))
+    const scoped = undrawnCounts(graph, locations, keys, connectedRecord.id)
+    const association = undrawnCounts(graph, locations, keys)
+
+    /*
+      The note used to report the association's counts whatever was on screen,
+      so a reader looking at one resident's four connections was told ninety of
+      them had no line to draw.
+    */
+    expect(association.sameLocation).toBeGreaterThan(scoped.sameLocation)
+
+    if (scoped.sameLocation === 0 && scoped.unplacedEnd === 0) {
+      expect(screen.queryByText(/no line to draw/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/one end with no location/)).not.toBeInTheDocument()
+      return
+    }
+    if (scoped.sameLocation > 0) {
+      const note = await screen.findByText(/no line to draw/)
+      expect(note.textContent).not.toContain(String(association.sameLocation))
+    }
+  })
+
+  it('leaves the connections off when the plat is opened without them', async () => {
+    const { container } = renderWithProviders(<App />, {
+      route: `/plat/${connectedRecord.id}`,
+    })
+
+    expect(await screen.findByRole('button', { name: 'Show connections' })).toBeInTheDocument()
+    expect(container.querySelectorAll('.arcs path')).toHaveLength(0)
   })
 })

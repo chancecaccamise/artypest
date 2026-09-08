@@ -2,7 +2,7 @@ import type { Entity, LocationIndex, Relation } from '@/lib/data/types'
 import type { Point } from '@/lib/geocoding/types'
 import { isCurrent, type ResolvedGraph } from '@/lib/insights'
 import { RELATION_COLORS, relationColor } from '@/lib/relations/colors'
-import { relationDate } from '@/lib/relations/recency'
+import { boldStrength, relationDate } from '@/lib/relations/recency'
 
 /*
   Connection arcs. See docs/PLAT-VIEW-SPEC.md section 6.
@@ -34,7 +34,7 @@ export interface BuildArcsInput {
   graph: ResolvedGraph
   locations: LocationIndex
   /** Relation type keys to include. Empty means none, which is the default. */
-  keys: Set<string>
+  keys: ReadonlySet<string>
   /** When set, only arcs touching this record are produced. */
   focusEntityId?: string | null
   today?: Date
@@ -135,6 +135,67 @@ export function arcPath(
   return `M ${round(x1)},${round(y1)} Q ${round(controlX)},${round(controlY)} ${round(x2)},${round(y2)}`
 }
 
+/* ------------------------------------------------------------- drawing -- */
+
+export interface ArcStroke {
+  /** In screen pixels. The caller divides by the zoom level itself. */
+  strokeWidth: number
+  opacity: number
+  /** Set on ended connections only, like the history divider elsewhere. */
+  strokeDasharray?: string
+}
+
+export interface ArcStrokeInput {
+  current: boolean
+  /** Where this arc sits on its type's recency ramp. 1 when ungraded. */
+  strength?: number
+  /** Draw it heavily enough to follow across the plat. */
+  bold?: boolean
+}
+
+/*
+  Ungraded and plain, an arc sits at 0.55 so it reads over the lots without
+  burying them. That ceiling was chosen when arcs were a thing you switched on
+  one type at a time to answer one question, and it is too quiet for a plat put
+  on a wall: a screen-width hairline at just over half opacity, over parcel
+  boundaries drawn in the same weight.
+
+  Bold raises the ceiling and the weight, and lifts the ramp so the faintest
+  graded arc lands at about what a plain ungraded one used to be. Grading never
+  makes the plat louder than not grading, in either mode, because strength only
+  ever multiplies down from the ceiling.
+*/
+const ARC_WIDTH_PLAIN = 1
+const ARC_WIDTH_BOLD = 2.25
+const ARC_CEILING_PLAIN = { current: 0.55, ended: 0.3 }
+const ARC_CEILING_BOLD = { current: 0.85, ended: 0.5 }
+
+export function arcStroke({ current, strength = 1, bold = false }: ArcStrokeInput): ArcStroke {
+  const ceiling = bold ? ARC_CEILING_BOLD : ARC_CEILING_PLAIN
+  const graded = bold ? boldStrength(strength) : strength
+
+  return {
+    strokeWidth: bold ? ARC_WIDTH_BOLD : ARC_WIDTH_PLAIN,
+    opacity: (current ? ceiling.current : ceiling.ended) * graded,
+    strokeDasharray: current ? undefined : bold ? '5 4' : '3 3',
+  }
+}
+
+/**
+ * What switching every kind of connection on, or all of them off, produces.
+ *
+ * One button rather than a row of chips to work through, because the first
+ * question a board member asks the plat is "show me what connects to what",
+ * and answering it should not require knowing the vocabulary first. The chips
+ * stay for narrowing down afterwards.
+ */
+export function toggleAllArcKeys(
+  current: ReadonlySet<string>,
+  available: readonly string[]
+): Set<string> {
+  return current.size > 0 ? new Set() : new Set(available)
+}
+
 /*
   Arc colour moved to src/lib/relations/colors.ts when the Connection Map
   started drawing threads in the same palette. Re-exported under the old names
@@ -176,11 +237,17 @@ export interface UndrawnCounts {
  * end is a gap in the records. Two ends on the same point is the normal case
  * for an owner who lives in the lot they own, and a reader who switches on
  * "owns" and sees five arcs across forty lots deserves to know which it is.
+ *
+ * Takes the same focus as `buildArcs` and must be given it. A reader looking
+ * at one resident's connections was being told that ninety connections had no
+ * line to draw, which was true of the association and not of the four in front
+ * of them.
  */
 export function undrawnCounts(
   graph: ResolvedGraph,
   locations: LocationIndex,
-  keys: Set<string>
+  keys: ReadonlySet<string>,
+  focusEntityId?: string | null
 ): UndrawnCounts {
   const counts: UndrawnCounts = { unplacedEnd: 0, sameLocation: 0 }
 
@@ -188,6 +255,14 @@ export function undrawnCounts(
     if (relation.deletedAt !== null) continue
     const type = graph.typeById.get(relation.relationTypeId)
     if (!type || !keys.has(type.key)) continue
+
+    if (
+      focusEntityId &&
+      relation.fromEntityId !== focusEntityId &&
+      relation.toEntityId !== focusEntityId
+    ) {
+      continue
+    }
 
     const from = locations.byEntity.get(relation.fromEntityId)
     const to = locations.byEntity.get(relation.toEntityId)
