@@ -186,6 +186,11 @@ export function resolveLocation(
         const found = via(lot, 'ownership', 'Owns')
         if (found) return found
       }
+      for (const lot of currentlyLinked(entity, ['related_to'], ctx)) {
+        if (lot.type !== 'property') continue
+        const found = via(lot, 'related', 'Associated with')
+        if (found) return found
+      }
       return geocoded(entity, ctx, readString(entity.data.mailingAddress))
     },
 
@@ -196,6 +201,11 @@ export function resolveLocation(
 
       for (const lot of currentlyLinked(entity, ['owns'], ctx, 'from')) {
         const found = via(lot, 'ownership', 'Owns')
+        if (found) return found
+      }
+      for (const lot of currentlyLinked(entity, ['related_to'], ctx)) {
+        if (lot.type !== 'property') continue
+        const found = via(lot, 'related', 'Associated with')
         if (found) return found
       }
       return null

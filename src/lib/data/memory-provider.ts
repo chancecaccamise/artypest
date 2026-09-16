@@ -5,6 +5,7 @@ import { resolveGraph } from '../insights'
 import { resolveAllLocations, resolveLocation, type ResolveContext } from '../locations/resolve'
 import { buildReviewIndex, reviewStateOf } from '../review/status'
 import { buildDemoData, type DemoData } from './fixtures'
+import { getActiveActor } from './actor'
 import { ENTITY_TYPES } from './types'
 import type {
   ActivityEntry,
@@ -50,9 +51,6 @@ import type {
 
 const DEFAULT_PAGE_SIZE = 50
 
-/** Stand-in for auth. The Supabase provider will read this from the session. */
-const CURRENT_USER = 'Demo User'
-
 function clone<T>(value: T): T {
   return structuredClone(value)
 }
@@ -96,7 +94,6 @@ class MemoryProvider implements DataProvider {
   */
   private currentSource: AuditSource = 'hand'
 
-
   constructor(data: DemoData) {
     this.org = clone(data.org)
     this.entities = clone(data.entities)
@@ -121,7 +118,10 @@ class MemoryProvider implements DataProvider {
       this.org.name = patch.name
     }
 
-    if (patch.sagisUrlTemplate !== undefined && patch.sagisUrlTemplate !== this.org.sagisUrlTemplate) {
+    if (
+      patch.sagisUrlTemplate !== undefined &&
+      patch.sagisUrlTemplate !== this.org.sagisUrlTemplate
+    ) {
       this.recordAudit(
         'entities',
         this.org.id,
@@ -243,7 +243,7 @@ class MemoryProvider implements DataProvider {
         many fields it filled in.
       */
       reviewedAt: this.currentSource === 'hand' ? now : null,
-      reviewedBy: this.currentSource === 'hand' ? CURRENT_USER : null,
+      reviewedBy: this.currentSource === 'hand' ? getActiveActor() : null,
     }
 
     this.entities.push(entity)
@@ -327,7 +327,7 @@ class MemoryProvider implements DataProvider {
   }
 
   getActor(): Promise<string> {
-    return Promise.resolve(CURRENT_USER)
+    return Promise.resolve(getActiveActor())
   }
 
   archiveEntity(id: string): Promise<Entity> {
@@ -519,7 +519,12 @@ class MemoryProvider implements DataProvider {
       orgId: this.org.id,
       list: input.list,
       // The stored value is a slug, so renaming the label never rewrites data.
-      value: input.value ?? input.label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''),
+      value:
+        input.value ??
+        input.label
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_|_$/g, ''),
       label: input.label,
       sortOrder: input.sortOrder ?? siblings.length,
       active: input.active ?? true,
@@ -646,7 +651,7 @@ class MemoryProvider implements DataProvider {
       fieldName,
       oldValue,
       newValue,
-      changedBy: CURRENT_USER,
+      changedBy: getActiveActor(),
       changedAt,
       source: this.currentSource,
       batchId: this.currentBatchId,
@@ -663,7 +668,7 @@ class MemoryProvider implements DataProvider {
   private markReviewed(entity: Entity, now: string): void {
     this.recordAudit('entities', entity.id, 'update', 'reviewedAt', entity.reviewedAt, now, now)
     entity.reviewedAt = now
-    entity.reviewedBy = CURRENT_USER
+    entity.reviewedBy = getActiveActor()
   }
 
   /** Last import write per record. One pass, shared by the filter and the index. */
@@ -693,7 +698,6 @@ class MemoryProvider implements DataProvider {
       users: clone(this.users),
     }
   }
-
 }
 
 export function createMemoryProvider(data: DemoData = buildDemoData()): DataProvider {

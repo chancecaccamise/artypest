@@ -8,6 +8,7 @@ import {
   computeOccupancy,
   computeStats,
   isCurrent,
+  needsAttentionFor,
   resolveGraph,
 } from './insights'
 
@@ -150,8 +151,12 @@ describe('computeStats', () => {
         entity('p3', 'person', 'Ordinary member'),
       ],
       relations: [
-        relation('r1', 'rt-member-of', 'p1', 'a1', { attributes: { role: 'board', position: 'president' } }),
-        relation('r2', 'rt-member-of', 'p2', 'a1', { attributes: { role: 'board', position: 'treasurer' } }),
+        relation('r1', 'rt-member-of', 'p1', 'a1', {
+          attributes: { role: 'board', position: 'president' },
+        }),
+        relation('r2', 'rt-member-of', 'p2', 'a1', {
+          attributes: { role: 'board', position: 'treasurer' },
+        }),
         // No board role, so this is a member of the association, not a seat.
         relation('r3', 'rt-member-of', 'p3', 'a1', {}),
       ],
@@ -335,6 +340,53 @@ describe('computeNeedsAttention', () => {
   })
 })
 
+describe('needsAttentionFor', () => {
+  it('gives every record exactly the lines the dashboard links to it, in the same order', () => {
+    const graph = graphFromDemo()
+    const everything = computeNeedsAttention(graph, TODAY)
+    expect(everything.length).toBeGreaterThan(0)
+
+    for (const record of graph.entities) {
+      expect(needsAttentionFor(graph, record.id, TODAY)).toEqual(
+        everything.filter((item) => item.entityId === record.id)
+      )
+    }
+  })
+
+  it('puts a board term on the person, not on the association it is a seat of', () => {
+    const graph = resolveGraph({
+      entities: [
+        entity('a1', 'association', 'HOA'),
+        entity('p1', 'person', 'Outgoing Secretary', { email: 'a@b.test' }),
+      ],
+      relations: [
+        relation('r1', 'rt-member-of', 'p1', 'a1', {
+          endDate: '2026-09-10',
+          attributes: { role: 'board', position: 'secretary' },
+        }),
+      ],
+      relationTypes: TYPES,
+    })
+
+    const onPerson = needsAttentionFor(graph, 'p1', TODAY)
+    expect(onPerson.map((item) => [item.kind, item.description])).toEqual([
+      ['term', 'Outgoing Secretary, Secretary of HOA, term ends'],
+    ])
+    expect(needsAttentionFor(graph, 'a1', TODAY)).toEqual([])
+  })
+
+  it('says nothing about an archived record, as the dashboard does not', () => {
+    const graph = resolveGraph({
+      entities: [{ ...entity('p1', 'person', 'Gone'), archivedAt: '2026-05-01T00:00:00.000Z' }],
+      relations: [],
+      relationTypes: TYPES,
+    })
+
+    expect(needsAttentionFor(graph, 'p1', TODAY)).toEqual([])
+    expect(needsAttentionFor(graph, 'no-such-record', TODAY)).toEqual([])
+  })
+})
+
 describe('computeBoard', () => {
   it('orders president, vice president, treasurer, secretary, then members', () => {
     const graph = resolveGraph({
@@ -347,10 +399,18 @@ describe('computeBoard', () => {
         entity('p5', 'person', 'E Vice'),
       ],
       relations: [
-        relation('r1', 'rt-member-of', 'p1', 'a1', { attributes: { role: 'board', position: 'member' } }),
-        relation('r2', 'rt-member-of', 'p2', 'a1', { attributes: { role: 'board', position: 'president' } }),
-        relation('r3', 'rt-member-of', 'p3', 'a1', { attributes: { role: 'board', position: 'secretary' } }),
-        relation('r4', 'rt-member-of', 'p4', 'a1', { attributes: { role: 'board', position: 'treasurer' } }),
+        relation('r1', 'rt-member-of', 'p1', 'a1', {
+          attributes: { role: 'board', position: 'member' },
+        }),
+        relation('r2', 'rt-member-of', 'p2', 'a1', {
+          attributes: { role: 'board', position: 'president' },
+        }),
+        relation('r3', 'rt-member-of', 'p3', 'a1', {
+          attributes: { role: 'board', position: 'secretary' },
+        }),
+        relation('r4', 'rt-member-of', 'p4', 'a1', {
+          attributes: { role: 'board', position: 'treasurer' },
+        }),
         relation('r5', 'rt-member-of', 'p5', 'a1', {
           attributes: { role: 'board', position: 'vice president' },
         }),
@@ -364,7 +424,10 @@ describe('computeBoard', () => {
 
   it('leaves out a seat whose term has ended', () => {
     const graph = resolveGraph({
-      entities: [entity('a1', 'association', 'HOA', { boardSeats: 3 }), entity('p1', 'person', 'Past')],
+      entities: [
+        entity('a1', 'association', 'HOA', { boardSeats: 3 }),
+        entity('p1', 'person', 'Past'),
+      ],
       relations: [
         relation('r1', 'rt-member-of', 'p1', 'a1', {
           endDate: '2026-01-01',
@@ -377,10 +440,8 @@ describe('computeBoard', () => {
     expect(computeBoard(graph, TODAY)).toHaveLength(0)
   })
 
-  it('groups the seeded data by association', () => {
-    const groups = computeBoard(graphFromDemo(), TODAY)
-    expect(groups.length).toBeGreaterThanOrEqual(2)
-    expect(groups.every((group) => group.seats.length > 0)).toBe(true)
+  it('does not present the archived placeholder roster as the current board', () => {
+    expect(computeBoard(graphFromDemo(), TODAY)).toEqual([])
   })
 })
 

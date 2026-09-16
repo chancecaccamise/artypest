@@ -42,6 +42,11 @@ describe('application shell', () => {
       expect(within(nav).getByRole('link', { name: new RegExp(label) })).toBeInTheDocument()
     }
 
+    expect(within(nav).queryByRole('link', { name: /Parcel Import/ })).not.toBeInTheDocument()
+    expect(
+      within(nav).queryByRole('link', { name: /Owner Reconciliation/ })
+    ).not.toBeInTheDocument()
+
     await waitFor(() => {
       expect(within(nav).getByRole('link', { name: /Properties/ }).textContent).toMatch(/48/)
     })

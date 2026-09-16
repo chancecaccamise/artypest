@@ -1,15 +1,15 @@
-import { useCallback, useMemo, useState } from 'react'
-import { Columns2, Map as MapIcon, Network, Spline } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Columns2, Map as MapIcon, Spline } from 'lucide-react'
 
-import { MapLegend } from './MapLegend'
 import { MapPanel } from './MapPanel'
+import { ParcelConnections } from './ParcelConnections'
 import { normalizePin } from '@/lib/parcels/pin'
 import { PlatView, shortPin, type PlatMarker } from './PlatView'
 import { useHarvestedParcels } from './use-harvested-parcels'
+import { parcelForLocatedRecord, parcelHoverLabel } from './parcel-summary'
 import { useOverlay } from './use-overlay'
 import { RecencyLegend } from '@/components/graph/RecencyLegend'
 import { buildRecencyScale } from '@/lib/relations/recency'
-import { UnplacedTray } from './UnplacedTray'
 import { arcColor, arcableKeys, buildArcs, toggleAllArcKeys, undrawnCounts } from './arcs'
 import { THEMATIC_MODES, THEMATIC_MODE_LABELS, buildTheming, type ThematicMode } from './theming'
 import { ConnectionMap } from '@/components/graph/ConnectionMap'
@@ -127,6 +127,15 @@ export function MapView({
     the same way the plat's own geometry does.
   */
   const harvestedParcels = useHarvestedParcels()
+  const refetchLocations = locationsQuery.refetch
+  useEffect(() => {
+    if (harvestedParcels.collection) {
+      // The provider can now resolve contacts through the county PINs whose
+      // geometry was not loaded during the initial directory request.
+      void refetchLocations()
+    }
+  }, [harvestedParcels.collection, refetchLocations])
+
   const pins = useMemo(() => {
     const all = new Set(platPins())
     for (const feature of harvestedParcels.collection?.features ?? []) {
@@ -148,6 +157,12 @@ export function MapView({
   }, [graph, locations, thematicMode, pins, referenceQuery.data])
 
   const selected = selectedId && graph ? (graph.byId.get(selectedId) ?? null) : null
+  const selectedProperty =
+    selected?.type === 'property'
+      ? selected
+      : selected && locations
+        ? parcelForLocatedRecord(selected.id, locations)
+        : null
 
   const selectedPin = useMemo(() => {
     if (!selected || !locations) return null
@@ -210,9 +225,7 @@ export function MapView({
   )
 
   const arcKeys = useMemo(
-    () =>
-      chosenArcKeys ??
-      (initialConnections === null ? NO_ARC_KEYS : new Set(availableArcKeys)),
+    () => chosenArcKeys ?? (initialConnections === null ? NO_ARC_KEYS : new Set(availableArcKeys)),
     [chosenArcKeys, initialConnections, availableArcKeys]
   )
 
@@ -269,6 +282,14 @@ export function MapView({
     [locations]
   )
 
+  const hoverLabelForPin = useCallback(
+    (pin: string) => {
+      const property = locations?.propertyByPin.get(normalizePin(pin))
+      return property && graph ? parcelHoverLabel(property, graph) : pin
+    },
+    [graph, locations]
+  )
+
   const handleSelectPin = useCallback(
     (pin: string | null) => {
       if (!pin || !locations) {
@@ -277,6 +298,16 @@ export function MapView({
       }
       const property = locations.propertyByPin.get(pin)
       select(property?.id ?? null)
+    },
+    [locations, select]
+  )
+
+  const handleSelectMarker = useCallback(
+    (entityId: string) => {
+      // A dot over a parcel is an entry point to the whole place, not just the
+      // one person or business that happened to provide the marker.
+      const property = locations ? parcelForLocatedRecord(entityId, locations) : null
+      select(property?.id ?? entityId)
     },
     [locations, select]
   )
@@ -500,7 +531,7 @@ export function MapView({
                     {undrawn.unplacedEnd === 1
                       ? ' has one end with no location, and is listed'
                       : ' have one end with no location, and are listed'}{' '}
-                    in the unplaced records below.
+                    without a location on the plat.
                   </>
                 ) : null}
               </span>
@@ -527,8 +558,9 @@ export function MapView({
               selectedEntityId={selectedId}
               arcs={arcs}
               onSelectPin={handleSelectPin}
-              onSelectEntity={select}
+              onSelectEntity={handleSelectMarker}
               labelForPin={labelForPin}
+              hoverLabelForPin={hoverLabelForPin}
               placingEntity={placing}
               onPlace={handlePlace}
             />
@@ -571,38 +603,7 @@ export function MapView({
         </div>
       </Panel>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Panel className="lg:col-span-2">
-          <div className="border-rule flex items-center gap-2 border-b px-3 py-2">
-            <Network className="text-ink-muted size-4" aria-hidden="true" />
-            <h2 className="label-caps">Unplaced records</h2>
-          </div>
-          <div className="p-3">
-            <UnplacedTray
-              unplaced={locations.unplaced}
-              selectedEntityId={selectedId}
-              onSelect={select}
-              onPlace={(entity) => setPlacing(entity)}
-              canEdit={canEdit}
-            />
-          </div>
-        </Panel>
-
-        {theming.legend.length > 0 ? (
-          <Panel>
-            <div className="p-3">
-              <MapLegend theming={theming} />
-            </div>
-          </Panel>
-        ) : (
-          <Panel>
-            <div className="text-ink-muted p-3 text-13">
-              Choose a colouring above to see how the lots break down. The plat itself is
-              deliberately uncoloured by default: linework first, data on top of it.
-            </div>
-          </Panel>
-        )}
-      </div>
+      <ParcelConnections property={selectedProperty} graph={graph} locations={locations} />
     </div>
   )
 }

@@ -8,6 +8,7 @@ import App from './App'
 import { initializeData } from '@/lib/data'
 import { loadParcelLayer } from '@/lib/parcels/parcel-layer'
 import { WorkSessionProvider } from '@/features/review/session'
+import { AuthProvider } from '@/lib/auth'
 import { RoleProvider } from '@/lib/role'
 import { ThemeProvider } from '@/lib/theme'
 
@@ -52,13 +53,15 @@ async function start() {
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <RoleProvider>
-            <WorkSessionProvider>
-              <BrowserRouter>
-                <App />
-              </BrowserRouter>
-            </WorkSessionProvider>
-          </RoleProvider>
+          <AuthProvider>
+            <RoleProvider>
+              <WorkSessionProvider>
+                <BrowserRouter>
+                  <App />
+                </BrowserRouter>
+              </WorkSessionProvider>
+            </RoleProvider>
+          </AuthProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </StrictMode>

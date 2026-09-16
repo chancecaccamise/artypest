@@ -36,6 +36,26 @@ describe('stat strip', () => {
       expect(within(strip).getByText(/^\d+ \/ \d+$/)).toBeInTheDocument()
     })
   })
+
+  it('recomputes from current records after a dashboard write', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<App />)
+
+    const strip = (await screen.findByText('Lots')).closest('.panel') as HTMLElement
+    const openItemsLabel = within(strip).getByText('Open items')
+    const tile = openItemsLabel.parentElement as HTMLElement
+    const before = Number(tile.querySelector('.text-2xl')?.textContent ?? '0')
+
+    await user.click(screen.getByRole('button', { name: 'Add record' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText(/^Name/), 'Dashboard refresh regression')
+    await user.type(within(dialog).getByLabelText('Status'), 'open')
+    await user.click(within(dialog).getByRole('button', { name: 'Add record' }))
+
+    await waitFor(() => {
+      expect(Number(tile.querySelector('.text-2xl')?.textContent ?? '0')).toBe(before + 1)
+    })
+  })
 })
 
 describe('needs attention', () => {
@@ -58,23 +78,37 @@ describe('needs attention', () => {
 })
 
 describe('board and committees', () => {
-  it('groups seats by association with a filled-of-total count', async () => {
+  it('shows an editable empty state until the real board roster is entered', async () => {
     renderWithProviders(<App />)
 
     const heading = await screen.findByText('Board and committees')
-    const panel = heading.closest('.panel')
+    const panel = heading.closest('.panel') as HTMLElement
+
+    expect(await within(panel).findByText('No current board seats on record')).toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Manage' })).toBeEnabled()
+  })
+
+  it('adds and removes current members from the dashboard', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<App />)
+
+    const heading = await screen.findByText('Board and committees')
+    const panel = heading.closest('.panel') as HTMLElement
+    await user.click(await within(panel).findByRole('button', { name: 'Manage' }))
+
+    const dialog = await screen.findByRole('dialog')
+    await user.selectOptions(within(dialog).getByLabelText('Person *'), 'Kay Heritage')
+    await user.selectOptions(within(dialog).getByLabelText('Position *'), 'Member')
+    await user.click(within(dialog).getByRole('button', { name: 'Add member' }))
 
     await waitFor(() => {
-      expect(
-        within(panel as HTMLElement).getByRole('link', { name: /Ardsley Park Homeowners/ })
-      ).toBeInTheDocument()
+      expect(within(panel).getByRole('link', { name: 'Kay Heritage' })).toBeInTheDocument()
     })
 
-    // President first, because that is the order a board reads its own roster in.
-    const seats = within(panel as HTMLElement).getAllByText(
-      /President|Vice president|Treasurer|Secretary|Chair|Member/
-    )
-    expect(seats[0]?.textContent).toBe('President')
+    await user.click(within(dialog).getByRole('button', { name: 'Remove Kay Heritage' }))
+    await waitFor(() => {
+      expect(within(panel).queryByRole('link', { name: 'Kay Heritage' })).not.toBeInTheDocument()
+    })
   })
 })
 
@@ -133,19 +167,6 @@ describe('quick add and the map preview', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
-  })
-
-  it('disables quick add for a resident rather than failing on click', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<App />)
-
-    await screen.findByRole('button', { name: 'Add business' })
-    await user.selectOptions(screen.getByLabelText('Preview as role'), 'resident')
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Add business' })).toBeDisabled()
-    })
-    expect(screen.getByText('The resident view is read only.')).toBeInTheDocument()
   })
 
   it('links the map preview straight into the Connection Map', async () => {

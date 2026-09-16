@@ -53,6 +53,8 @@ export function MapPanel({
 
   const connections = useMemo(() => {
     if (!entity) return []
+    if (entity.type === 'property') return []
+
     const rows: { id: string; label: string; other: Entity; current: boolean }[] = []
 
     for (const relation of graph.relationsFor.get(entity.id) ?? []) {
@@ -69,9 +71,9 @@ export function MapPanel({
       })
     }
 
-    return rows
-      .sort((a, b) => Number(b.current) - Number(a.current) || a.other.name.localeCompare(b.other.name))
-      .slice(0, 8)
+    return rows.sort(
+      (a, b) => Number(b.current) - Number(a.current) || a.other.name.localeCompare(b.other.name)
+    )
   }, [entity, graph])
 
   const openItems = useMemo(() => {
@@ -90,7 +92,7 @@ export function MapPanel({
       <div className="p-4">
         <EmptyState
           title="Nothing selected"
-          description="Click a lot on the plat, or pick a record from the unplaced list, to see what is on it."
+          description="Click a lot or one of its dots to see its parcel data and connections."
         />
       </div>
     )
@@ -117,7 +119,12 @@ export function MapPanel({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
-        <LocationSourceNote location={location} entity={entity} onPlace={onPlace} canEdit={canEdit} />
+        <LocationSourceNote
+          location={location}
+          entity={entity}
+          onPlace={onPlace}
+          canEdit={canEdit}
+        />
 
         {entity.type === 'property' ? (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
@@ -151,23 +158,22 @@ export function MapPanel({
             <p className="label-caps mb-1 text-[0.6875rem]">Connections</p>
             <ul className="divide-rule border-rule divide-y border-t">
               {connections.map((row) => (
-                <li
-                  key={row.id}
-                  className={cn(
-                    'flex items-center gap-2 py-1.5 text-13',
-                    !row.current && 'opacity-60'
-                  )}
-                >
-                  <span className="text-ink-muted w-24 shrink-0 truncate text-xs">{row.label}</span>
-                  <Link
-                    to={entityHref(row.other.type, row.other.id)}
-                    className="text-ink hover:text-survey min-w-0 flex-1 truncate hover:underline"
-                  >
-                    {row.other.name}
-                  </Link>
-                  {locations.byEntity.has(row.other.id) ? null : (
-                    <StatusBadge tone="neutral">off map</StatusBadge>
-                  )}
+                <li key={row.id} className={cn('text-13 py-2', !row.current && 'opacity-60')}>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Link
+                      to={entityHref(row.other.type, row.other.id)}
+                      className="text-ink hover:text-survey min-w-0 flex-1 truncate font-semibold hover:underline"
+                    >
+                      {row.other.name}
+                    </Link>
+                    <TypeBadge type={row.other.type}>
+                      {ENTITY_TYPE_LABELS[row.other.type].singular}
+                    </TypeBadge>
+                    {locations.byEntity.has(row.other.id) ? null : (
+                      <StatusBadge tone="neutral">off map</StatusBadge>
+                    )}
+                  </div>
+                  <p className="text-ink-muted mt-0.5 text-xs">{row.label}</p>
                 </li>
               ))}
             </ul>
@@ -221,7 +227,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return (
     <div className="min-w-0">
       <dt className="label-caps text-[0.6875rem]">{label}</dt>
-      <dd className="text-ink truncate font-mono text-13">{children}</dd>
+      <dd className="text-ink text-13 truncate font-mono">{children}</dd>
     </div>
   )
 }

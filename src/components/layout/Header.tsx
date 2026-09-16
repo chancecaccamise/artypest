@@ -1,11 +1,10 @@
-import { ClipboardList, Menu, Monitor, Moon, Sun } from 'lucide-react'
+import { ClipboardList, LogOut, Menu, Monitor, Moon, Sun } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Select } from '@/components/ui/field'
 import { useActivity, useActor, useOrg } from '@/hooks/use-data'
 import { useWorkSession } from '@/features/review/session'
 import { buildWorkLog, recordCount, recordsChecked } from '@/features/review/work-log'
-import { ROLES, ROLE_LABELS, useRole } from '@/lib/role'
+import { useAuth } from '@/lib/auth'
 import { THEMES, useTheme, type Theme } from '@/lib/theme'
 import { SearchBar } from './SearchBar'
 
@@ -20,7 +19,7 @@ export interface HeaderProps {
 export function Header({ onOpenNav, workLogOpen, onToggleWorkLog }: HeaderProps) {
   const org = useOrg()
   const { theme, setTheme } = useTheme()
-  const { role, setRole } = useRole()
+  const auth = useAuth()
   const sessionCount = useSessionCount()
 
   const cycleTheme = () => {
@@ -43,9 +42,9 @@ export function Header({ onOpenNav, workLogOpen, onToggleWorkLog }: HeaderProps)
         <Menu />
       </Button>
 
-      {/* Truncates rather than pushing the role switcher off a 375px screen. */}
+      {/* Truncates rather than pushing the header controls off a 375px screen. */}
       <div className="min-w-0 flex-1 sm:flex-none">
-        <p className="font-display text-ink truncate text-13 font-bold sm:text-sm">
+        <p className="font-display text-ink text-13 truncate font-bold sm:text-sm">
           {org.data?.name ?? 'Loading organization'}
         </p>
       </div>
@@ -53,22 +52,6 @@ export function Header({ onOpenNav, workLogOpen, onToggleWorkLog }: HeaderProps)
       <SearchBar className="mx-auto hidden max-w-md flex-1 sm:block" />
 
       <div className="ml-auto flex shrink-0 items-center gap-2 sm:ml-0">
-        <label className="sr-only" htmlFor="role-switcher">
-          Preview as role
-        </label>
-        <Select
-          id="role-switcher"
-          value={role}
-          onChange={(event) => setRole(event.target.value as (typeof ROLES)[number])}
-          className="h-8 w-auto max-w-[9rem] min-w-0 text-13 sm:min-w-[8.5rem]"
-        >
-          {ROLES.map((value) => (
-            <option key={value} value={value}>
-              {ROLE_LABELS[value]}
-            </option>
-          ))}
-        </Select>
-
         {/*
           The count is the reason this is a header control rather than a menu
           item: "eleven so far" is worth seeing without opening anything, and
@@ -99,6 +82,19 @@ export function Header({ onOpenNav, workLogOpen, onToggleWorkLog }: HeaderProps)
         >
           <ThemeIcon />
         </Button>
+
+        {auth.status === 'signed-in' ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void auth.signOut()}
+            aria-label="Sign out"
+            title={`Signed in as ${auth.account.name} (${auth.account.email})`}
+          >
+            <LogOut />
+            <span className="hidden sm:inline">Sign out</span>
+          </Button>
+        ) : null}
       </div>
     </header>
   )

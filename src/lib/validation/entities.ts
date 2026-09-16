@@ -85,7 +85,8 @@ export const personDataSchema = z.object({
    * A data URL today, downscaled in the browser by src/lib/photos.ts. Becomes a
    * Supabase Storage URL later, and stays a string either way.
    */
-  photo: optionalText,
+  // Managed by the photo panel rather than the add/edit field grid.
+  photo: optionalText.optional(),
   notes: optionalText,
 })
 
@@ -147,6 +148,7 @@ export const businessDataSchema = z.object({
   contactName: optionalText,
   phone: optionalText,
   email: optionalEmail,
+  website: optionalText,
   mailingAddress: optionalText,
   notes: optionalText,
 })

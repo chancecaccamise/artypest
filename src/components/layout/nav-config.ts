@@ -1,5 +1,4 @@
 import {
-  UsersRound,
   Building2,
   ClipboardList,
   FileText,
@@ -60,8 +59,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Connection Map', to: '/map', icon: Network },
       { label: 'Plat View', to: '/plat', icon: Map },
-      { label: 'Parcel Import', to: '/parcels', icon: MapPinned },
-      { label: 'Owner Reconciliation', to: '/owners', icon: UsersRound },
+      // Owner Reconciliation is intentionally hidden while that workflow is paused.
+      // { label: 'Owner Reconciliation', to: '/owners', icon: UsersRound },
       { label: 'Settings', to: '/settings', icon: Settings },
     ],
   },

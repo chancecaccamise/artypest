@@ -1040,3 +1040,81 @@ second rendering pass over 16,656 polygons and belongs with the map work rather
 than bolted to this. The dashboard has no coverage widget for the same reason:
 it is a different audience asking a different question, and the panel answers
 the analyst's.
+
+## 2026-09-16: staff sign-in
+
+**Did.** Staff sign in with the email and password an administrator set up in
+Supabase.
+
+- `/sign-in`, outside the shell, built with React Hook Form and Zod. Separate,
+  plain messages for a wrong password, an unconfirmed account, a suspended one,
+  too many attempts, and a dropped connection, so nobody is told their password
+  is wrong when it is the wifi
+- Every other page is behind `RequireSignIn`. A signed-out visitor is sent to
+  sign in and returned to the page they asked for. A saved sign-in reopens
+  without the form
+- The account must have an `org_users` row. Without one the page says the
+  account has not been given access, and offers signing in as somebody else
+- The role comes from that row. Only administrators see the role preview
+  switcher
+- Sign out in the header
+- A production build with no database configured refuses to open rather than
+  opening to everyone
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 618 tests, and a
+production build. 14 are new and drive the real application through a real
+Supabase client with a faked network: the redirect and return, each failure
+message, the membership gate, restoring a saved sign-in, sign out, the role
+switcher by role, and both no-database cases. Checked in a browser against the
+dev server: `/people` signed out lands on the form.
+
+**Needs doing before anybody can sign in.**
+
+1. Give each account an `org_users` row. See "Staff sign-in" in `README.md`.
+2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the deployment's
+   environment. Without them the deployed site now shows "Sign-in is not
+   available", by design.
+3. Turn off "Allow new users to sign up" in the Supabase dashboard. The
+   membership check already stops a stranger's account at the door, but there
+   is no reason to let one be created.
+
+**Not done, and why.**
+
+- *The records are still the in-memory ones.* Sign-in guards the application,
+  but the demo fixtures ship in the JavaScript bundle and the harvested parcels
+  are static files under `public/`, fetchable by URL. The county data is public
+  anyway. Real protection of the association's own records is row level
+  security, which applies once the Supabase provider replaces the in-memory one.
+- *Changes are not yet attributed to the signed-in person.* The in-memory
+  provider still names its fixture user as the actor, so Activity and the work
+  log say that rather than the account. The Supabase provider gets this from the
+  audit triggers, which already read the signed-in email.
+- *No password reset by email.* See `DECISIONS.md`.
+- *One association per account.* The earliest `org_users` row wins. Choosing
+  between associations waits until somebody belongs to two.
+
+## 2026-09-16: Needs attention follows you onto the record
+
+**Did.** A record's page now shows the dashboard's Needs attention lines about
+that record, above the tabs. Following "Gerald Pinckney, Secretary of Ardsley
+Park Homeowners Association, term ends" from the dashboard lands on his page
+with that same line on it, the date and how far away it is, and a button to
+where it gets fixed: Open connections for terms, contracts, insurance, and a
+missing owner; the edit form, focused on the right field, for a missing parcel
+number, contact, or follow-up date. Residents get no edit buttons. A record with
+nothing wrong shows nothing.
+
+*One set of rules.* `needsAttentionFor` in `src/lib/insights.ts` runs the same
+rules as the dashboard over only the relations touching the record, then keeps
+the items about it. Each item now carries a `kind`, which is what picks the
+button, rather than parsing its wording.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 626 tests, and a
+production build. 8 are new, including one asserting that for every record in
+the demo data the record's lines are exactly the dashboard's lines for it, in
+the same order. Checked in a browser on Gerald Pinckney's page with the full
+harvested layer loaded.
+
+**Not done.** A board term shows on the person, not on the association the seat
+belongs to, because that is where the dashboard links. The association's page
+could reasonably list its seats that are ending too.

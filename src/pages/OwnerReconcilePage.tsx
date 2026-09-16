@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Users } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 import { StatusBadge } from '@/components/ui/badge'
@@ -28,6 +29,7 @@ import { cn } from '@/lib/utils'
 const REVIEW_PAGE_SIZE = 40
 
 export function OwnerReconcilePage() {
+  const queryClient = useQueryClient()
   const { graph } = useGraph()
 
   const [applied, setApplied] = useState<string | null>(null)
@@ -70,7 +72,11 @@ export function OwnerReconcilePage() {
         setProgress({ done, total })
       },
     })
-      .then((result) => {
+      .then(async (result) => {
+        // This workflow calls the provider directly rather than through a
+        // mutation hook. Refresh every reader of the changed graph and audit
+        // trail before reporting completion.
+        await queryClient.invalidateQueries()
         setApplied(
           `${result.ownersCreated.toLocaleString()} owners created, ${result.ownersLinked.toLocaleString()} linked, ` +
             `${result.relationsCreated.toLocaleString()} ownerships recorded.` +
@@ -83,7 +89,7 @@ export function OwnerReconcilePage() {
         setApplying(false)
         setProgress(null)
       })
-  }, [graph, actionable])
+  }, [graph, actionable, queryClient])
 
   if (!graph) {
     return (
@@ -149,8 +155,7 @@ export function OwnerReconcilePage() {
           {data.kind === 'memory' && actionable.length > 500 ? (
             <Notice tone="warning">
               <span>
-                This is running on demo data kept in this browser. Applying
-                {' '}
+                This is running on demo data kept in this browser. Applying{' '}
                 {actionable.length.toLocaleString()} decisions is more than local storage can hold,
                 so the result will be correct on screen but will not survive a reload. Connect the
                 database first if you want it kept.
@@ -246,15 +251,14 @@ function ReviewRow({ group }: { group: OwnerGroup }) {
     <li className="border-rule rounded-[6px] border p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-ink font-mono text-13 break-words">{group.raw}</p>
-          <p className="text-ink-muted mt-1 text-13">{group.reason}</p>
+          <p className="text-ink text-13 font-mono break-words">{group.raw}</p>
+          <p className="text-ink-muted text-13 mt-1">{group.reason}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           <IdChip prefix="lots">{String(group.propertyIds.length)}</IdChip>
           {group.parsed.truncated ? <StatusBadge tone="amber">truncated</StatusBadge> : null}
         </div>
       </div>
-
     </li>
   )
 }

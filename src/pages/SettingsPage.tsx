@@ -663,8 +663,9 @@ function UsersTab() {
 
       <div className="border-rule border-b p-3">
         <Notice tone="info">
-          These are placeholders. Real accounts, invitations, and permissions arrive with the
-          backend. The role switcher in the header previews what each role sees.
+          This list is still sample data. The accounts people sign in with are set up by your
+          administrator, and each one carries its own role. Administrators can preview what any
+          role sees from the switcher in the header.
         </Notice>
       </div>
 

@@ -1,7 +1,7 @@
 import type { FeatureCollection, LineString, MultiPolygon, Polygon } from 'geojson'
 import { useEffect, useState } from 'react'
 
-import type { ParcelProperties, StreetProperties } from '@/lib/geo'
+import { registerParcelGeometry, type ParcelProperties, type StreetProperties } from '@/lib/geo'
 import { loadParcelGeometry, loadParcelStreets } from '@/lib/parcels/parcel-layer'
 
 /*
@@ -24,10 +24,9 @@ export function useHarvestedParcels(enabled = true): HarvestedParcels {
     Polygon | MultiPolygon,
     ParcelProperties
   > | null>(null)
-  const [streets, setStreets] = useState<FeatureCollection<
-    LineString,
-    StreetProperties
-  > | null>(null)
+  const [streets, setStreets] = useState<FeatureCollection<LineString, StreetProperties> | null>(
+    null
+  )
   /*
     Starts true when enabled, rather than being set true inside the effect,
     which would be a synchronous setState during an effect and a cascading
@@ -43,11 +42,12 @@ export function useHarvestedParcels(enabled = true): HarvestedParcels {
     void Promise.all([loadParcelGeometry(), loadParcelStreets()])
       .then(([geometry, streetData]) => {
         if (cancelled) return
-        setCollection(
+        const collection =
           geometry === null
             ? null
             : (geometry as unknown as FeatureCollection<Polygon | MultiPolygon, ParcelProperties>)
-        )
+        if (collection) registerParcelGeometry(collection)
+        setCollection(collection)
         setStreets(streetData as FeatureCollection<LineString, StreetProperties> | null)
       })
       .finally(() => {

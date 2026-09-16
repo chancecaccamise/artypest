@@ -55,7 +55,9 @@ describe('detail view', () => {
       ).toBeInTheDocument()
     }
 
-    expect(within(tablist).getByRole('tab', { name: 'Details', selected: true })).toBeInTheDocument()
+    expect(
+      within(tablist).getByRole('tab', { name: 'Details', selected: true })
+    ).toBeInTheDocument()
   })
 
   it('renders every field in the schema, including the empty ones', async () => {
@@ -68,7 +70,6 @@ describe('detail view', () => {
     for (const label of ['Lot number', 'Year built', 'Square feet', 'Situs address']) {
       expect(grid).toContain(label)
     }
-
   })
 
   it('shows an unfilled field as "Not set" rather than dropping the row', async () => {
@@ -102,7 +103,9 @@ describe('detail view', () => {
     expect(await screen.findByText('Parcel record')).toBeInTheDocument()
 
     const pin = String(property.data.pin)
-    const link = screen.getByRole('link', { name: new RegExp(pin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })
+    const link = screen.getByRole('link', {
+      name: new RegExp(pin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    })
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
 
@@ -175,32 +178,19 @@ describe('detail view', () => {
   })
 })
 
-describe('role gating', () => {
-  it('hides notes from a resident and drops the tab entirely', async () => {
-    const user = userEvent.setup()
+describe('administrator access', () => {
+  it('shows internal notes to everyone admitted to the application', async () => {
     renderWithProviders(<App />, { route: `/people/${personWithNotes.id}` })
 
     const tablist = await screen.findByRole('tablist')
     expect(within(tablist).getByRole('tab', { name: 'Notes' })).toBeInTheDocument()
-
-    await user.selectOptions(screen.getByLabelText('Preview as role'), 'resident')
-
-    await waitFor(() => {
-      expect(within(tablist).queryByRole('tab', { name: 'Notes' })).not.toBeInTheDocument()
-    })
+    expect(screen.queryByLabelText('Preview as role')).not.toBeInTheDocument()
   })
 
-  it('removes the add and actions controls for a resident', async () => {
-    const user = userEvent.setup()
+  it('keeps record controls available', async () => {
     renderWithProviders(<App />, { route: '/people' })
 
     expect(await screen.findByRole('button', { name: /Add person/ })).toBeInTheDocument()
-
-    await user.selectOptions(screen.getByLabelText('Preview as role'), 'resident')
-
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /Add person/ })).not.toBeInTheDocument()
-    })
   })
 })
 
@@ -254,7 +244,9 @@ describe('archive and delete', () => {
 
     expect(await screen.findByText(/is archived/)).toBeInTheDocument()
     const banner = screen.getByText(/is archived/).closest('div')
-    expect(within(banner as HTMLElement).getByRole('button', { name: 'Restore' })).toBeInTheDocument()
+    expect(
+      within(banner as HTMLElement).getByRole('button', { name: 'Restore' })
+    ).toBeInTheDocument()
 
     await user.click(within(banner as HTMLElement).getByRole('button', { name: 'Restore' }))
     await waitFor(() => {

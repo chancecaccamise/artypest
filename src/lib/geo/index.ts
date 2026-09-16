@@ -58,6 +58,34 @@ const CENTROIDS = new Map<string, Point>(
   })
 )
 
+/**
+ * Adds the county geometry that is fetched when the plat opens.
+ *
+ * The data provider resolves people and businesses through property PINs. The
+ * full county layer is intentionally not in the JavaScript bundle, so its
+ * centroids become available only after that separate geometry request lands.
+ * Returning the number of newly registered parcels lets the caller avoid an
+ * unnecessary location refetch when two map views share the cached request.
+ */
+export function registerParcelGeometry(
+  collection: FeatureCollection<Polygon | MultiPolygon, ParcelProperties>
+): number {
+  let added = 0
+
+  for (const feature of collection.features) {
+    const pin = normalizePin(feature.properties.pin)
+    if (pin === '') continue
+    if (!BY_PIN.has(pin)) added += 1
+    BY_PIN.set(pin, feature)
+    const [longitude, latitude] = centroidOf(feature).geometry.coordinates
+    if (longitude !== undefined && latitude !== undefined) {
+      CENTROIDS.set(pin, [longitude, latitude])
+    }
+  }
+
+  return added
+}
+
 export function parcelForPin(pin: string | null | undefined): ParcelFeature | null {
   if (!pin) return null
   return BY_PIN.get(normalizePin(pin)) ?? null

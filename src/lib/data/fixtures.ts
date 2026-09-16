@@ -3,6 +3,7 @@ import { parseOwner } from '@/lib/parcels/owner'
 import { normalizePin } from '@/lib/parcels/pin'
 import type { ParcelLayerRecord } from '@/lib/parcels/parcel-layer'
 import { formatMailingAddress } from '@/lib/parcels/types'
+import { normalizeTsnaAddress, TSNA_CONTACTS } from '@/lib/data/tsna-contacts'
 
 import type {
   AuditEntry,
@@ -142,7 +143,13 @@ export function buildDemoData(
       label: 'is a member of',
       reverseLabel: 'has member',
     },
-    { id: 'rt-manages', orgId: ORG_ID, key: 'manages', label: 'manages', reverseLabel: 'is managed by' },
+    {
+      id: 'rt-manages',
+      orgId: ORG_ID,
+      key: 'manages',
+      label: 'manages',
+      reverseLabel: 'is managed by',
+    },
     {
       id: 'rt-employed-by',
       orgId: ORG_ID,
@@ -171,7 +178,13 @@ export function buildDemoData(
       label: 'is adjacent to',
       reverseLabel: 'is adjacent to',
     },
-    { id: 'rt-governs', orgId: ORG_ID, key: 'governs', label: 'governs', reverseLabel: 'is governed by' },
+    {
+      id: 'rt-governs',
+      orgId: ORG_ID,
+      key: 'governs',
+      label: 'governs',
+      reverseLabel: 'is governed by',
+    },
     {
       id: 'rt-references',
       orgId: ORG_ID,
@@ -348,9 +361,7 @@ export function buildDemoData(
       propertyUseCode: parcel.propertyUseCode,
       // Georgia assesses at 40% of fair market value, so the two move together.
       fairMarketValue: stale ? Math.round(parcel.fairMarketValue * 0.91) : parcel.fairMarketValue,
-      assessedValue: stale
-        ? Math.round(parcel.totalAssessment * 0.91)
-        : parcel.totalAssessment,
+      assessedValue: stale ? Math.round(parcel.totalAssessment * 0.91) : parcel.totalAssessment,
       parcelUpdatedAt: stale ? null : parcel.dateUpdated,
       parcelSource: 'imported',
       // Straight from the county roll, like the rest of the parcel fields.
@@ -416,7 +427,9 @@ export function buildDemoData(
           parcelSource: 'manual',
           yearBuilt: intBetween(1912, 1972),
           squareFeet: intBetween(1100, 3800),
-          notes: manual.pin ? '' : 'Lot number confirmed from the 1994 plat. PIN still to be looked up.',
+          notes: manual.pin
+            ? ''
+            : 'Lot number confirmed from the 1994 plat. PIN still to be looked up.',
         },
         intBetween(200, 700),
         intBetween(5, 190)
@@ -598,10 +611,30 @@ export function buildDemoData(
     { name: 'Gerald Pinckney', position: 'secretary', association: hoa, termEndsInDays: 41 },
     { name: 'Lorraine Kowalski', position: 'member', association: hoa, termEndsInDays: 519 },
     { name: 'Nathaniel Ashby', position: 'chair', association: archCommittee, termEndsInDays: 78 },
-    { name: 'Constance Barrow', position: 'member', association: archCommittee, termEndsInDays: 443 },
-    { name: 'Yolanda Ferrell', position: 'member', association: archCommittee, termEndsInDays: 443 },
-    { name: 'Otis Brantley', position: 'chair', association: landscapeCommittee, termEndsInDays: 260 },
-    { name: 'Estelle Nesmith', position: 'member', association: landscapeCommittee, termEndsInDays: 88 },
+    {
+      name: 'Constance Barrow',
+      position: 'member',
+      association: archCommittee,
+      termEndsInDays: 443,
+    },
+    {
+      name: 'Yolanda Ferrell',
+      position: 'member',
+      association: archCommittee,
+      termEndsInDays: 443,
+    },
+    {
+      name: 'Otis Brantley',
+      position: 'chair',
+      association: landscapeCommittee,
+      termEndsInDays: 260,
+    },
+    {
+      name: 'Estelle Nesmith',
+      position: 'member',
+      association: landscapeCommittee,
+      termEndsInDays: 88,
+    },
   ]
 
   const boardEntities = BOARD.map((seat, offset) => {
@@ -759,9 +792,17 @@ export function buildDemoData(
   /* ----------------------------------------------------------- documents -- */
 
   const DOCUMENTS: { name: string; documentType: string; effectiveYear: number }[] = [
-    { name: 'Declaration of Covenants, 1994 Restatement', documentType: 'covenants', effectiveYear: 1994 },
+    {
+      name: 'Declaration of Covenants, 1994 Restatement',
+      documentType: 'covenants',
+      effectiveYear: 1994,
+    },
     { name: 'Bylaws, Amended 2019', documentType: 'bylaws', effectiveYear: 2019 },
-    { name: 'Architectural Guidelines, Revision 4', documentType: 'guidelines', effectiveYear: 2023 },
+    {
+      name: 'Architectural Guidelines, Revision 4',
+      documentType: 'guidelines',
+      effectiveYear: 2023,
+    },
     { name: 'Reserve Study, 2024', documentType: 'study', effectiveYear: 2024 },
     { name: 'Ardsley Park Plat, Sheet 2 of 5', documentType: 'plat', effectiveYear: 1911 },
     { name: 'Master Insurance Policy, 2026 Term', documentType: 'policy', effectiveYear: 2026 },
@@ -934,8 +975,7 @@ export function buildDemoData(
         status: rec.status,
         occurredOn: date(-rec.openedDaysAgo),
         followUpDate: rec.followUpInDays === null ? null : date(rec.followUpInDays),
-        propertyId:
-          rec.propertyIndex === null ? null : at(properties, rec.propertyIndex).id,
+        propertyId: rec.propertyIndex === null ? null : at(properties, rec.propertyIndex).id,
         summary: '',
         notes: '',
       },
@@ -1105,10 +1145,16 @@ export function buildDemoData(
 
   // Adjacency, walking the street in order.
   for (let offset = 0; offset < 16; offset += 2) {
-    relation(nextRelationId(), 'rt-adjacent-to', at(properties, offset).id, at(properties, offset + 1).id, {
-      createdDaysAgo: 900,
-      attributes: { boundary: 'shared side lot line' },
-    })
+    relation(
+      nextRelationId(),
+      'rt-adjacent-to',
+      at(properties, offset).id,
+      at(properties, offset + 1).id,
+      {
+        createdDaysAgo: 900,
+        attributes: { boundary: 'shared side lot line' },
+      }
+    )
   }
 
   // Households.
@@ -1119,10 +1165,16 @@ export function buildDemoData(
     [6, 7],
   ]
   for (const [left, right] of relatedPairs) {
-    relation(nextRelationId(), 'rt-related-to', at(tenantEntities, left).id, at(tenantEntities, right).id, {
-      attributes: { relationship: 'household' },
-      createdDaysAgo: intBetween(100, 600),
-    })
+    relation(
+      nextRelationId(),
+      'rt-related-to',
+      at(tenantEntities, left).id,
+      at(tenantEntities, right).id,
+      {
+        attributes: { relationship: 'household' },
+        createdDaysAgo: intBetween(100, 600),
+      }
+    )
   }
 
   // Records reference the documents they were decided under.
@@ -1546,7 +1598,9 @@ export function buildDemoData(
   */
   const seededPins = new Set(
     properties
-      .map((property) => (typeof property.data.pin === 'string' ? normalizePin(property.data.pin) : ''))
+      .map((property) =>
+        typeof property.data.pin === 'string' ? normalizePin(property.data.pin) : ''
+      )
       .filter((pin) => pin !== '')
   )
 
@@ -1599,6 +1653,102 @@ export function buildDemoData(
     )
   })
 
+  /* ----------------------------------------------------- supplied contacts -- */
+
+  /*
+    The generated people and businesses made the early interface testable, but
+    they must not appear beside a client's real contacts. Archiving preserves
+    the old relation/audit examples for development without listing them in
+    the active directory or counting them in dashboard rollups.
+  */
+  const retiredFixtureAt = stamp(-1, 6)
+  for (const row of entities) {
+    if ((row.type === 'person' || row.type === 'business') && row.archivedAt === null) {
+      row.archivedAt = retiredFixtureAt
+      row.updatedAt = retiredFixtureAt
+    }
+  }
+
+  const propertyByAddress = new Map<string, Entity>()
+  for (const property of properties) {
+    propertyByAddress.set(normalizeTsnaAddress(property.name), property)
+    const situs = typeof property.data.situsAddress === 'string' ? property.data.situsAddress : ''
+    if (situs !== '') propertyByAddress.set(normalizeTsnaAddress(situs), property)
+  }
+
+  const millisecondsPerDay = 86_400_000
+  const daysSince = (iso: string) =>
+    Math.max(0, Math.floor((anchor.getTime() - new Date(iso).getTime()) / millisecondsPerDay))
+
+  for (const contact of TSNA_CONTACTS) {
+    const createdDaysAgo = daysSince(contact.createdAt)
+    const person = entity(
+      `ent-tsna-person-${contact.id}`,
+      'person',
+      contact.person.name,
+      {
+        email: contact.person.email,
+        phone: contact.person.phone,
+        mailingAddress: contact.person.mailingAddress ?? null,
+        memberSince: Number(contact.createdAt.slice(0, 4)),
+        householdRole: contact.business ? 'business_contact' : 'member',
+        notes: '',
+      },
+      createdDaysAgo,
+      createdDaysAgo
+    )
+
+    let business: Entity | null = null
+    if (contact.business) {
+      business = entity(
+        `ent-tsna-business-${contact.id}`,
+        'business',
+        contact.business.name,
+        {
+          businessCategory: 'member_business',
+          stateFilingNumber: null,
+          contactName: contact.person.name,
+          phone: contact.person.phone,
+          email: contact.person.email,
+          website: contact.business.website,
+          mailingAddress: contact.business.address ?? null,
+          notes: '',
+        },
+        createdDaysAgo,
+        createdDaysAgo
+      )
+
+      relation(nextRelationId(), 'rt-employed-by', person.id, business.id, {
+        startDate: contact.createdAt.slice(0, 10),
+        attributes: { title: 'Primary contact' },
+        createdDaysAgo,
+      })
+    }
+
+    for (const link of contact.propertyLinks) {
+      const property = propertyByAddress.get(normalizeTsnaAddress(link.address))
+      const subject = link.subject === 'person' ? person : business
+      if (!property || !subject) continue
+
+      const relationTypeId =
+        link.relation === 'owns'
+          ? 'rt-owns'
+          : link.relation === 'resides_at'
+            ? 'rt-resides-at'
+            : 'rt-related-to'
+
+      relation(nextRelationId(), relationTypeId, subject.id, property.id, {
+        startDate: contact.createdAt.slice(0, 10),
+        attributes: { source: 'TSNA business contacts' },
+        createdDaysAgo,
+      })
+    }
+
+    markChecked(person, Math.min(Math.max(createdDaysAgo, 1), 120), contact.person.name)
+    if (business) {
+      markChecked(business, Math.min(Math.max(createdDaysAgo, 1), 120), contact.person.name)
+    }
+  }
 
   return { org, relationTypes, entities, relations, auditEntries, referenceItems, users }
 }

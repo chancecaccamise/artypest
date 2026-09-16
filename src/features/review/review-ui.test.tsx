@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
 import App from '@/App'
+import { createFakeSupabase } from '@/test/fake-supabase'
 import { renderWithProviders } from '@/test/render'
 
 /*
@@ -64,9 +65,9 @@ describe('the hand mark in the directory', () => {
     await user.click(target!)
 
     await waitFor(() => {
-      expect(
-        screen.getAllByRole('button', { name: /Mark this record as checked/ }).length
-      ).toBe(before.length - 1)
+      expect(screen.getAllByRole('button', { name: /Mark this record as checked/ }).length).toBe(
+        before.length - 1
+      )
     })
     // Still on the list.
     expect(screen.getByRole('heading', { name: /Properties/, level: 1 })).toBeInTheDocument()
@@ -76,8 +77,9 @@ describe('the hand mark in the directory', () => {
     const user = await openProperties()
 
     const total = Number(
-      screen.getByRole('heading', { name: /Properties/, level: 1 }).parentElement?.textContent
-        ?.replace(/\D/g, '') ?? '0'
+      screen
+        .getByRole('heading', { name: /Properties/, level: 1 })
+        .parentElement?.textContent?.replace(/\D/g, '') ?? '0'
     )
 
     await user.selectOptions(screen.getByLabelText('Checked'), 'unchecked')
@@ -119,6 +121,39 @@ describe('the work log', () => {
   it('opens from the header and stays open across the app', async () => {
     const { panel } = await openLog()
     expect(within(panel).getByText('Where you were')).toBeInTheDocument()
+  })
+
+  it('attributes signed-in work to the active account and shows it immediately', async () => {
+    const account = {
+      id: 'work-log-user',
+      email: 'analyst@ardsleypark.org',
+      password: 'test password',
+      member: { name: 'Association Analyst', role: 'admin' },
+    }
+    const fake = createFakeSupabase({ accounts: [account], savedSignIn: account.email })
+    const user = userEvent.setup()
+    renderWithProviders(<App />, {
+      route: '/properties',
+      auth: { client: fake.client },
+    })
+
+    await screen.findByRole('heading', { name: /Properties/, level: 1 })
+    await screen.findByRole('table')
+    await user.click(screen.getByRole('button', { name: /Work log/ }))
+
+    const panel = await screen.findByRole('complementary', { name: 'Work log' })
+    await user.click(within(panel).getByRole('button', { name: 'Start fresh' }))
+
+    const target = screen.getAllByRole('button', { name: /Mark this record as checked/ })[0]
+    expect(target).toBeDefined()
+    await user.click(target!)
+
+    await waitFor(() => {
+      expect(within(panel).getByText('Where you were').parentElement).toHaveTextContent('Checked')
+      expect(
+        screen.getByRole('button', { name: 'Work log. 1 record this session.' })
+      ).toBeInTheDocument()
+    })
   })
 
   /*

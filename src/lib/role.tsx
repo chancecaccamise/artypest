@@ -1,11 +1,9 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
 
 /*
-  The role switcher.
-
-  Real accounts arrive with the backend. Until then this is a client-side
-  preview of what each role sees, which is enough to keep the resident view
-  honest: notes are internal and a resident must never be shown them.
+  Everyone admitted to the application is an administrator. Stored role labels
+  remain available for existing member records, but they no longer change what
+  somebody can see or do.
 */
 
 export const ROLES = ['admin', 'manager', 'board', 'resident'] as const
@@ -19,32 +17,21 @@ export const ROLE_LABELS: Record<Role, string> = {
 }
 
 interface RoleContextValue {
-  role: Role
-  setRole: (role: Role) => void
-  /** Internal notes are hidden from residents. */
   canSeeNotes: boolean
-  /** Residents read. Everyone else can change records. */
   canEdit: boolean
   canManageSettings: boolean
 }
 
 const RoleContext = createContext<RoleContextValue | null>(null)
 
+const ADMIN_ACCESS: RoleContextValue = {
+  canSeeNotes: true,
+  canEdit: true,
+  canManageSettings: true,
+}
+
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const [role, setRole] = useState<Role>('admin')
-
-  const value = useMemo<RoleContextValue>(
-    () => ({
-      role,
-      setRole,
-      canSeeNotes: role !== 'resident',
-      canEdit: role !== 'resident',
-      canManageSettings: role === 'admin' || role === 'manager',
-    }),
-    [role]
-  )
-
-  return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>
+  return <RoleContext.Provider value={ADMIN_ACCESS}>{children}</RoleContext.Provider>
 }
 
 export function useRole(): RoleContextValue {

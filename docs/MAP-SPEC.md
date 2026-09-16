@@ -35,15 +35,15 @@ DataProvider and must not import from `src/features`.
 
 ### Sources
 
-| Source | Meaning |
-|---|---|
-| `manual` | Placed by hand on the record. Always wins. |
-| `parcel` | The centroid of the parcel polygon for the record's PIN. |
-| `residence` | Borrowed from a lot the person currently resides at. |
-| `ownership` | Borrowed from a lot the record currently owns. |
-| `geocoded` | From the geocoding service, using a mailing or situs address. |
-| `related` | Borrowed from a record it is linked to, for assets and records. |
-| `governed` | The centroid of every parcel an association governs. |
+| Source      | Meaning                                                         |
+| ----------- | --------------------------------------------------------------- |
+| `manual`    | Placed by hand on the record. Always wins.                      |
+| `parcel`    | The centroid of the parcel polygon for the record's PIN.        |
+| `residence` | Borrowed from a lot the person currently resides at.            |
+| `ownership` | Borrowed from a lot the record currently owns.                  |
+| `geocoded`  | From the geocoding service, using a mailing or situs address.   |
+| `related`   | Borrowed from a record it is linked to, for assets and records. |
+| `governed`  | The centroid of every parcel an association governs.            |
 
 `manual` and `parcel` are exact. Everything else is derived, and the user
 interface says so wherever a derived location is shown.
@@ -54,15 +54,15 @@ One universal order would be wrong. An out-of-state holding company's mailing
 address is in Atlanta, and a person's mailing address is often the lot they
 already resolve to. So the order is defined per entity type, first match wins:
 
-| Type | Order |
-|---|---|
-| `property` | manual, parcel, geocoded (situs address) |
-| `person` | manual, residence, ownership, geocoded (mailing address) |
-| `business` | manual, geocoded (mailing address), ownership |
-| `association` | manual, geocoded, governed |
-| `asset` | manual, related (adjacent or owned parcel), governed |
-| `record` | manual, related (`data.propertyId`), related (any linked property) |
-| `document` | manual, related (a record that references it, and only when that record is itself exactly placed, per the one-borrowing rule below) |
+| Type          | Order                                                                                                                               |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `property`    | manual, parcel, geocoded (situs address)                                                                                            |
+| `person`      | manual, residence, ownership, related property, geocoded (mailing address)                                                          |
+| `business`    | manual, geocoded (mailing address), ownership, related property                                                                     |
+| `association` | manual, geocoded, governed                                                                                                          |
+| `asset`       | manual, related (adjacent or owned parcel), governed                                                                                |
+| `record`      | manual, related (`data.propertyId`), related (any linked property)                                                                  |
+| `document`    | manual, related (a record that references it, and only when that record is itself exactly placed, per the one-borrowing rule below) |
 
 A record that matches nothing is **unplaced**. Unplaced is a normal state, not
 an error, and the map surfaces it in a tray rather than hiding it.
@@ -145,14 +145,14 @@ never from a scale library.
 
 Implemented in `src/features/map/theming.ts`.
 
-| Mode | Buckets |
-|---|---|
-| `none` | A single ink fill. The default, and the one that reads as a plat. |
-| `occupancy` | Owner-occupied, long-term rental, short-term rental, vacant or unknown. The same four segments and the same colours as the dashboard occupancy bar. |
-| `completeness` | Complete, missing owner, missing parcel number, missing both. |
-| `property_use` | By the org's property use reference list. |
-| `zoning` | By the org's zoning reference list. |
-| `open_items` | None, one, two or more open records against the lot. |
+| Mode           | Buckets                                                                                                                                             |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `none`         | A single ink fill. The default, and the one that reads as a plat.                                                                                   |
+| `occupancy`    | Owner-occupied, long-term rental, short-term rental, vacant or unknown. The same four segments and the same colours as the dashboard occupancy bar. |
+| `completeness` | Complete, missing owner, missing parcel number, missing both.                                                                                       |
+| `property_use` | By the org's property use reference list.                                                                                                           |
+| `zoning`       | By the org's zoning reference list.                                                                                                                 |
+| `open_items`   | None, one, two or more open records against the lot.                                                                                                |
 
 `occupancy` and `completeness` are the two that matter and are built first. A
 mode must reuse an answer the app already computes: `occupancy` calls the same
@@ -168,11 +168,11 @@ is still listed, at reduced emphasis, so the absence is visible.
 
 Turf, against the parcel geometry. Implemented in `src/features/map/spatial.ts`.
 
-| Query | Definition |
-|---|---|
-| Adjacent | Parcels whose boundaries touch or overlap the subject parcel. |
-| Within radius | Parcels whose centroid is within *n* feet of the subject centroid. |
-| Within shape | Parcels whose centroid falls inside a drawn or selected polygon. |
+| Query         | Definition                                                         |
+| ------------- | ------------------------------------------------------------------ |
+| Adjacent      | Parcels whose boundaries touch or overlap the subject parcel.      |
+| Within radius | Parcels whose centroid is within _n_ feet of the subject centroid. |
+| Within shape  | Parcels whose centroid falls inside a drawn or selected polygon.   |
 
 **Notify adjacent owners** is the query that earns its keep. From a property
 record, it produces the mailing list an architectural review notification needs:

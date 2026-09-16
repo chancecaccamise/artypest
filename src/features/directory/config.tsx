@@ -239,7 +239,9 @@ const propertyConfig: DirectoryConfig = {
       label: 'Property use',
       className: 'w-40',
       render: (entity, labelFor) =>
-        orNotSet(text(entity, 'propertyUse'), () => labelFor('property_use', entity.data.propertyUse)),
+        orNotSet(text(entity, 'propertyUse'), () =>
+          labelFor('property_use', entity.data.propertyUse)
+        ),
     },
     {
       key: 'assessedValue',
@@ -284,11 +286,22 @@ const propertyConfig: DirectoryConfig = {
   */
   fields: [
     { key: 'lotNumber', label: 'Lot number', format: 'mono' },
-    { key: 'propertyUse', label: 'Property use', format: 'reference', referenceList: 'property_use' },
+    {
+      key: 'propertyUse',
+      label: 'Property use',
+      format: 'reference',
+      referenceList: 'property_use',
+    },
     { key: 'yearBuilt', label: 'Year built', format: 'year' },
     { key: 'squareFeet', label: 'Square feet', format: 'number' },
     { key: 'situsAddress', label: 'Situs address', hiddenFromGrid: true },
-    { key: 'zoning', label: 'Zoning district', format: 'reference', referenceList: 'zoning', hiddenFromGrid: true },
+    {
+      key: 'zoning',
+      label: 'Zoning district',
+      format: 'reference',
+      referenceList: 'zoning',
+      hiddenFromGrid: true,
+    },
     { key: 'acreage', label: 'Acreage', format: 'acreage', hiddenFromGrid: true },
     {
       key: 'propertyUseCode',
@@ -330,7 +343,8 @@ const propertyConfig: DirectoryConfig = {
     const lot = text(entity, 'lotNumber')
     const pin = text(entity, 'pin')
     if (lot !== '') chips.push({ prefix: 'Lot', value: lot })
-    if (pin !== '') chips.push({ prefix: 'PIN', value: pin, title: 'SAGIS parcel identification number' })
+    if (pin !== '')
+      chips.push({ prefix: 'PIN', value: pin, title: 'SAGIS parcel identification number' })
     return chips
   },
 }
@@ -368,7 +382,8 @@ const businessConfig: DirectoryConfig = {
       key: 'stateFilingNumber',
       label: 'Filing no.',
       className: 'w-32',
-      render: (entity) => orNotSet(text(entity, 'stateFilingNumber'), (value) => <Mono>{value}</Mono>),
+      render: (entity) =>
+        orNotSet(text(entity, 'stateFilingNumber'), (value) => <Mono>{value}</Mono>),
     },
   ],
   filters: [
@@ -384,6 +399,7 @@ const businessConfig: DirectoryConfig = {
         { value: 'accounting', label: 'Accounting' },
         { value: 'insurance', label: 'Insurance' },
         { value: 'property_owner', label: 'Property owner' },
+        { value: 'member_business', label: 'Member business' },
       ],
     },
   ],
@@ -393,6 +409,7 @@ const businessConfig: DirectoryConfig = {
     { key: 'contactName', label: 'Primary contact' },
     { key: 'phone', label: 'Phone', format: 'phone' },
     { key: 'email', label: 'Email', format: 'email' },
+    { key: 'website', label: 'Website' },
     { key: 'mailingAddress', label: 'Mailing address' },
     { key: 'notes', label: 'Notes', format: 'longtext', internal: true, hiddenFromGrid: true },
   ],
@@ -576,7 +593,9 @@ const recordConfig: DirectoryConfig = {
       render: (entity) => {
         const value = text(entity, 'status')
         if (value === '') return <NotSet />
-        return <StatusBadge tone={RECORD_STATUS_TONE[value] ?? 'neutral'}>{humanize(value)}</StatusBadge>
+        return (
+          <StatusBadge tone={RECORD_STATUS_TONE[value] ?? 'neutral'}>{humanize(value)}</StatusBadge>
+        )
       },
     },
     {

@@ -11,6 +11,7 @@ import {
   RecentActivityPanel,
   StatStrip,
 } from '@/features/dashboard/widgets'
+import { BoardEditorDialog } from '@/features/dashboard/BoardEditorDialog'
 import { EntityFormDialog } from '@/features/directory/EntityFormDialog'
 import { useGraph, useOrg } from '@/hooks/use-data'
 import type { EntityType } from '@/lib/data/types'
@@ -33,14 +34,13 @@ export function DashboardPage() {
   const { canEdit } = useRole()
 
   const [addType, setAddType] = useState<EntityType | null>(null)
+  const [boardEditorOpen, setBoardEditorOpen] = useState(false)
 
   return (
     <>
       <PageHeader
         title="Dashboard"
-        subtitle={
-          org.data ? `${org.data.name}, at a glance` : 'Loading the association'
-        }
+        subtitle={org.data ? `${org.data.name}, at a glance` : 'Loading the association'}
       />
 
       {isError ? (
@@ -56,7 +56,7 @@ export function DashboardPage() {
         <div className="lg:col-span-2">
           <NeedsAttentionPanel graph={graph} />
         </div>
-        <BoardPanel graph={graph} />
+        <BoardPanel graph={graph} onManage={() => setBoardEditorOpen(true)} />
       </div>
 
       <div className="mb-4 grid gap-4 lg:grid-cols-3">
@@ -71,8 +71,14 @@ export function DashboardPage() {
         <MapPreviewPanel graph={graph} />
       </div>
 
-      {addType ? (
-        <EntityFormDialog open onClose={() => setAddType(null)} type={addType} />
+      {addType ? <EntityFormDialog open onClose={() => setAddType(null)} type={addType} /> : null}
+
+      {graph ? (
+        <BoardEditorDialog
+          open={boardEditorOpen}
+          onClose={() => setBoardEditorOpen(false)}
+          graph={graph}
+        />
       ) : null}
     </>
   )

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { computeOccupancy, computeStats, resolveGraph } from '@/lib/insights'
+import { computeNeedsAttention, computeOccupancy, computeStats, resolveGraph } from '@/lib/insights'
 import type { ParcelLayerRecord } from '@/lib/parcels/parcel-layer'
 
 import { buildDemoData } from './fixtures'
@@ -97,6 +97,15 @@ describe('the harvested parcel layer', () => {
 
     expect(after.total).toBe(before.total)
     expect(after.counts).toEqual(before.counts)
+  })
+
+  it('does not turn county parcels into false needs-attention items', () => {
+    const before = resolveGraph(buildDemoData(REFERENCE, []))
+    const after = resolveGraph(buildDemoData(REFERENCE, LAYER))
+
+    expect(computeNeedsAttention(after, REFERENCE)).toEqual(
+      computeNeedsAttention(before, REFERENCE)
+    )
   })
 
   it('records association membership as a relation, not a field', () => {

@@ -3,8 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import App from '@/App'
+import { entityHref } from '@/components/layout/nav-config'
 import { data } from '@/lib/data'
 import { arcableKeys, buildArcs, undrawnCounts } from '@/features/map/arcs'
+import { parcelHoverLabel } from '@/features/map/parcel-summary'
 import { PARCELS } from '@/lib/geo'
 import type { Entity } from '@/lib/data/types'
 import { resolveGraph } from '@/lib/insights'
@@ -21,7 +23,7 @@ import { renderWithProviders } from '@/test/render'
 const FIRST_PIN = normalizePin(PARCELS.features[0]?.properties.pin ?? '')
 
 let plattedProperty: Entity
-let unplacedRecord: Entity
+let plattedHoverLabel: string
 /** A record with at least one connection the plat can actually draw a line for. */
 let connectedRecord: Entity
 
@@ -32,15 +34,12 @@ beforeAll(async () => {
   if (!property) throw new Error('The seeded data has no property on the first platted lot')
   plattedProperty = property
 
-  const unplaced = locations.unplaced[0]
-  if (!unplaced) throw new Error('The seeded data places everything, so the tray cannot be tested')
-  unplacedRecord = unplaced
-
   const graph = resolveGraph({
     entities: await data.listAllEntities(),
     relations: await data.listRelations(),
     relationTypes: await data.listRelationTypes(),
   })
+  plattedHoverLabel = parcelHoverLabel(plattedProperty, graph)
   const keys = new Set(arcableKeys(graph, locations))
 
   /*
@@ -107,11 +106,19 @@ describe('plat view', () => {
     expect(parcel).toBeDefined()
     if (!parcel) return
 
+    await user.hover(parcel)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(plattedHoverLabel)
+    expect(screen.getByRole('tooltip')).toHaveTextContent(FIRST_PIN)
+
     await user.click(parcel)
 
     expect(
       await screen.findByRole('heading', { name: plattedProperty.name, level: 2 })
     ).toBeInTheDocument()
+    expect(screen.getByText('Parcel connections')).toBeInTheDocument()
+    expect(
+      screen.getAllByRole('link').some((link) => link.getAttribute('href')?.startsWith('mailto:'))
+    ).toBe(true)
     expect(screen.getByRole('button', { name: /Notify adjacent owners/ })).toBeInTheDocument()
   })
 
@@ -138,26 +145,22 @@ describe('thematic modes', () => {
     expect(screen.queryByText('Legend')).not.toBeInTheDocument()
   })
 
-  it('renders a legend with a count per bucket once a mode is chosen', async () => {
+  it('keeps the connection workspace in place once a colouring is chosen', async () => {
     const user = userEvent.setup()
     renderWithProviders(<App />, { route: '/plat' })
 
     await user.selectOptions(await screen.findByLabelText('Colour lots by'), 'occupancy')
 
-    expect(await screen.findByText('Legend')).toBeInTheDocument()
-    expect(screen.getByText('Owner-occupied')).toBeInTheDocument()
-    expect(screen.getByText('Vacant or unknown')).toBeInTheDocument()
+    expect(screen.queryByText('Legend')).not.toBeInTheDocument()
+    expect(await screen.findByText('Parcel connections')).toBeInTheDocument()
   })
 
-  it('lists empty buckets rather than hiding them', async () => {
+  it('removes the old colouring explanation panel', async () => {
     const user = userEvent.setup()
     renderWithProviders(<App />, { route: '/plat' })
 
     await user.selectOptions(await screen.findByLabelText('Colour lots by'), 'completeness')
-
-    for (const label of ['Complete', 'No current owner', 'No parcel number', 'Neither on file']) {
-      expect(await screen.findByText(label)).toBeInTheDocument()
-    }
+    expect(screen.queryByText(/Choose a colouring above/)).not.toBeInTheDocument()
   })
 })
 
@@ -188,24 +191,21 @@ describe('connection arcs', () => {
   })
 })
 
-describe('unplaced tray', () => {
-  it('surfaces records the cascade could not place', async () => {
+describe('parcel connection workspace', () => {
+  it('replaces the unplaced-record and colouring panels', async () => {
     renderWithProviders(<App />, { route: '/plat' })
 
-    expect(await screen.findByText('Unplaced records')).toBeInTheDocument()
-    expect(await screen.findByText(/have no location the map can derive/)).toBeInTheDocument()
+    expect(await screen.findByText('Parcel connections')).toBeInTheDocument()
+    expect(screen.getByText('Select a parcel to see its connections')).toBeInTheDocument()
+    expect(screen.queryByText('Unplaced records')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Choose a colouring above/)).not.toBeInTheDocument()
   })
 
-  it('selects an unplaced record and explains that it has no location', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<App />, { route: '/plat' })
-
-    const tray = (await screen.findByText('Unplaced records')).closest('.panel') as HTMLElement
-    await user.click(within(tray).getByRole('button', { name: unplacedRecord.name }))
-
-    expect(
-      await screen.findByText(/No location on file, and none can be derived/)
-    ).toBeInTheDocument()
+  it('shows the selected parcel name in the connection workspace', async () => {
+    renderWithProviders(<App />, { route: `/plat/${plattedProperty.id}` })
+    const heading = await screen.findByText('Parcel connections')
+    const panel = heading.closest('.panel') as HTMLElement
+    expect(within(panel).getByText(plattedProperty.name)).toBeInTheDocument()
   })
 })
 
@@ -287,7 +287,7 @@ describe('location provenance on a record', () => {
     expect(entity).not.toBeNull()
     if (!entity) return
 
-    renderWithProviders(<App />, { route: `/people/${entity.id}` })
+    renderWithProviders(<App />, { route: entityHref(entity.type, entity.id) })
 
     expect(await screen.findByText('derived')).toBeInTheDocument()
     expect(screen.getByText(borrowed.explanation)).toBeInTheDocument()

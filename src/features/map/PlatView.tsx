@@ -152,6 +152,8 @@ export interface PlatViewProps {
    * one labelled with a code.
    */
   labelForPin: (pin: string) => string
+  /** Business and owner/contact names shown when the parcel marker is hovered. */
+  hoverLabelForPin?: (pin: string) => string
   /** Active while the user is placing a record by hand. */
   placingEntity: Entity | null
   onPlace: (point: Point) => void
@@ -171,6 +173,7 @@ export function PlatView({
   onSelectPin,
   onSelectEntity,
   labelForPin,
+  hoverLabelForPin,
   placingEntity,
   onPlace,
   className,
@@ -448,8 +451,7 @@ export function PlatView({
       onScreen.top >= 0 &&
       onScreen.right <= size.width &&
       onScreen.bottom <= size.height
-    const readable =
-      lotWidth * k >= READABLE_LOT_PX || lotHeight * k >= READABLE_LOT_PX
+    const readable = lotWidth * k >= READABLE_LOT_PX || lotHeight * k >= READABLE_LOT_PX
 
     if (visible && readable) return
 
@@ -608,10 +610,7 @@ export function PlatView({
     size and the geometry, not on the transform, so this does not refire on a
     pan or a zoom.
   */
-  const arcSignature = useMemo(
-    () => arcs.map((arc) => arc.relationId).join(','),
-    [arcs]
-  )
+  const arcSignature = useMemo(() => arcs.map((arc) => arc.relationId).join(','), [arcs])
   const lastArcFrame = useRef<{ signature: string; projection: unknown }>({
     signature: '',
     projection: null,
@@ -764,6 +763,7 @@ export function PlatView({
                 selected={parcel.pin === selectedPin}
                 hovered={parcel.pin === hoveredPin}
                 strokeWidth={strokeWidth}
+                hoverLabel={hoverLabelForPin?.(parcel.pin) ?? parcel.pin}
                 onSelect={onSelectPin}
                 onHover={setHoveredPin}
               />
@@ -952,6 +952,18 @@ export function PlatView({
         </div>
       ) : null}
 
+      {hoveredPin && !placingEntity ? (
+        <div
+          role="tooltip"
+          className="panel pointer-events-none absolute right-2 bottom-8 max-w-72 px-2.5 py-2"
+        >
+          <p className="text-ink text-13 font-semibold">
+            {hoverLabelForPin?.(hoveredPin) ?? hoveredPin}
+          </p>
+          <p className="text-ink-faint mt-0.5 font-mono text-[0.6875rem]">PIN {hoveredPin}</p>
+        </div>
+      ) : null}
+
       <div className="text-ink-faint absolute bottom-2 left-2 font-mono text-[0.6875rem]">
         {Math.round(zoomLevel * 100)}%
       </div>
@@ -986,6 +998,7 @@ interface ParcelProps {
   selected: boolean
   hovered: boolean
   strokeWidth: number
+  hoverLabel: string
   onSelect: (pin: string | null) => void
   onHover: (pin: string | null) => void
 }
@@ -1005,6 +1018,7 @@ const Parcel = memo(function Parcel({
   selected,
   hovered,
   strokeWidth,
+  hoverLabel,
   onSelect,
   onHover,
 }: ParcelProps) {
@@ -1023,7 +1037,7 @@ const Parcel = memo(function Parcel({
       onPointerEnter={() => onHover(parcel.pin)}
       onPointerLeave={() => onHover(null)}
     >
-      <title>{parcel.commonArea ? `${parcel.commonArea}, ${parcel.pin}` : parcel.pin}</title>
+      <title>{hoverLabel === parcel.pin ? parcel.pin : `${hoverLabel} · ${parcel.pin}`}</title>
     </path>
   )
 })

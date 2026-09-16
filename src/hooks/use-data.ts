@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tan
 import { useMemo } from 'react'
 
 import { data } from '@/lib/data'
+import { useAuth } from '@/lib/auth'
 import type {
   Entity,
   EntityInput,
@@ -133,7 +134,13 @@ export function useActors() {
 
 /** The signed-in person, as the audit log records them. */
 export function useActor() {
-  return useQuery({ queryKey: queryKeys.actor, queryFn: () => data.getActor() })
+  const auth = useAuth()
+  const accountActor = auth.status === 'signed-in' ? auth.account.email : null
+
+  return useQuery({
+    queryKey: [...queryKeys.actor, accountActor ?? 'provider'],
+    queryFn: () => accountActor ?? data.getActor(),
+  })
 }
 
 /*
@@ -198,6 +205,32 @@ export function useCreateEntity() {
   return useMutation({
     mutationFn: (input: EntityInput) => data.createEntity(input),
     onSuccess: () => invalidateAll(client),
+  })
+}
+
+/** Creates a record and its initial connections before refreshing dependent views once. */
+export function useCreateEntityWithRelations() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      entity,
+      relations,
+    }: {
+      entity: EntityInput
+      relations: Array<Omit<RelationInput, 'fromEntityId'>>
+    }) => {
+      const created = await data.createEntity(entity)
+      for (const relation of relations) {
+        await data.createRelation({ ...relation, fromEntityId: created.id })
+      }
+      return created
+    },
+    onSuccess: () => {
+      // The record is already durable at this point. Let the form close while
+      // the directory and map refresh in the background, especially when a
+      // person was linked to several properties at once.
+      void invalidateAll(client)
+    },
   })
 }
 

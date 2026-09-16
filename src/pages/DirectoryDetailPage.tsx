@@ -17,6 +17,7 @@ import { EntityFormDialog } from '@/features/directory/EntityFormDialog'
 import { FilesTab } from '@/features/directory/FilesTab'
 import { ImagesTab, imagesOf } from '@/features/directory/ImagesTab'
 import { HistoryTab } from '@/features/directory/HistoryTab'
+import { NeedsAttentionNotice } from '@/features/directory/NeedsAttentionNotice'
 import { NotesTab } from '@/features/directory/NotesTab'
 import { RecordsTab } from '@/features/directory/RecordsTab'
 import { DIRECTORY_CONFIGS } from '@/features/directory/config'
@@ -288,6 +289,16 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
           </span>
         </Notice>
       ) : null}
+
+      {/* Above the tabs, so the reason somebody came is on whichever tab they land. */}
+      <NeedsAttentionNotice
+        entity={entity}
+        onOpenConnections={() => setTab('connections')}
+        onEditField={(fieldKey) => {
+          setFocusField(fieldKey)
+          setEditOpen(true)
+        }}
+      />
 
       <Tabs tabs={tabs} value={tab} onChange={setTab} className="mb-4" />
 

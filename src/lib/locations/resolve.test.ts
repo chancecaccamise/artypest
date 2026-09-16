@@ -21,7 +21,20 @@ const TYPES: RelationType[] = [
     label: 'resides at',
     reverseLabel: 'is home to',
   },
-  { id: 'rt-governs', orgId: 'o', key: 'governs', label: 'governs', reverseLabel: 'is governed by' },
+  {
+    id: 'rt-related-to',
+    orgId: 'o',
+    key: 'related_to',
+    label: 'is related to',
+    reverseLabel: 'is related to',
+  },
+  {
+    id: 'rt-governs',
+    orgId: 'o',
+    key: 'governs',
+    label: 'governs',
+    reverseLabel: 'is governed by',
+  },
   {
     id: 'rt-adjacent-to',
     orgId: 'o',
@@ -191,6 +204,14 @@ describe('person', () => {
     expect(resolveLocation(person, ctx)?.source).toBe('ownership')
   })
 
+  it('borrows from a property they are associated with', () => {
+    const person = entity('per', 'person', 'Associated resident')
+    const ctx = context([person, lot], [relation('r', 'rt-related-to', 'per', 'lot')])
+
+    expect(resolveLocation(person, ctx)?.source).toBe('related')
+    expect(resolveLocation(person, ctx)?.viaEntityId).toBe('lot')
+  })
+
   it('does not borrow from a lot they sold', () => {
     const person = entity('per', 'person', 'Prior owner')
     const ctx = context(
@@ -202,9 +223,15 @@ describe('person', () => {
   })
 
   it('does not borrow from an archived lot', () => {
-    const archived = entity('lot', 'property', 'Archived lot', { pin: PLATTED_PIN }, {
-      archivedAt: '2026-01-01T00:00:00.000Z',
-    })
+    const archived = entity(
+      'lot',
+      'property',
+      'Archived lot',
+      { pin: PLATTED_PIN },
+      {
+        archivedAt: '2026-01-01T00:00:00.000Z',
+      }
+    )
     const person = entity('per', 'person', 'A Resident')
     const ctx = context([person, archived], [relation('r', 'rt-resides-at', 'per', 'lot')])
 
@@ -233,6 +260,15 @@ describe('business', () => {
     const ctx = context([holding, lot], [relation('r', 'rt-owns', 'biz', 'lot')])
 
     expect(resolveLocation(holding, ctx)?.source).toBe('ownership')
+  })
+
+  it('falls back to an associated property when the office address is unknown', () => {
+    const lot = entity('lot', 'property', 'A lot', { pin: PLATTED_PIN })
+    const business = entity('biz', 'business', 'Property service')
+    const ctx = context([business, lot], [relation('r', 'rt-related-to', 'biz', 'lot')])
+
+    expect(resolveLocation(business, ctx)?.source).toBe('related')
+    expect(resolveLocation(business, ctx)?.viaEntityId).toBe('lot')
   })
 
   it('is unplaced when neither is known', () => {
@@ -324,11 +360,12 @@ describe('resolveAllLocations, against the seeded data', () => {
     expect(platted.every((lot) => index.byEntity.get(lot.id)?.source === 'parcel')).toBe(true)
   })
 
-  it('places most residents through where they live', () => {
-    const residents = demo.entities.filter((candidate) => candidate.type === 'person')
-    const placed = residents.filter((person) => index.byEntity.has(person.id))
-    expect(placed.length).toBeGreaterThan(0)
-    expect(placed.some((person) => index.byEntity.get(person.id)?.source === 'residence')).toBe(true)
+  it('leaves supplied contacts unplaced until the harvested geometry loads', () => {
+    const residents = demo.entities.filter(
+      (candidate) => candidate.type === 'person' && candidate.archivedAt === null
+    )
+    expect(residents.length).toBeGreaterThan(0)
+    expect(residents.every((person) => !index.byEntity.has(person.id))).toBe(true)
   })
 
   it('leaves some records unplaced, which is a normal state', () => {

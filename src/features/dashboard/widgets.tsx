@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Building2, ClipboardList, MapPinned, Network, Users } from 'lucide-react'
+import { Building2, ClipboardList, MapPinned, Network, Pencil, Users } from 'lucide-react'
 
 import { entityHref } from '@/components/layout/nav-config'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -145,7 +145,7 @@ export function NeedsAttentionPanel({ graph }: { graph: ResolvedGraph | null }) 
                         : 'border-l-transparent'
                   )}
                 >
-                  <span className="text-ink min-w-0 flex-1 truncate text-13">
+                  <span className="text-ink text-13 min-w-0 flex-1 truncate">
                     {item.description}
                   </span>
 
@@ -186,7 +186,13 @@ export function NeedsAttentionPanel({ graph }: { graph: ResolvedGraph | null }) 
 
 /* ------------------------------------------------------------------ board -- */
 
-export function BoardPanel({ graph }: { graph: ResolvedGraph | null }) {
+export function BoardPanel({
+  graph,
+  onManage,
+}: {
+  graph: ResolvedGraph | null
+  onManage?: () => void
+}) {
   const groups = useMemo(() => (graph ? computeBoard(graph) : null), [graph])
 
   if (!groups) {
@@ -202,12 +208,22 @@ export function BoardPanel({ graph }: { graph: ResolvedGraph | null }) {
 
   return (
     <Panel>
-      <PanelHeader title="Board and committees" />
+      <PanelHeader
+        title="Board and committees"
+        action={
+          onManage ? (
+            <Button size="sm" onClick={onManage}>
+              <Pencil />
+              Manage
+            </Button>
+          ) : null
+        }
+      />
       <PanelBody className="flex flex-col gap-4">
         {groups.length === 0 ? (
           <EmptyState
             title="No current board seats on record"
-            description="Board membership is a connection, not a separate list. Add a member_of connection with the board role to a person."
+            description="Use Manage to add the current board and committee members."
           />
         ) : (
           groups.map((group) => (
@@ -231,7 +247,7 @@ export function BoardPanel({ graph }: { graph: ResolvedGraph | null }) {
                     <li key={seat.relationId} className="flex items-center gap-2 py-1.5">
                       <Link
                         to={entityHref('person', seat.personId)}
-                        className="text-ink hover:text-survey min-w-0 flex-1 truncate text-13 hover:underline"
+                        className="text-ink hover:text-survey text-13 min-w-0 flex-1 truncate hover:underline"
                       >
                         {seat.personName}
                       </Link>
@@ -304,7 +320,7 @@ function ActivityLine({ entry }: { entry: ActivityEntry }) {
   if (!entry.entityId || !entry.entityType) return <AuditLine entry={entry} />
 
   return (
-    <li className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5 text-13">
+    <li className="text-13 flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5">
       <span className="text-ink-faint w-16 shrink-0 font-mono text-xs">
         {formatTime(entry.changedAt)}
       </span>
@@ -368,7 +384,10 @@ export function OccupancyPanel({ graph }: { graph: ResolvedGraph | null }) {
       <PanelHeader title="Occupancy" meta={`${total} lots`} />
       <PanelBody className="flex flex-col gap-3">
         {total === 0 ? (
-          <EmptyState title="No lots on record yet" description="Add a property to see occupancy." />
+          <EmptyState
+            title="No lots on record yet"
+            description="Add a property to see occupancy."
+          />
         ) : (
           <>
             {/* Divs and token colors. A chart library for one stacked bar
@@ -395,7 +414,7 @@ export function OccupancyPanel({ graph }: { graph: ResolvedGraph | null }) {
 
             <ul className="flex flex-col gap-1.5">
               {OCCUPANCY_SEGMENTS.map((segment) => (
-                <li key={segment} className="flex items-center gap-2 text-13">
+                <li key={segment} className="text-13 flex items-center gap-2">
                   <span
                     aria-hidden="true"
                     className="size-2.5 shrink-0 rounded-[2px]"
@@ -540,7 +559,14 @@ function MapPreviewGraphic() {
             stroke={node.color}
             strokeWidth="0.9"
           />
-          <rect x={node.x - 4.5} y={node.y - 1.6} width={9} height={1.4} rx={0.7} fill={node.color} />
+          <rect
+            x={node.x - 4.5}
+            y={node.y - 1.6}
+            width={9}
+            height={1.4}
+            rx={0.7}
+            fill={node.color}
+          />
           <rect
             x={node.x - 4.5}
             y={node.y + 0.6}

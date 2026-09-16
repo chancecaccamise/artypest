@@ -90,10 +90,7 @@ export interface DashboardStats {
   that is the state the demo was in before the harvest, and every existing
   figure has to keep its old meaning.
 */
-export function associationProperties(
-  graph: ResolvedGraph,
-  today: Date = new Date()
-): Entity[] {
+export function associationProperties(graph: ResolvedGraph, today: Date = new Date()): Entity[] {
   const properties = graph.entities.filter(
     (entity) =>
       entity.type === 'property' && entity.deletedAt === null && entity.archivedAt === null
@@ -189,8 +186,13 @@ export function computeStats(graph: ResolvedGraph, today: Date = new Date()): Da
 
 export type Urgency = 'overdue' | 'approaching' | 'incomplete'
 
+/** Which rule raised an item, so a record's page can offer the matching fix. */
+export type AttentionKind =
+  'contract' | 'insurance' | 'term' | 'follow-up' | 'no-owner' | 'no-pin' | 'no-contact'
+
 export interface AttentionItem {
   id: string
+  kind: AttentionKind
   urgency: Urgency
   /** What is wrong, in the board's words. */
   description: string
@@ -218,17 +220,59 @@ export function computeNeedsAttention(
   graph: ResolvedGraph,
   today: Date = new Date()
 ): AttentionItem[] {
+  return collectAttention(graph, today, null)
+}
+
+/**
+ * The items the dashboard would link to this one record.
+ *
+ * Same rules, same wording, same order: a reader who followed a line from the
+ * dashboard should find that line on the record, not a paraphrase of it. Only
+ * the relations touching the record are read, not the whole association.
+ */
+export function needsAttentionFor(
+  graph: ResolvedGraph,
+  entityId: string,
+  today: Date = new Date()
+): AttentionItem[] {
+  return collectAttention(graph, today, entityId)
+}
+
+function collectAttention(
+  graph: ResolvedGraph,
+  today: Date,
+  scope: string | null
+): AttentionItem[] {
   const items: AttentionItem[] = []
-  const active = graph.entities.filter(
-    (entity) => entity.deletedAt === null && entity.archivedAt === null
+  const isActive = (entity: Entity) => entity.deletedAt === null && entity.archivedAt === null
+
+  /*
+    Everything an item about one record can come from touches that record:
+    its own fields, and relations with it at one end. The ownership check for a
+    property reads the same list, because an `owns` relation touches the lot.
+  */
+  const relations = scope === null ? graph.relations : (graph.relationsFor.get(scope) ?? [])
+  const scoped = scope === null ? graph.entities : [graph.byId.get(scope)]
+  const associationPropertyIds =
+    scope === null
+      ? new Set(associationProperties(graph, today).map((property) => property.id))
+      : null
+  const active = scoped.filter(
+    (entity): entity is Entity =>
+      entity !== undefined &&
+      isActive(entity) &&
+      // County parcels remain searchable and mappable, but they are not HOA
+      // records and must not create sixteen thousand false dashboard warnings.
+      (entity.type !== 'property' ||
+        associationPropertyIds === null ||
+        associationPropertyIds.has(entity.id))
   )
-  const activeIds = new Set(active.map((entity) => entity.id))
 
   const urgencyFor = (days: number): Urgency => (days < 0 ? 'overdue' : 'approaching')
 
   const propertiesWithOwner = new Set<string>()
 
-  for (const relation of graph.relations) {
+  for (const relation of relations) {
     const key = relationKey(relation, graph)
     if (!key) continue
 
@@ -243,7 +287,7 @@ export function computeNeedsAttention(
     }
 
     if (!current) continue
-    if (!activeIds.has(from.id) || !activeIds.has(to.id)) continue
+    if (!isActive(from) || !isActive(to)) continue
 
     if (key === 'vendor_for') {
       const contractEnd =
@@ -256,6 +300,7 @@ export function computeNeedsAttention(
         if (days <= CONTRACT_WINDOW_DAYS) {
           items.push({
             id: `contract-${relation.id}`,
+            kind: 'contract',
             urgency: urgencyFor(days),
             description: `${from.name} contract ${days < 0 ? 'ended' : 'ends'}`,
             date: contractEnd,
@@ -272,6 +317,7 @@ export function computeNeedsAttention(
         if (days <= INSURANCE_WINDOW_DAYS) {
           items.push({
             id: `insurance-${relation.id}`,
+            kind: 'insurance',
             urgency: urgencyFor(days),
             description: `${from.name} insurance ${days < 0 ? 'expired' : 'expires'}`,
             date: insurance,
@@ -290,6 +336,7 @@ export function computeNeedsAttention(
           typeof relation.attributes.position === 'string' ? relation.attributes.position : 'member'
         items.push({
           id: `term-${relation.id}`,
+          kind: 'term',
           urgency: urgencyFor(days),
           description: `${from.name}, ${POSITION_LABELS[position] ?? position} of ${to.name}, term ${days < 0 ? 'ended' : 'ends'}`,
           date: relation.endDate,
@@ -310,6 +357,7 @@ export function computeNeedsAttention(
         if (days < 0) {
           items.push({
             id: `record-${entity.id}`,
+            kind: 'follow-up',
             urgency: 'overdue',
             description: `${entity.name} is past its follow-up date`,
             date: followUp,
@@ -325,6 +373,7 @@ export function computeNeedsAttention(
       if (!propertiesWithOwner.has(entity.id)) {
         items.push({
           id: `no-owner-${entity.id}`,
+          kind: 'no-owner',
           urgency: 'incomplete',
           description: `${entity.name} has no current owner on record`,
           date: null,
@@ -338,6 +387,7 @@ export function computeNeedsAttention(
       if (typeof pin !== 'string' || pin.trim() === '') {
         items.push({
           id: `no-pin-${entity.id}`,
+          kind: 'no-pin',
           urgency: 'incomplete',
           description: `${entity.name} has no SAGIS parcel number recorded`,
           date: null,
@@ -356,6 +406,7 @@ export function computeNeedsAttention(
       if (!hasEmail && !hasPhone) {
         items.push({
           id: `no-contact-${entity.id}`,
+          kind: 'no-contact',
           urgency: 'incomplete',
           description: `${entity.name} has no email and no phone number`,
           date: null,
@@ -370,7 +421,14 @@ export function computeNeedsAttention(
   // Overdue first, then what is coming up soonest, then the data gaps.
   const rank: Record<Urgency, number> = { overdue: 0, approaching: 1, incomplete: 2 }
 
-  return items.sort((a, b) => {
+  /*
+    A relation touching the record can raise an item about the other end: a
+    board term is the person's item, not the association's. Those belong on the
+    other record's page.
+  */
+  const relevant = scope === null ? items : items.filter((item) => item.entityId === scope)
+
+  return relevant.sort((a, b) => {
     if (rank[a.urgency] !== rank[b.urgency]) return rank[a.urgency] - rank[b.urgency]
     if (a.date && b.date) return a.date.localeCompare(b.date)
     if (a.date) return -1
@@ -442,7 +500,9 @@ export function computeBoard(graph: ResolvedGraph, today: Date = new Date()): Bo
 
   for (const group of groups.values()) {
     group.seats.sort(
-      (a, b) => positionRank(a.position) - positionRank(b.position) || a.personName.localeCompare(b.personName)
+      (a, b) =>
+        positionRank(a.position) - positionRank(b.position) ||
+        a.personName.localeCompare(b.personName)
     )
   }
 

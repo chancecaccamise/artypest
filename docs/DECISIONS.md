@@ -1036,3 +1036,74 @@ sit in the accessibility tree under the same name.
 It ran `vitest run src/lib/data/schema.test.ts`. The schema suite is
 `supabase/schema.test.ts`, so the script had been passing by testing nothing.
 Repointed, and the hand mark's Postgres behaviour added to it.
+
+## 2026-09-16, staff sign-in
+
+### Accounts are made in Supabase, so there is no sign-up and no reset flow
+
+**Chosen.** Email and password against accounts an administrator creates in
+Supabase. The sign-in page says to ask the administrator about a forgotten
+password.
+
+**Rejected.** A sign-up page, and an emailed password reset.
+
+**Why.** Staff accounts already exist and nobody should be able to add
+themselves. A reset flow needs the project's redirect URLs and email templates
+set up, which is configuration nobody has decided on yet. It is worth adding
+once there are more than a handful of accounts.
+
+### A correct password is not enough: the account must be in `org_users`
+
+**Chosen.** After Supabase accepts the password, the app reads the account's
+`org_users` row. No row means a plain "this account has not been given access"
+page, with a way to sign in as somebody else.
+
+**Rejected.** Treating any Supabase account as staff.
+
+**Why.** Row level security decides every read through `current_org_ids()`,
+which reads `org_users`. An account with no row would sign in to an application
+that can show it nothing once the Supabase provider lands, and until then would
+see the in-memory records with no right to. It also means an account created by
+mistake, or by public sign-up if that is ever left on, gets nowhere.
+
+### With a database configured, sign-in is always required; without one, only production refuses
+
+**Chosen.** Configured: sign-in on every page, in development too. Not
+configured: the demo runs with no sign-in in development and tests, and a
+production build shows "Sign-in is not available" instead of opening.
+
+**Rejected.** Opening whenever there is no database, and requiring a database
+everywhere.
+
+**Why.** The demo with no credentials is how every fresh clone and the whole
+test suite run, and that is worth keeping. But a deployment that lost its
+environment variables would otherwise open to everyone without a sound, which
+is the one failure a sign-in page exists to prevent.
+
+### The role comes from the account, and only administrators may preview another
+
+**Chosen.** `src/lib/role.tsx` takes the role from `org_users`. The header's
+role switcher is shown to administrators only, and is still shown to everyone in
+the demo. An unrecognised role is treated as resident.
+
+**Why.** Left as it was, the switcher would let a board member give themselves
+an administrator's controls a second after signing in. The preview is kept
+against the account that chose it, so it cannot carry past a sign-out into the
+next person's sitting.
+
+### Signing out ends this browser's sign-in only
+
+**Chosen.** `signOut({ scope: 'local' })`, then the query cache is cleared.
+
+**Why.** Supabase's default ends every sign-in that person has, including their
+phone. Nobody means that by "sign out".
+
+### The sign-in tests fake the network, not the client
+
+**Chosen.** `src/test/fake-supabase.ts` builds a real supabase-js client whose
+`fetch` answers the password grant, logout, and the `org_users` read.
+
+**Why.** Mocking `signInWithPassword` would test our assumptions about the
+library. This runs its real error classes, session storage, and query builder,
+so the "wrong password" and "connection down" messages are tested against what
+the library actually returns.

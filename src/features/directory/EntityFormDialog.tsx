@@ -5,7 +5,11 @@ import { Dialog } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/field'
 import { Notice } from '@/components/ui/empty-state'
 import { DIRECTORY_CONFIGS, type FieldDef } from '@/features/directory/config'
-import { useCreateEntity, useUpdateEntity } from '@/hooks/use-data'
+import {
+  type PendingPropertyLink,
+  PropertyLinkFields,
+} from '@/features/directory/PropertyLinkFields'
+import { useCreateEntityWithRelations, useRelationTypes, useUpdateEntity } from '@/hooks/use-data'
 import { useReferenceLabels } from '@/hooks/use-reference-labels'
 import { ENTITY_TYPE_LABELS, type Entity, type EntityType } from '@/lib/data/types'
 import { readString } from '@/lib/format'
@@ -54,13 +58,15 @@ export function EntityFormDialog({
   const fields = useMemo(() => formFields(type), [type])
   const { optionsFor } = useReferenceLabels()
 
-  const createEntity = useCreateEntity()
+  const createEntity = useCreateEntityWithRelations()
+  const relationTypes = useRelationTypes()
   const updateEntity = useUpdateEntity()
 
   const [name, setName] = useState('')
   const [values, setValues] = useState<Record<string, string>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [propertyLinks, setPropertyLinks] = useState<PendingPropertyLink[]>([])
 
   /*
     Reset whenever the dialog opens, so a cancelled edit does not leak into the
@@ -75,10 +81,13 @@ export function EntityFormDialog({
     if (openKey !== null) {
       setName(entity?.name ?? '')
       setValues(
-        Object.fromEntries(fields.map((field) => [field.key, toInputValue(entity?.data[field.key])]))
+        Object.fromEntries(
+          fields.map((field) => [field.key, toInputValue(entity?.data[field.key])])
+        )
       )
       setErrors({})
       setSubmitError(null)
+      setPropertyLinks([])
     }
   }
 
@@ -133,10 +142,26 @@ export function EntityFormDialog({
           },
         })
       } else {
+        const relationTypeByKey = new Map(
+          (relationTypes.data ?? []).map((relationType) => [relationType.key, relationType])
+        )
+        const unresolved = propertyLinks.find((link) => !relationTypeByKey.has(link.relationKey))
+        if (unresolved) throw new Error('A selected property relationship is not available.')
+
         const created = await createEntity.mutateAsync({
-          type,
-          name: parsed.data.name,
-          data: parsed.data.data,
+          entity: {
+            type,
+            name: parsed.data.name,
+            data: parsed.data.data,
+          },
+          relations: propertyLinks.map((link) => {
+            const relationType = relationTypeByKey.get(link.relationKey)
+            if (!relationType) throw new Error('A selected property relationship is not available.')
+            return {
+              relationTypeId: relationType.id,
+              toEntityId: link.propertyId,
+            }
+          }),
         })
         onCreated?.(created)
       }
@@ -157,7 +182,9 @@ export function EntityFormDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title={isEditing ? `Edit ${config.singular.toLowerCase()}` : `Add ${config.singular.toLowerCase()}`}
+      title={
+        isEditing ? `Edit ${config.singular.toLowerCase()}` : `Add ${config.singular.toLowerCase()}`
+      }
       description={
         isEditing
           ? 'Every change is recorded field by field in the History tab.'
@@ -169,7 +196,11 @@ export function EntityFormDialog({
             Cancel
           </Button>
           <Button variant="primary" type="submit" form="entity-form" disabled={pending}>
-            {pending ? 'Saving' : isEditing ? 'Save changes' : `Add ${config.singular.toLowerCase()}`}
+            {pending
+              ? 'Saving'
+              : isEditing
+                ? 'Save changes'
+                : `Add ${config.singular.toLowerCase()}`}
           </Button>
         </>
       }
@@ -262,6 +293,10 @@ export function EntityFormDialog({
             )
           })}
         </div>
+
+        {!isEditing && (type === 'person' || type === 'business') ? (
+          <PropertyLinkFields type={type} value={propertyLinks} onChange={setPropertyLinks} />
+        ) : null}
       </form>
     </Dialog>
   )
