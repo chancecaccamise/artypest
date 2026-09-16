@@ -1,12 +1,11 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Building2, ClipboardList, MapPinned, Network, Pencil, Users } from 'lucide-react'
+import { Building2, ClipboardList, MapPinned, Pencil, Users } from 'lucide-react'
 
 import { entityHref } from '@/components/layout/nav-config'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Panel, PanelBody, PanelFooter, PanelHeader } from '@/components/ui/panel'
-import { PhaseTag } from '@/components/ui/phase-note'
 import { Skeleton, SkeletonRows } from '@/components/ui/skeleton'
 import { AuditLine, groupByDay } from '@/features/directory/HistoryTab'
 import { useActivity } from '@/hooks/use-data'
@@ -135,7 +134,7 @@ export function NeedsAttentionPanel({ graph }: { graph: ResolvedGraph | null }) 
             {visible.map((item) => (
               <li key={item.id}>
                 <Link
-                  to={entityHref(item.entityType, item.entityId)}
+                  to={`${entityHref(item.entityType, item.entityId)}${item.kind === 'todo' ? '?tab=todo' : ''}`}
                   className={cn(
                     'hover:bg-paper-sunken flex items-center gap-3 border-l-[3px] px-3 py-2 transition-colors duration-[120ms]',
                     item.urgency === 'overdue'
@@ -171,10 +170,7 @@ export function NeedsAttentionPanel({ graph }: { graph: ResolvedGraph | null }) 
 
       {items.length > VISIBLE_ATTENTION_ITEMS ? (
         <PanelFooter>
-          <span>
-            {items.length - VISIBLE_ATTENTION_ITEMS} more, mostly records missing an owner or a
-            parcel number
-          </span>
+          <span>{items.length - VISIBLE_ATTENTION_ITEMS} more items need attention</span>
           <Link to="/properties" className="text-survey hover:underline">
             Open Properties
           </Link>
@@ -455,9 +451,7 @@ export function QuickAddPanel({ onAdd, disabled = false }: QuickAddPanelProps) {
   return (
     <Panel>
       <PanelHeader title="Quick add" />
-      {/* content-start keeps the buttons their own height when this panel is
-          stretched to match the Connection Map card beside it. */}
-      <PanelBody className="grid auto-rows-min grid-cols-2 content-start gap-2">
+      <PanelBody className="grid auto-rows-min grid-cols-2 content-start gap-2 sm:grid-cols-4">
         {actions.map((action) => (
           <Button
             key={action.type}
@@ -477,106 +471,5 @@ export function QuickAddPanel({ onAdd, disabled = false }: QuickAddPanelProps) {
         </PanelFooter>
       ) : null}
     </Panel>
-  )
-}
-
-/* ------------------------------------------------------------ map preview -- */
-
-export function MapPreviewPanel({ graph }: { graph: ResolvedGraph | null }) {
-  const connections = graph?.relations.length ?? 0
-  const records = graph?.entities.length ?? 0
-
-  return (
-    <Panel>
-      <PanelHeader title="Connection Map" action={<PhaseTag>live</PhaseTag>} />
-      <PanelBody className="flex flex-col gap-3">
-        <p className="text-ink-muted text-13">
-          Every resident, lot, business, and association in one picture. Start from any record and
-          walk outward: who owns what, who lives where, which vendor a board member happens to work
-          for.
-        </p>
-
-        <MapPreviewGraphic />
-
-        <div className="flex items-center gap-4">
-          <span className="text-ink-faint font-mono text-xs">{records} records</span>
-          <span className="text-ink-faint font-mono text-xs">{connections} connections</span>
-        </div>
-      </PanelBody>
-
-      <PanelFooter>
-        <span>Click any node to re-centre the map on it.</span>
-        <Link to="/map" className={cn(buttonVariants({ size: 'sm', variant: 'primary' }))}>
-          <Network className="size-3.5" />
-          Open map
-        </Link>
-      </PanelFooter>
-    </Panel>
-  )
-}
-
-/** A small, honest sketch of the map's shape. Not a fake graph of real data. */
-function MapPreviewGraphic() {
-  const nodes = [
-    { x: 50, y: 18, color: 'var(--type-person)' },
-    { x: 18, y: 58, color: 'var(--type-property)' },
-    { x: 50, y: 62, color: 'var(--type-property)' },
-    { x: 82, y: 52, color: 'var(--type-business)' },
-    { x: 30, y: 88, color: 'var(--type-association)' },
-    { x: 72, y: 86, color: 'var(--type-record)' },
-  ] as const
-
-  return (
-    <svg
-      viewBox="0 0 100 100"
-      className="border-rule bg-paper h-32 w-full rounded-[3px] border"
-      preserveAspectRatio="xMidYMid meet"
-      aria-hidden="true"
-    >
-      {nodes.slice(1).map((node, index) => (
-        <line
-          key={index}
-          x1={nodes[0].x}
-          y1={nodes[0].y}
-          x2={node.x}
-          y2={node.y}
-          stroke="var(--rule)"
-          strokeWidth="0.7"
-        />
-      ))}
-      <line x1={18} y1={58} x2={30} y2={88} stroke="var(--rule)" strokeWidth="0.7" />
-      <line x1={82} y1={52} x2={72} y2={86} stroke="var(--rule)" strokeWidth="0.7" />
-
-      {nodes.map((node, index) => (
-        <g key={index}>
-          <rect
-            x={node.x - 7}
-            y={node.y - 4.5}
-            width={14}
-            height={9}
-            rx={1.5}
-            fill="var(--paper-raised)"
-            stroke={node.color}
-            strokeWidth="0.9"
-          />
-          <rect
-            x={node.x - 4.5}
-            y={node.y - 1.6}
-            width={9}
-            height={1.4}
-            rx={0.7}
-            fill={node.color}
-          />
-          <rect
-            x={node.x - 4.5}
-            y={node.y + 0.6}
-            width={6}
-            height={1.1}
-            rx={0.55}
-            fill="var(--rule-strong)"
-          />
-        </g>
-      ))}
-    </svg>
   )
 }

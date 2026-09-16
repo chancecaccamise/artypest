@@ -88,6 +88,11 @@ export const RECORD_TYPES = [
   'assessment',
 ] as const
 
+export interface BuildDemoDataOptions {
+  /** Test-only legacy fixtures. The running website always supplies false. */
+  includeTemporaryData?: boolean
+}
+
 export function buildDemoData(
   reference: Date = new Date(),
   /*
@@ -95,7 +100,8 @@ export function buildDemoData(
     tests and any code path that does not want 10,000 lots keeps the small
     demo. See src/lib/parcels/parcel-layer.ts.
   */
-  parcelLayer: readonly ParcelLayerRecord[] = []
+  parcelLayer: readonly ParcelLayerRecord[] = [],
+  { includeTemporaryData = true }: BuildDemoDataOptions = {}
 ): DemoData {
   const random = makeRandom(31405)
   const pick = <T>(list: readonly T[]): T => at(list, Math.floor(random() * list.length))
@@ -122,7 +128,9 @@ export function buildDemoData(
 
   const org: Org = {
     id: ORG_ID,
-    name: 'Ardsley Park Homeowners Association',
+    name: includeTemporaryData
+      ? 'Ardsley Park Homeowners Association'
+      : 'Thomas Square Neighborhood Association',
     sagisUrlTemplate: 'https://gis.chathamcounty.org/parcelviewer?pin={pin}',
     createdAt: stamp(-1460, 14),
   }
@@ -1596,13 +1604,15 @@ export function buildDemoData(
     Lots already seeded above are skipped, because the association's own record
     of a lot it manages is better than the roll's.
   */
-  const seededPins = new Set(
-    properties
-      .map((property) =>
-        typeof property.data.pin === 'string' ? normalizePin(property.data.pin) : ''
+  const seededPins = includeTemporaryData
+    ? new Set(
+        properties
+          .map((property) =>
+            typeof property.data.pin === 'string' ? normalizePin(property.data.pin) : ''
+          )
+          .filter((pin) => pin !== '')
       )
-      .filter((pin) => pin !== '')
-  )
+    : new Set<string>()
 
   parcelLayer.forEach((parcel, index) => {
     const pin = normalizePin(parcel.pin)
@@ -1747,6 +1757,50 @@ export function buildDemoData(
     markChecked(person, Math.min(Math.max(createdDaysAgo, 1), 120), contact.person.name)
     if (business) {
       markChecked(business, Math.min(Math.max(createdDaysAgo, 1), 120), contact.person.name)
+    }
+  }
+
+  if (!includeTemporaryData) {
+    const association = entity(
+      'ent-tsna-association',
+      'association',
+      'Thomas Square Neighborhood Association',
+      {
+        associationType: 'neighborhood_association',
+        boardSeats: null,
+        foundedYear: null,
+        jurisdiction: 'Thomas Square, Savannah, Georgia',
+        meetingCadence: null,
+        email: null,
+        phone: null,
+        mailingAddress: null,
+        notes: '',
+      },
+      0,
+      0
+    )
+
+    const cleanEntities = entities
+      .filter(
+        (row) =>
+          row.id.startsWith('ent-parcel-') ||
+          row.id.startsWith('ent-tsna-') ||
+          row.id === association.id
+      )
+      .map((row) => ({ ...row, archivedAt: null, reviewedAt: null, reviewedBy: null }))
+    const cleanEntityIds = new Set(cleanEntities.map((row) => row.id))
+    const cleanRelations = relations.filter(
+      (row) => cleanEntityIds.has(row.fromEntityId) && cleanEntityIds.has(row.toEntityId)
+    )
+
+    return {
+      org,
+      relationTypes,
+      entities: cleanEntities,
+      relations: cleanRelations,
+      auditEntries: [],
+      referenceItems,
+      users: [],
     }
   }
 

@@ -20,12 +20,14 @@ import { HistoryTab } from '@/features/directory/HistoryTab'
 import { NeedsAttentionNotice } from '@/features/directory/NeedsAttentionNotice'
 import { NotesTab } from '@/features/directory/NotesTab'
 import { RecordsTab } from '@/features/directory/RecordsTab'
+import { ToDoTab } from '@/features/directory/ToDoTab'
 import { DIRECTORY_CONFIGS } from '@/features/directory/config'
 import { ReviewToggle, reviewSentence } from '@/features/review/ReviewMark'
 import {
   useArchiveEntity,
   useDeleteEntity,
   useEntity,
+  useGraph,
   useRelations,
   useOrg,
   useRestoreEntity,
@@ -35,9 +37,11 @@ import { ENTITY_TYPE_LABELS, type EntityType } from '@/lib/data/types'
 import { formatDateTime } from '@/lib/format'
 import { stateFor } from '@/lib/review/status'
 import { useRole } from '@/lib/role'
+import { todosForSubject } from '@/lib/todos'
 
 const TABS: TabDefinition[] = [
   { value: 'details', label: 'Details' },
+  { value: 'todo', label: 'To do' },
   { value: 'images', label: 'Images' },
   { value: 'connections', label: 'Connections' },
   { value: 'records', label: 'Records' },
@@ -57,6 +61,7 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
   const relationsQuery = useRelations(id)
   const org = useOrg()
   const reviewIndex = useReviewIndex()
+  const { graph } = useGraph()
 
   const archiveEntity = useArchiveEntity()
   const restoreEntity = useRestoreEntity()
@@ -69,8 +74,14 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
+  const supportsTodos = type === 'person' || type === 'business'
+  const availableTabs = supportsTodos
+    ? TABS
+    : TABS.filter((candidate) => candidate.value !== 'todo')
   const requested = params.get('tab') ?? 'details'
-  const tab = TABS.some((candidate) => candidate.value === requested) ? requested : 'details'
+  const tab = availableTabs.some((candidate) => candidate.value === requested)
+    ? requested
+    : 'details'
 
   /*
     Counts on the tabs, so a reader can see there are two connections and no
@@ -83,18 +94,22 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
       (relation) => relation.deletedAt === null
     ).length
 
-    const withCounts = TABS.map((definition) => {
+    const withCounts = availableTabs.map((definition) => {
       if (definition.value === 'images') {
         return { ...definition, count: current ? imagesOf(current).length : undefined }
       }
       if (definition.value === 'connections') {
         return { ...definition, count: relationsQuery.data ? connections : undefined }
       }
+      if (definition.value === 'todo') {
+        const count = current && graph ? todosForSubject(graph, current.id).length : undefined
+        return { ...definition, count }
+      }
       return definition
     })
 
     return canSeeNotes ? withCounts : withCounts.filter((item) => item.value !== 'notes')
-  }, [canSeeNotes, entityQuery.data, relationsQuery.data])
+  }, [availableTabs, canSeeNotes, entityQuery.data, graph, relationsQuery.data])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -174,7 +189,11 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
           <span className="flex flex-wrap items-center gap-1.5">
             <TypeBadge type={entity.type}>{ENTITY_TYPE_LABELS[entity.type].singular}</TypeBadge>
             {chips.map((chip) => (
-              <IdChip key={`${chip.prefix ?? ''}${chip.value}`} prefix={chip.prefix} title={chip.title}>
+              <IdChip
+                key={`${chip.prefix ?? ''}${chip.value}`}
+                prefix={chip.prefix}
+                title={chip.title}
+              >
                 {chip.value}
               </IdChip>
             ))}
@@ -205,68 +224,68 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
                 className="h-9 px-3 text-sm"
               />
               <div className="relative" ref={menuRef}>
-              <Button
-                variant="secondary"
-                onClick={() => setMenuOpen((open) => !open)}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-              >
-                Actions
-                <ChevronDown />
-              </Button>
-
-              {menuOpen ? (
-                <div
-                  role="menu"
-                  className="panel panel-enter absolute right-0 z-30 mt-1 w-48 p-1"
-                  style={{
-                    boxShadow: '0 8px 24px -10px color-mix(in srgb, var(--ink) 35%, transparent)',
-                  }}
+                <Button
+                  variant="secondary"
+                  onClick={() => setMenuOpen((open) => !open)}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
                 >
-                  <MenuItem
-                    onClick={() => {
-                      setFocusField(undefined)
-                      setEditOpen(true)
-                      setMenuOpen(false)
+                  Actions
+                  <ChevronDown />
+                </Button>
+
+                {menuOpen ? (
+                  <div
+                    role="menu"
+                    className="panel panel-enter absolute right-0 z-30 mt-1 w-48 p-1"
+                    style={{
+                      boxShadow: '0 8px 24px -10px color-mix(in srgb, var(--ink) 35%, transparent)',
                     }}
                   >
-                    <Pencil className="size-3.5" />
-                    Edit
-                  </MenuItem>
-
-                  {archived ? (
                     <MenuItem
                       onClick={() => {
-                        restoreEntity.mutate(entity.id)
+                        setFocusField(undefined)
+                        setEditOpen(true)
                         setMenuOpen(false)
                       }}
                     >
-                      <ArchiveRestore className="size-3.5" />
-                      Restore
+                      <Pencil className="size-3.5" />
+                      Edit
                     </MenuItem>
-                  ) : (
+
+                    {archived ? (
+                      <MenuItem
+                        onClick={() => {
+                          restoreEntity.mutate(entity.id)
+                          setMenuOpen(false)
+                        }}
+                      >
+                        <ArchiveRestore className="size-3.5" />
+                        Restore
+                      </MenuItem>
+                    ) : (
+                      <MenuItem
+                        onClick={() => {
+                          archiveEntity.mutate(entity.id)
+                          setMenuOpen(false)
+                        }}
+                      >
+                        <Archive className="size-3.5" />
+                        Archive
+                      </MenuItem>
+                    )}
+
                     <MenuItem
+                      tone="destructive"
                       onClick={() => {
-                        archiveEntity.mutate(entity.id)
+                        setConfirmDelete(true)
                         setMenuOpen(false)
                       }}
                     >
-                      <Archive className="size-3.5" />
-                      Archive
+                      <Trash2 className="size-3.5" />
+                      Delete
                     </MenuItem>
-                  )}
-
-                  <MenuItem
-                    tone="destructive"
-                    onClick={() => {
-                      setConfirmDelete(true)
-                      setMenuOpen(false)
-                    }}
-                  >
-                    <Trash2 className="size-3.5" />
-                    Delete
-                  </MenuItem>
-                </div>
+                  </div>
                 ) : null}
               </div>
             </div>
@@ -294,6 +313,7 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
       <NeedsAttentionNotice
         entity={entity}
         onOpenConnections={() => setTab('connections')}
+        onOpenTodos={() => setTab('todo')}
         onEditField={(fieldKey) => {
           setFocusField(fieldKey)
           setEditOpen(true)
@@ -315,6 +335,12 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
       <TabPanel value="images" active={tab === 'images'}>
         {entity ? <ImagesTab entity={entity} /> : null}
       </TabPanel>
+
+      {supportsTodos ? (
+        <TabPanel value="todo" active={tab === 'todo'}>
+          <ToDoTab entity={entity} />
+        </TabPanel>
+      ) : null}
 
       <TabPanel value="connections" active={tab === 'connections'}>
         <ConnectionsTab entity={entity} />
@@ -388,8 +414,8 @@ function MenuItem({
       onClick={onClick}
       className={
         tone === 'destructive'
-          ? 'text-oxblood hover:bg-paper-sunken flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left text-13 transition-colors duration-[120ms]'
-          : 'text-ink hover:bg-paper-sunken flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left text-13 transition-colors duration-[120ms]'
+          ? 'text-oxblood hover:bg-paper-sunken text-13 flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left transition-colors duration-[120ms]'
+          : 'text-ink hover:bg-paper-sunken text-13 flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left transition-colors duration-[120ms]'
       }
     >
       {children}

@@ -31,7 +31,8 @@ import type { DataProvider } from './types'
 const SAVE_DEBOUNCE_MS = 400
 
 let store: OverlayStore = createLocalOverlayStore()
-let baseline: DemoData = buildDemoData()
+const includeTemporaryData = import.meta.env.MODE === 'test'
+let baseline: DemoData = buildDemoData(new Date(), [], { includeTemporaryData })
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
 type PersistenceListener = (error: string | null) => void
@@ -138,22 +139,17 @@ export let parcelLayerSource: 'harvest' | 'fixture' = 'fixture'
  * Rebuilds the provider with the harvested parcel layer folded in, and with any
  * saved work layered back on top.
  *
- * Call once, before rendering. Calling it with an empty array leaves the
- * fixture demo in place, which is the fallback when
- * public/parcels/attributes.json has not been generated.
+ * Call once before rendering. The client dataset is clean even when the county
+ * layer is unavailable: supplied contacts remain, but generated demo records
+ * are never shown in the running website.
  */
 export function initializeData(
   parcels: readonly ParcelLayerRecord[],
   source: 'harvest' | 'fixture' = 'harvest'
 ): void {
-  if (parcels.length === 0) {
-    parcelLayerSource = 'fixture'
-    return
-  }
-
-  provider = build(buildDemoData(new Date(), parcels))
+  provider = build(buildDemoData(new Date(), parcels, { includeTemporaryData: false }))
   data = provider
-  parcelLayerSource = source
+  parcelLayerSource = parcels.length === 0 ? 'fixture' : source
 }
 
 /**

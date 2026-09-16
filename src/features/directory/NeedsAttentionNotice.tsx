@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 export interface NeedsAttentionNoticeProps {
   entity: Entity
   onOpenConnections: () => void
+  onOpenTodos: () => void
   /** Opens the edit form with this field focused. */
   onEditField: (fieldKey: string) => void
 }
@@ -36,6 +37,7 @@ interface Fix {
 export function NeedsAttentionNotice({
   entity,
   onOpenConnections,
+  onOpenTodos,
   onEditField,
 }: NeedsAttentionNoticeProps) {
   const { graph } = useGraph()
@@ -50,16 +52,17 @@ export function NeedsAttentionNotice({
 
   const fixFor = (kind: AttentionKind): Fix | null => {
     switch (kind) {
-      // Terms, contracts, insurance, and ownership are all dated connections.
+      // Terms, contracts, and insurance are all dated connections.
       case 'term':
       case 'contract':
       case 'insurance':
-      case 'no-owner':
         return { label: 'Open connections', run: onOpenConnections }
       case 'no-pin':
         return canEdit ? { label: 'Add parcel number', run: () => onEditField('pin') } : null
       case 'no-contact':
         return canEdit ? { label: 'Add email or phone', run: () => onEditField('email') } : null
+      case 'todo':
+        return { label: 'Open to do', run: onOpenTodos }
       case 'follow-up':
         return canEdit
           ? { label: 'Change follow-up date', run: () => onEditField('followUpDate') }

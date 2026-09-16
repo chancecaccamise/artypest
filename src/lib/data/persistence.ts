@@ -29,8 +29,12 @@ const STORAGE_KEY = 'artypest.overlay.v1'
   A version 1 overlay would restore records with no hand mark and audit rows
   with no provenance, which would read as "checked by nobody, written by
   nobody" rather than as missing.
+
+  3: the generated demo dataset was retired. An older overlay can contain full
+  copies of edited fixture records and would otherwise bring fake people and
+  activity back after the clean baseline loads.
 */
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 export interface Overlay {
   version: number

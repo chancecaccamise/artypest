@@ -4,7 +4,6 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { Notice } from '@/components/ui/empty-state'
 import {
   BoardPanel,
-  MapPreviewPanel,
   NeedsAttentionPanel,
   OccupancyPanel,
   QuickAddPanel,
@@ -23,7 +22,7 @@ import { useRole } from '@/lib/role'
     1. Stat strip
     2. Needs attention (two thirds) and Board and committees (one third)
     3. Recent activity (two thirds) and Occupancy (one third)
-    4. Quick add (half) and Connection Map (half)
+    4. Quick add
 
   Every widget owns its own loading skeleton and empty state, so a slow or
   empty section never blanks the page.
@@ -66,10 +65,7 @@ export function DashboardPage() {
         <OccupancyPanel graph={graph} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <QuickAddPanel disabled={!canEdit} onAdd={(type) => setAddType(type)} />
-        <MapPreviewPanel graph={graph} />
-      </div>
+      <QuickAddPanel disabled={!canEdit} onAdd={(type) => setAddType(type)} />
 
       {addType ? <EntityFormDialog open onClose={() => setAddType(null)} type={addType} /> : null}
 

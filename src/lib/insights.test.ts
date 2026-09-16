@@ -278,7 +278,7 @@ describe('computeNeedsAttention', () => {
     expect(item?.description).toContain('expired')
   })
 
-  it('flags a property with no current owner and one with no PIN', () => {
+  it('does not flag ownerless properties but still flags a missing PIN', () => {
     const graph = resolveGraph({
       entities: [
         entity('lot1', 'property', 'Owned Lot', { pin: '20032 63001' }),
@@ -294,12 +294,11 @@ describe('computeNeedsAttention', () => {
     const noOwner = items.filter((item) => item.source === 'Missing owner').map((i) => i.entityId)
     const noPin = items.filter((item) => item.source === 'Missing PIN').map((i) => i.entityId)
 
-    expect(noOwner).toEqual(expect.arrayContaining(['lot2', 'lot3']))
-    expect(noOwner).not.toContain('lot1')
+    expect(noOwner).toEqual([])
     expect(noPin).toEqual(['lot3'])
   })
 
-  it('does not treat an ended ownership as current', () => {
+  it('does not turn an ended ownership into a needs-attention item', () => {
     const graph = resolveGraph({
       entities: [
         entity('lot1', 'property', 'Sold Lot', { pin: '20032 63001' }),
@@ -309,7 +308,7 @@ describe('computeNeedsAttention', () => {
       relationTypes: TYPES,
     })
 
-    expect(computeNeedsAttention(graph, TODAY).some((i) => i.source === 'Missing owner')).toBe(true)
+    expect(computeNeedsAttention(graph, TODAY).some((i) => i.source === 'Missing owner')).toBe(false)
   })
 
   it('flags a person only when both email and phone are missing', () => {

@@ -186,6 +186,10 @@ export const recordDataSchema = z.object({
   followUpDate: optionalDate,
   summary: optionalText,
   notes: optionalText,
+  /** Present on reminder records created from a person or business page. */
+  subjectId: optionalText.optional(),
+  subjectType: optionalText.optional(),
+  completedAt: optionalDate.optional(),
 })
 
 export const documentDataSchema = z.object({

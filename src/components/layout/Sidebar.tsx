@@ -119,11 +119,6 @@ export function Sidebar({
         ))}
       </div>
 
-      {showLabels ? (
-        <div className="border-rule text-ink-faint border-t px-3 py-2 text-[0.6875rem]">
-          <p className="font-mono">demo data, no backend</p>
-        </div>
-      ) : null}
     </nav>
   )
 }

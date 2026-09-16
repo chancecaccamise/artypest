@@ -153,7 +153,7 @@ describe('recent activity', () => {
   })
 })
 
-describe('quick add and the map preview', () => {
+describe('quick add', () => {
   it('opens the add dialog for the type that was clicked', async () => {
     const user = userEvent.setup()
     renderWithProviders(<App />)
@@ -169,10 +169,10 @@ describe('quick add and the map preview', () => {
     })
   })
 
-  it('links the map preview straight into the Connection Map', async () => {
+  it('does not render the Connection Map preview card', async () => {
     renderWithProviders(<App />)
 
-    const link = await screen.findByRole('link', { name: /Open map/ })
-    expect(link).toHaveAttribute('href', '/map')
+    await screen.findByRole('button', { name: 'Add business' })
+    expect(screen.queryByRole('link', { name: /Open map/ })).not.toBeInTheDocument()
   })
 })

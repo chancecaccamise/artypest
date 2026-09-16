@@ -188,7 +188,7 @@ export type Urgency = 'overdue' | 'approaching' | 'incomplete'
 
 /** Which rule raised an item, so a record's page can offer the matching fix. */
 export type AttentionKind =
-  'contract' | 'insurance' | 'term' | 'follow-up' | 'no-owner' | 'no-pin' | 'no-contact'
+  'contract' | 'insurance' | 'term' | 'follow-up' | 'todo' | 'no-pin' | 'no-contact'
 
 export interface AttentionItem {
   id: string
@@ -248,8 +248,7 @@ function collectAttention(
 
   /*
     Everything an item about one record can come from touches that record:
-    its own fields, and relations with it at one end. The ownership check for a
-    property reads the same list, because an `owns` relation touches the lot.
+    its own fields, and relations with it at one end.
   */
   const relations = scope === null ? graph.relations : (graph.relationsFor.get(scope) ?? [])
   const scoped = scope === null ? graph.entities : [graph.byId.get(scope)]
@@ -270,7 +269,29 @@ function collectAttention(
 
   const urgencyFor = (days: number): Urgency => (days < 0 ? 'overdue' : 'approaching')
 
-  const propertiesWithOwner = new Set<string>()
+  // Reminder records belong to their person or business through subjectId.
+  // They appear on that subject's page and link there from the dashboard.
+  for (const todo of graph.entities) {
+    if (!isActive(todo) || todo.type !== 'record') continue
+    if (todo.data.recordType !== 'todo' || todo.data.status === 'closed') continue
+    const subjectId = typeof todo.data.subjectId === 'string' ? todo.data.subjectId : ''
+    if (!subjectId || (scope !== null && subjectId !== scope)) continue
+    const subject = graph.byId.get(subjectId)
+    if (!subject || !isActive(subject)) continue
+
+    const dueDate = typeof todo.data.followUpDate === 'string' ? todo.data.followUpDate : null
+    const days = dueDate ? daysUntil(dueDate, today) : null
+    items.push({
+      id: `todo-${todo.id}`,
+      kind: 'todo',
+      urgency: days === null ? 'incomplete' : urgencyFor(days),
+      description: todo.name,
+      date: dueDate,
+      entityId: subject.id,
+      entityType: subject.type,
+      source: `To do · ${subject.name}`,
+    })
+  }
 
   for (const relation of relations) {
     const key = relationKey(relation, graph)
@@ -281,10 +302,6 @@ function collectAttention(
     if (!from || !to) continue
 
     const current = isCurrent(relation, today)
-
-    if (key === 'owns' && to.type === 'property' && current) {
-      propertiesWithOwner.add(to.id)
-    }
 
     if (!current) continue
     if (!isActive(from) || !isActive(to)) continue
@@ -370,19 +387,6 @@ function collectAttention(
     }
 
     if (entity.type === 'property') {
-      if (!propertiesWithOwner.has(entity.id)) {
-        items.push({
-          id: `no-owner-${entity.id}`,
-          kind: 'no-owner',
-          urgency: 'incomplete',
-          description: `${entity.name} has no current owner on record`,
-          date: null,
-          entityId: entity.id,
-          entityType: entity.type,
-          source: 'Missing owner',
-        })
-      }
-
       const pin = entity.data.pin
       if (typeof pin !== 'string' || pin.trim() === '') {
         items.push({

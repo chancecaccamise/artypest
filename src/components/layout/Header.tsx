@@ -1,7 +1,7 @@
 import { ClipboardList, LogOut, Menu, Monitor, Moon, Sun } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { useActivity, useActor, useOrg } from '@/hooks/use-data'
+import { useActivity, useActor } from '@/hooks/use-data'
 import { useWorkSession } from '@/features/review/session'
 import { buildWorkLog, recordCount, recordsChecked } from '@/features/review/work-log'
 import { useAuth } from '@/lib/auth'
@@ -17,7 +17,6 @@ export interface HeaderProps {
 }
 
 export function Header({ onOpenNav, workLogOpen, onToggleWorkLog }: HeaderProps) {
-  const org = useOrg()
   const { theme, setTheme } = useTheme()
   const auth = useAuth()
   const sessionCount = useSessionCount()
@@ -41,13 +40,6 @@ export function Header({ onOpenNav, workLogOpen, onToggleWorkLog }: HeaderProps)
       >
         <Menu />
       </Button>
-
-      {/* Truncates rather than pushing the header controls off a 375px screen. */}
-      <div className="min-w-0 flex-1 sm:flex-none">
-        <p className="font-display text-ink text-13 truncate font-bold sm:text-sm">
-          {org.data?.name ?? 'Loading organization'}
-        </p>
-      </div>
 
       <SearchBar className="mx-auto hidden max-w-md flex-1 sm:block" />
 

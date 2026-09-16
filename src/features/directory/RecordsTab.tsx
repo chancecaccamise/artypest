@@ -9,6 +9,7 @@ import { SkeletonRows } from '@/components/ui/skeleton'
 import { useGraph } from '@/hooks/use-data'
 import type { Entity } from '@/lib/data/types'
 import { formatDate, humanize, readString } from '@/lib/format'
+import { isTodo } from '@/lib/todos'
 
 /*
   Records linked to this entity, newest first.
@@ -35,6 +36,7 @@ export function RecordsTab({ entity }: { entity: Entity }) {
 
     for (const candidate of graph.entities) {
       if (candidate.type !== 'record') continue
+      if (isTodo(candidate)) continue
       if (candidate.deletedAt !== null) continue
       if (candidate.data.propertyId === entity.id) found.set(candidate.id, candidate)
     }
