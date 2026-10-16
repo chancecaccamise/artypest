@@ -1,55 +1,103 @@
 {
-  "harvestedAt": "2026-08-25",
+  "harvestedAt": "2026-10-16",
   "selection": "neighborhood",
   "neighborhoods": [
     "Abercorn Heights/Lamara Heights/Ridgewood/Poplar Heights",
     "Ardmore/Gould Estates/Olin Heights",
     "Ardsley Park/Chatham Crescent",
+    "Avondale",
     "Baldwin Park",
+    "Bay Street Viaduct Area",
+    "Beach High School Area",
     "Beach Institute",
+    "Benjamin Van Clark Park",
+    "Bingville",
+    "Blackshear",
+    "Cann Park",
+    "Carver Heights",
+    "Cloverdale",
+    "Cuyler/Brownville",
+    "Dale Terrace/Olympus/Victory Square",
     "Dixon Park",
+    "East Savannah",
     "East Victorian District",
     "Eastside",
     "Edgemere",
     "Fairway Oaks",
+    "Feiler Park/Hussars Terrace/Dittmerville",
+    "Fernwood/Parkwood",
     "Forest Park",
+    "Gordonston",
     "Groveland/Kensington Park",
+    "Habersham Woods",
+    "Hillcrest Area",
     "Hitch Village/Fred Wessels Homes",
+    "Hudson Hill/Bayview",
+    "Hutchinson Island",
+    "Jackson Park",
+    "Kayton/Frazier Area",
     "LaRoche Park/Springhill/Daffin Heights/Wilemere/Shirley Park",
+    "Laurel Grove/Railroad Area",
+    "Liberty City/Summerside/Southover/Richfield",
     "Live Oak",
     "Medical Arts",
     "Memorial Hospital/Fairfield",
     "Metropolitan",
     "Midtown",
     "North Historic District",
+    "Oakland Park/Northgate/Eastgate/Pinehurst",
+    "Ogeecheeton/Dawes Avenue",
     "Parkside",
+    "Poplar Place/University Place",
     "Sackville",
+    "Savannah Gardens",
     "South Garden",
     "South Historic District",
+    "Sunset Park",
+    "Sylvan Terrace",
+    "Tatemville",
     "Thomas Square",
+    "Tremont Park",
+    "Twickenham",
+    "Victory Heights",
+    "Victory Manor/East Hill/Donwood",
+    "West Savannah",
     "West Victorian District",
+    "Winter Gardens/Brightwood",
     "Yamacraw Village"
   ],
   "extent": {
-    "xmin": -81.11080118318812,
+    "xmin": -81.1488767263573,
     "ymin": 32.016555721542424,
-    "xmax": -81.06544661998973,
-    "ymax": 32.08760312582318
+    "xmax": -81.05007250190364,
+    "ymax": 32.09770051169257
   },
-  "parcels": 16656,
+  "parcels": 34788,
   "accounting": {
-    "idsReturnedByService": 16698,
-    "fetched": 16698,
-    "written": 16656,
-    "centredOutsideSelection": 42,
+    "idsReturnedByService": 34861,
+    "fetched": 34861,
+    "written": 34788,
+    "centredOutsideSelection": 73,
     "duplicatePins": 0
   },
   "coverage": [
+    {
+      "neighborhood": "Liberty City/Summerside/Southover/Richfield",
+      "harvested": 1955,
+      "touching": 1956,
+      "sharedWithNeighbor": 1
+    },
     {
       "neighborhood": "North Historic District",
       "harvested": 1735,
       "touching": 1740,
       "sharedWithNeighbor": 5
+    },
+    {
+      "neighborhood": "West Savannah",
+      "harvested": 1701,
+      "touching": 1702,
+      "sharedWithNeighbor": 1
     },
     {
       "neighborhood": "Midtown",
@@ -58,10 +106,22 @@
       "sharedWithNeighbor": 38
     },
     {
+      "neighborhood": "Carver Heights",
+      "harvested": 1401,
+      "touching": 1407,
+      "sharedWithNeighbor": 6
+    },
+    {
       "neighborhood": "South Historic District",
       "harvested": 1375,
       "touching": 1378,
       "sharedWithNeighbor": 3
+    },
+    {
+      "neighborhood": "Cuyler/Brownville",
+      "harvested": 1262,
+      "touching": 1262,
+      "sharedWithNeighbor": 0
     },
     {
       "neighborhood": "Live Oak",
@@ -82,15 +142,33 @@
       "sharedWithNeighbor": 0
     },
     {
+      "neighborhood": "Tatemville",
+      "harvested": 1032,
+      "touching": 1034,
+      "sharedWithNeighbor": 2
+    },
+    {
       "neighborhood": "LaRoche Park/Springhill/Daffin Heights/Wilemere/Shirley Park",
       "harvested": 985,
       "touching": 1024,
       "sharedWithNeighbor": 39
     },
     {
+      "neighborhood": "Avondale",
+      "harvested": 934,
+      "touching": 952,
+      "sharedWithNeighbor": 18
+    },
+    {
       "neighborhood": "Metropolitan",
       "harvested": 811,
       "touching": 811,
+      "sharedWithNeighbor": 0
+    },
+    {
+      "neighborhood": "Victory Heights",
+      "harvested": 796,
+      "touching": 796,
       "sharedWithNeighbor": 0
     },
     {
@@ -106,9 +184,51 @@
       "sharedWithNeighbor": 1
     },
     {
+      "neighborhood": "Benjamin Van Clark Park",
+      "harvested": 752,
+      "touching": 752,
+      "sharedWithNeighbor": 0
+    },
+    {
       "neighborhood": "Abercorn Heights/Lamara Heights/Ridgewood/Poplar Heights",
       "harvested": 715,
       "touching": 715,
+      "sharedWithNeighbor": 0
+    },
+    {
+      "neighborhood": "Cloverdale",
+      "harvested": 706,
+      "touching": 708,
+      "sharedWithNeighbor": 2
+    },
+    {
+      "neighborhood": "Hudson Hill/Bayview",
+      "harvested": 570,
+      "touching": 571,
+      "sharedWithNeighbor": 1
+    },
+    {
+      "neighborhood": "Twickenham",
+      "harvested": 541,
+      "touching": 542,
+      "sharedWithNeighbor": 1
+    },
+    {
+      "neighborhood": "East Savannah",
+      "harvested": 536,
+      "touching": 552,
+      "sharedWithNeighbor": 16
+    },
+    {
+      "neighborhood": "Feiler Park/Hussars Terrace/Dittmerville",
+      "harvested": 512,
+      "touching": 513,
+      "sharedWithNeighbor": 1
+    },
+    {
+      "neighborhood": "Jackson Park",
+      "harvested": 476,
+      "touching": 476,
       "sharedWithNeighbor": 0
     },
     {
@@ -136,10 +256,40 @@
       "sharedWithNeighbor": 2
     },
     {
+      "neighborhood": "Cann Park",
+      "harvested": 423,
+      "touching": 423,
+      "sharedWithNeighbor": 0
+    },
+    {
+      "neighborhood": "Sunset Park",
+      "harvested": 407,
+      "touching": 414,
+      "sharedWithNeighbor": 7
+    },
+    {
+      "neighborhood": "Victory Manor/East Hill/Donwood",
+      "harvested": 381,
+      "touching": 381,
+      "sharedWithNeighbor": 0
+    },
+    {
       "neighborhood": "Baldwin Park",
       "harvested": 371,
       "touching": 411,
       "sharedWithNeighbor": 40
+    },
+    {
+      "neighborhood": "Tremont Park",
+      "harvested": 369,
+      "touching": 369,
+      "sharedWithNeighbor": 0
+    },
+    {
+      "neighborhood": "Bingville",
+      "harvested": 335,
+      "touching": 335,
+      "sharedWithNeighbor": 0
     },
     {
       "neighborhood": "East Victorian District",
@@ -160,6 +310,18 @@
       "sharedWithNeighbor": 19
     },
     {
+      "neighborhood": "Fernwood/Parkwood",
+      "harvested": 300,
+      "touching": 311,
+      "sharedWithNeighbor": 11
+    },
+    {
+      "neighborhood": "Hutchinson Island",
+      "harvested": 300,
+      "touching": 313,
+      "sharedWithNeighbor": 13
+    },
+    {
       "neighborhood": "South Garden",
       "harvested": 283,
       "touching": 291,
@@ -178,10 +340,52 @@
       "sharedWithNeighbor": 15
     },
     {
+      "neighborhood": "Sylvan Terrace",
+      "harvested": 267,
+      "touching": 267,
+      "sharedWithNeighbor": 0
+    },
+    {
+      "neighborhood": "Gordonston",
+      "harvested": 252,
+      "touching": 252,
+      "sharedWithNeighbor": 0
+    },
+    {
+      "neighborhood": "Oakland Park/Northgate/Eastgate/Pinehurst",
+      "harvested": 239,
+      "touching": 268,
+      "sharedWithNeighbor": 29
+    },
+    {
+      "neighborhood": "Poplar Place/University Place",
+      "harvested": 235,
+      "touching": 236,
+      "sharedWithNeighbor": 1
+    },
+    {
+      "neighborhood": "Ogeecheeton/Dawes Avenue",
+      "harvested": 233,
+      "touching": 239,
+      "sharedWithNeighbor": 6
+    },
+    {
       "neighborhood": "Hitch Village/Fred Wessels Homes",
       "harvested": 218,
       "touching": 221,
       "sharedWithNeighbor": 3
+    },
+    {
+      "neighborhood": "Winter Gardens/Brightwood",
+      "harvested": 205,
+      "touching": 208,
+      "sharedWithNeighbor": 3
+    },
+    {
+      "neighborhood": "Beach High School Area",
+      "harvested": 184,
+      "touching": 195,
+      "sharedWithNeighbor": 11
     },
     {
       "neighborhood": "Fairway Oaks",
@@ -190,10 +394,40 @@
       "sharedWithNeighbor": 0
     },
     {
+      "neighborhood": "Dale Terrace/Olympus/Victory Square",
+      "harvested": 159,
+      "touching": 161,
+      "sharedWithNeighbor": 2
+    },
+    {
+      "neighborhood": "Habersham Woods",
+      "harvested": 150,
+      "touching": 159,
+      "sharedWithNeighbor": 9
+    },
+    {
       "neighborhood": "Medical Arts",
       "harvested": 145,
       "touching": 145,
       "sharedWithNeighbor": 0
+    },
+    {
+      "neighborhood": "Kayton/Frazier Area",
+      "harvested": 124,
+      "touching": 124,
+      "sharedWithNeighbor": 0
+    },
+    {
+      "neighborhood": "Savannah Gardens",
+      "harvested": 120,
+      "touching": 123,
+      "sharedWithNeighbor": 3
+    },
+    {
+      "neighborhood": "Laurel Grove/Railroad Area",
+      "harvested": 96,
+      "touching": 97,
+      "sharedWithNeighbor": 1
     },
     {
       "neighborhood": "Yamacraw Village",
@@ -202,10 +436,28 @@
       "sharedWithNeighbor": 2
     },
     {
+      "neighborhood": "Blackshear",
+      "harvested": 73,
+      "touching": 81,
+      "sharedWithNeighbor": 8
+    },
+    {
       "neighborhood": "Memorial Hospital/Fairfield",
       "harvested": 72,
       "touching": 76,
       "sharedWithNeighbor": 4
+    },
+    {
+      "neighborhood": "Hillcrest Area",
+      "harvested": 69,
+      "touching": 72,
+      "sharedWithNeighbor": 3
+    },
+    {
+      "neighborhood": "Bay Street Viaduct Area",
+      "harvested": 37,
+      "touching": 42,
+      "sharedWithNeighbor": 5
     }
   ]
 }

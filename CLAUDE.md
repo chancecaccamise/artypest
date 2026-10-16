@@ -61,9 +61,10 @@ pnpm sagis:harvest    # download the parcel corridor from the county service
 `public/overlays/`, 656KB committed, listed in `scripts/sagis/overlays.mjs`. One
 is drawn at a time.
 
-`pnpm sagis:harvest` writes ~24MB. The 13MB in `public/parcels/` is committed,
+`pnpm sagis:harvest` writes ~56MB for 34,788 parcels in 63 neighborhoods. The
+30MB in `public/parcels/` (3.4MB gzipped) is committed,
 because the deployed site is static files with no database behind it yet and has
-no other way to get the map. The 11MB `data/sagis/parcels.ndjson` is not: it is
+no other way to get the map. The 26MB `data/sagis/parcels.ndjson` is not: it is
 the Postgres-shaped copy. When the slice is absent the app falls back to the
 48-lot demo fixture and says which it is using. Coverage is a list of
 neighborhoods in `scripts/sagis/coverage.mjs`, recorded in

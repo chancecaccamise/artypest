@@ -48,6 +48,8 @@ export interface StreetPath {
   d: string
   /** Length in pixels, so a name is only drawn where it fits. */
   length: number
+  /** Projected bounds, for viewport culling, as ParcelPath has. */
+  bounds: [minX: number, minY: number, maxX: number, maxY: number]
 }
 
 export interface PlatProjection {
@@ -215,12 +217,14 @@ export function buildProjection(
   streetSource.features.forEach((feature, index) => {
     const d = path(feature)
     if (!d) return
+    const [[minX, minY], [maxX, maxY]] = path.bounds(feature)
     streets.push({
       id: `${feature.properties.name}-${index}`,
       name: feature.properties.name,
       classification: feature.properties.classification,
       d,
       length: path.measure(feature),
+      bounds: [minX, minY, maxX, maxY],
     })
   })
 

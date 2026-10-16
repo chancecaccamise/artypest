@@ -63,8 +63,9 @@ function clone<T>(value: T): T {
   owner's connection opened the to do. Postgres hands out uuids for the same
   reason.
 */
-function nextId(prefix: string): string {
-  return `${prefix}-${crypto.randomUUID()}`
+function nextId(): string {
+  // A bare uuid, which is what Postgres keys every table on.
+  return crypto.randomUUID()
 }
 
 /**
@@ -100,7 +101,28 @@ function forAuditLog(value: unknown, rendered: string | null): string | null {
   return rendered
 }
 
-class MemoryProvider implements DataProvider {
+/*
+  What the database-backed provider needs on top of the contract: a way to put
+  rows the database handed back into the store, so reads stay in memory while
+  the database stays the source of truth. Not on DataProvider, because nothing
+  outside src/lib/data should be writing around the audit log.
+*/
+export interface MemoryStore extends DataProvider {
+  upsertEntities(rows: readonly Entity[]): void
+  upsertRelations(rows: readonly Relation[]): void
+  setOrg(org: Org): void
+  setRelationTypes(types: readonly RelationType[]): void
+  setReferenceItems(items: readonly ReferenceItem[]): void
+  setUsers(users: readonly OrgUser[]): void
+  /** Replaces the log the hand mark reads. See SyncedProvider. */
+  setAuditEntries(entries: readonly AuditEntry[]): void
+  /** Adds to that log, ignoring rows it already holds. Returns how many were new. */
+  mergeAuditEntries(entries: readonly AuditEntry[]): number
+  /** One relation, deleted or not. listRelations leaves deleted ones out. */
+  getRelation(id: string): Relation | null
+}
+
+class MemoryProvider implements MemoryStore {
   readonly kind = 'memory' as const
 
   private org: Org
@@ -129,6 +151,71 @@ class MemoryProvider implements DataProvider {
     this.auditEntries = clone(data.auditEntries)
     this.referenceItems = clone(data.referenceItems)
     this.users = clone(data.users)
+  }
+
+  /* ---------------------------------------------------------------- sync -- */
+
+  upsertEntities(rows: readonly Entity[]): void {
+    const index = new Map(this.entities.map((entity, position) => [entity.id, position]))
+    for (const row of rows) {
+      const position = index.get(row.id)
+      if (position === undefined) {
+        index.set(row.id, this.entities.length)
+        this.entities.push(clone(row))
+      } else {
+        this.entities[position] = clone(row)
+      }
+    }
+  }
+
+  upsertRelations(rows: readonly Relation[]): void {
+    const index = new Map(this.relations.map((relation, position) => [relation.id, position]))
+    for (const row of rows) {
+      const position = index.get(row.id)
+      if (position === undefined) {
+        index.set(row.id, this.relations.length)
+        this.relations.push(clone(row))
+      } else {
+        this.relations[position] = clone(row)
+      }
+    }
+  }
+
+  setOrg(org: Org): void {
+    this.org = clone(org)
+  }
+
+  setRelationTypes(types: readonly RelationType[]): void {
+    this.relationTypes = clone([...types])
+  }
+
+  setReferenceItems(items: readonly ReferenceItem[]): void {
+    this.referenceItems = clone([...items])
+  }
+
+  setUsers(users: readonly OrgUser[]): void {
+    this.users = clone([...users])
+  }
+
+  setAuditEntries(entries: readonly AuditEntry[]): void {
+    this.auditEntries = clone([...entries])
+  }
+
+  mergeAuditEntries(entries: readonly AuditEntry[]): number {
+    const seen = new Set(this.auditEntries.map((entry) => entry.id))
+    let added = 0
+    for (const entry of entries) {
+      if (seen.has(entry.id)) continue
+      seen.add(entry.id)
+      this.auditEntries.push(clone(entry))
+      added += 1
+    }
+    return added
+  }
+
+  getRelation(id: string): Relation | null {
+    const found = this.relations.find((relation) => relation.id === id)
+    return found ? clone(found) : null
   }
 
   /* ----------------------------------------------------------------- org -- */
@@ -254,7 +341,7 @@ class MemoryProvider implements DataProvider {
   createEntity(input: EntityInput): Promise<Entity> {
     const now = new Date().toISOString()
     const entity: Entity = {
-      id: nextId('ent'),
+      id: nextId(),
       orgId: this.org.id,
       type: input.type,
       name: input.name,
@@ -404,7 +491,7 @@ class MemoryProvider implements DataProvider {
   createRelation(input: RelationInput): Promise<Relation> {
     const now = new Date().toISOString()
     const relation: Relation = {
-      id: nextId('rel'),
+      id: nextId(),
       orgId: this.org.id,
       relationTypeId: input.relationTypeId,
       fromEntityId: input.fromEntityId,
@@ -579,7 +666,7 @@ class MemoryProvider implements DataProvider {
   createReferenceItem(input: ReferenceItemInput): Promise<ReferenceItem> {
     const siblings = this.referenceItems.filter((item) => item.list === input.list)
     const item: ReferenceItem = {
-      id: nextId('ref'),
+      id: nextId(),
       orgId: this.org.id,
       list: input.list,
       // The stored value is a slug, so renaming the label never rewrites data.
@@ -620,7 +707,7 @@ class MemoryProvider implements DataProvider {
     work: () => Promise<T>,
     source: AuditSource = 'hand'
   ): Promise<{ batchId: string; result: T }> {
-    const batchId = nextId('batch')
+    const batchId = nextId()
     const previousBatch = this.currentBatchId
     const previousSource = this.currentSource
     this.currentBatchId = batchId
@@ -707,7 +794,7 @@ class MemoryProvider implements DataProvider {
     changedAt: string
   ): void {
     this.auditEntries.push({
-      id: nextId('aud'),
+      id: nextId(),
       orgId: this.org.id,
       tableName,
       recordId,
@@ -765,5 +852,9 @@ class MemoryProvider implements DataProvider {
 }
 
 export function createMemoryProvider(data: DemoData = buildDemoData()): DataProvider {
+  return new MemoryProvider(data)
+}
+
+export function createMemoryStore(data: DemoData): MemoryStore {
   return new MemoryProvider(data)
 }

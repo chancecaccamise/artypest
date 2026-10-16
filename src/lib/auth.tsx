@@ -71,7 +71,11 @@ interface AuthActions {
   nameFor: (actor: string) => string
 }
 
-export type AuthContextValue = AuthState & AuthActions
+export type AuthContextValue = AuthState &
+  AuthActions & {
+    /** The database connection, or null in the demo. For the shared records gate. */
+    client: SupabaseClient<Database> | null
+  }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
@@ -199,6 +203,7 @@ export function AuthProvider({
       signOut,
       retryCheck,
       nameFor,
+      client,
     }),
     [
       hasClient,
@@ -213,6 +218,7 @@ export function AuthProvider({
       signOut,
       retryCheck,
       nameFor,
+      client,
     ]
   )
 

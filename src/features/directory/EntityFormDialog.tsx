@@ -34,6 +34,10 @@ export interface EntityFormDialogProps {
   onCreated?: (entity: Entity) => void
   /** Prefills the name when adding, for "create it from here" elsewhere. */
   initialName?: string
+  /** Wording for when the form is a step in something else, like a connection. */
+  title?: string
+  description?: string
+  submitLabel?: string
   /** Field key to focus on open, used by "Add parcel record". */
   focusField?: string
 }
@@ -55,6 +59,9 @@ export function EntityFormDialog({
   entity,
   onCreated,
   initialName,
+  title,
+  description,
+  submitLabel,
   focusField,
 }: EntityFormDialogProps) {
   const config = DIRECTORY_CONFIGS[type]
@@ -186,12 +193,14 @@ export function EntityFormDialog({
       open={open}
       onClose={onClose}
       title={
-        isEditing ? `Edit ${config.singular.toLowerCase()}` : `Add ${config.singular.toLowerCase()}`
+        title ??
+        (isEditing ? `Edit ${config.singular.toLowerCase()}` : `Add ${config.singular.toLowerCase()}`)
       }
       description={
-        isEditing
+        description ??
+        (isEditing
           ? 'Every change is recorded field by field in the History tab.'
-          : `A new ${config.singular.toLowerCase()} in ${ENTITY_TYPE_LABELS[type].plural.toLowerCase()}.`
+          : `A new ${config.singular.toLowerCase()} in ${ENTITY_TYPE_LABELS[type].plural.toLowerCase()}.`)
       }
       footer={
         <>
@@ -203,7 +212,7 @@ export function EntityFormDialog({
               ? 'Saving'
               : isEditing
                 ? 'Save changes'
-                : `Add ${config.singular.toLowerCase()}`}
+                : (submitLabel ?? `Add ${config.singular.toLowerCase()}`)}
           </Button>
         </>
       }

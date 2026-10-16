@@ -87,7 +87,7 @@ const FRAME_FILL = 0.78
 const ARC_FRAME_MAX_ZOOM = 40
 
 /*
-  The most lots drawn at once. The harvested layer holds 16,656, and at any zoom
+  The most lots drawn at once. The harvested layer holds 34,788, and at any zoom
   where a reader is looking at lots rather than at the shape of the city far
   fewer than this are on screen, so the cap only bites when fully zoomed out.
   When it does, the plat says so: quietly drawing part of a neighborhood would be
@@ -364,6 +364,24 @@ export function PlatView({
 
     return { parcels, capped: onScreen - parcels.length }
   }, [projection.parcels, parcelsByArea, viewport])
+
+  /*
+    Only the streets on screen, for the same reason as the lots. The streets
+    were drawn whole when the plat held 4,755 of them; the 63-neighborhood
+    harvest holds 8,336, and every one was repainted on every pan frame however
+    far in the reader had zoomed. No ceiling: a street is a single line, and
+    fully zoomed out they are what shows the shape of the city.
+
+    Street names point at these same paths by id, so they are culled with them.
+  */
+  const visibleStreets = useMemo(() => {
+    if (projection.parcels.length <= CULL_THRESHOLD) return projection.streets
+    const { left, top, right, bottom } = viewport
+    return projection.streets.filter((street) => {
+      const [minX, minY, maxX, maxY] = street.bounds
+      return !(maxX < left || minX > right || maxY < top || minY > bottom)
+    })
+  }, [projection.parcels.length, projection.streets, viewport])
 
   useEffect(() => {
     const svg = svgRef.current
@@ -774,7 +792,7 @@ export function PlatView({
           </g>
 
           <g className="streets" pointerEvents="none">
-            {projection.streets.map((street) => (
+            {visibleStreets.map((street) => (
               <path
                 key={street.id}
                 id={`street-${street.id}`}
@@ -868,7 +886,7 @@ export function PlatView({
           <g className="labels" pointerEvents="none">
             {/* Street names follow the centreline, which a raster basemap
                 cannot do as cleanly. */}
-            {projection.streets.map((street) =>
+            {visibleStreets.map((street) =>
               shouldLabelStreet(street, zoomLevel) ? (
                 <text
                   key={`label-${street.id}`}

@@ -9,14 +9,24 @@ import {
   isEmptyOverlay,
   type OverlayStore,
 } from './persistence'
+import { planLocalWork } from './copy-local-work'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+import type { Database } from '@/types/database'
+import type { RemoteStore } from './remote'
+import { createSupabaseRemote } from './supabase-remote'
+import { withStableIds } from './stable-ids'
+import { createSyncedProvider, type SyncedProvider } from './synced-provider'
 import type { DataProvider } from './types'
 
 /*
   The single place the app picks a data backend.
 
-  Today: in-memory fixtures with what the reader has typed layered on top and
-  kept in the browser. Later: the Supabase provider, at which point everything
-  below the `data` export goes away, because Postgres does all of it properly.
+  Signed in to a configured database: the association's shared records, through
+  SyncedProvider, connected by connectSharedRecords once the account is known.
+  Otherwise, which is the demo, the test suite, and every fresh clone: in-memory
+  fixtures with what the reader has typed layered on top and kept in the
+  browser.
 
   Why `data` is a `let`. The harvested parcel layer is fetched, so it cannot be
   there at module-evaluation time, and it is 16,656 lots that have to become
@@ -59,6 +69,8 @@ export function onPersistenceError(listener: PersistenceListener): () => void {
 }
 
 function saveNow() {
+  // The shared records save themselves; this browser's copy is left as it was.
+  if (shared) return
   const overlay = buildOverlay(provider.snapshot(), baseline, new Date().toISOString())
 
   // Back to the seeded state means there is nothing to remember.
@@ -135,6 +147,9 @@ export let data: DataProvider = provider
 /** `harvest` once the served slice has been loaded, `fixture` before that. */
 export let parcelLayerSource: 'harvest' | 'fixture' = 'fixture'
 
+/** Set while signed in to the shared records. */
+let shared: SyncedProvider | null = null
+
 /**
  * Rebuilds the provider with the harvested parcel layer folded in, and with any
  * saved work layered back on top.
@@ -171,6 +186,74 @@ export function resetLocalWork(): void {
 /** True when there is saved work in this browser. */
 export function hasLocalWork(): boolean {
   return store.read() !== null
+}
+
+/* -------------------------------------------------------- shared records -- */
+
+/**
+ * Switches the whole app to the association's shared records.
+ *
+ * Called once the signed-in account is known, because row level security
+ * returns nothing to nobody. Reads everything the database holds for the
+ * association and lays it over the county layer and the supplied contacts.
+ */
+export async function connectSharedRecords(remote: RemoteStore): Promise<void> {
+  const snapshot = await remote.loadAll()
+  // The same starting data this browser built, on the ids every browser shares.
+  const starting = withStableIds(baseline).data
+  shared = createSyncedProvider({ remote, baseline: starting, snapshot })
+  data = shared
+}
+
+type RemoteFactory = (client: SupabaseClient<Database>, orgId: string) => RemoteStore
+let remoteFactory: RemoteFactory = createSupabaseRemote
+
+/** Where the shared records live for this account. Supabase, except in tests. */
+export function remoteFor(client: SupabaseClient<Database>, orgId: string): RemoteStore {
+  return remoteFactory(client, orgId)
+}
+
+/** Test seam. Signed-in tests keep their records in memory, not on a network. */
+export function setRemoteForTests(factory: RemoteFactory | null): void {
+  remoteFactory = factory ?? createSupabaseRemote
+}
+
+/** Back to this browser's own store, on signing out. */
+export function disconnectSharedRecords(): void {
+  shared = null
+  data = provider
+}
+
+export function isSharedRecords(): boolean {
+  return shared !== null
+}
+
+/** Picks up what anyone else has written. True when something changed. */
+export function refreshSharedRecords(): Promise<boolean> {
+  return shared ? shared.refresh() : Promise.resolve(false)
+}
+
+/**
+ * Copies the work saved in this browser into the shared records, as one batch
+ * so Activity shows it together, then forgets the browser's copy.
+ *
+ * Kept until every write has succeeded: a copy that fails halfway can be run
+ * again, and what already went in is not written twice.
+ */
+export async function copyLocalWorkToShared(): Promise<{ records: number; connections: number }> {
+  const target = shared
+  if (!target) throw new Error('Sign in to the shared records first.')
+  const overlay = store.read()
+  if (!overlay) return { records: 0, connections: 0 }
+
+  const work = planLocalWork(overlay, baseline, await target.listRelationTypes())
+  await target.runBatch(async () => {
+    for (const entity of work.entities) await target.adoptEntity(entity)
+    for (const relation of work.relations) await target.adoptRelation(relation)
+  })
+
+  resetLocalWork()
+  return { records: work.entities.length, connections: work.relations.length }
 }
 
 /** Test seam. Swaps the storage and rebuilds from the current baseline. */

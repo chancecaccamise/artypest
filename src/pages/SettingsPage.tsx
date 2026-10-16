@@ -29,7 +29,7 @@ import {
   type ReferenceList,
 } from '@/lib/data/types'
 import { formatDateTime } from '@/lib/format'
-import { hasLocalWork, onPersistenceError, resetLocalWork } from '@/lib/data'
+import { hasLocalWork, isSharedRecords, onPersistenceError, resetLocalWork } from '@/lib/data'
 import { parcelService } from '@/lib/parcels'
 import { buildParcelViewerUrl } from '@/lib/parcels/pin'
 import { ROLE_LABELS } from '@/lib/role'
@@ -522,13 +522,16 @@ function RelationTypesTab() {
 /* ----------------------------------------------------------- appearance -- */
 
 /*
-  What is kept in this browser, and how to be rid of it.
+  Where the work is kept, and how to be rid of a browser's own copy.
 
-  Until Supabase is connected, everything typed here lives in local storage on
-  one machine. A board member should be able to see that stated plainly and to
-  get back to a clean demo without clearing their whole browser.
+  Signed in, everything goes to the association's shared records, and what is
+  left in this browser is only work saved before they were shared. In the demo,
+  everything typed lives in local storage on one machine, and a board member
+  should be able to see that stated plainly and get back to a clean demo
+  without clearing their whole browser.
 */
 function SavedWorkPanel() {
+  const shared = isSharedRecords()
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(() => hasLocalWork())
   const [confirming, setConfirming] = useState(false)
@@ -540,16 +543,22 @@ function SavedWorkPanel() {
       <PanelHeader title="Saved work" />
       <PanelBody className="flex flex-col gap-3">
         <p className="text-ink-muted text-13 max-w-2xl">
-          Records, connections, and photographs are kept in this browser, on this computer, until
-          the database is connected. They are not shared with anyone else and they are not backed
-          up.
+          {shared
+            ? 'Records, connections, and photographs are saved to the association’s shared records as you work. Everyone in the association sees the same records.'
+            : 'Records, connections, and photographs are kept in this browser, on this computer. They are not shared with anyone else and they are not backed up.'}
         </p>
 
         <dl className="grid max-w-2xl gap-x-8 gap-y-2 sm:grid-cols-2">
           <div className="flex items-center justify-between gap-3">
             <dt className="text-ink-muted text-13">Status</dt>
             <dd className="font-mono text-xs">
-              {saved ? 'work saved in this browser' : 'nothing saved yet'}
+              {shared
+                ? saved
+                  ? 'older work still in this browser'
+                  : 'shared'
+                : saved
+                  ? 'work saved in this browser'
+                  : 'nothing saved yet'}
             </dd>
           </div>
         </dl>
@@ -564,7 +573,9 @@ function SavedWorkPanel() {
           {confirming ? (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-ink-muted text-13">
-                This removes everything added or changed here. It cannot be undone.
+                {shared
+                  ? 'This removes the work this browser saved before the records were shared. Copy it in first, from the notice at the top of the page, if you want to keep it.'
+                  : 'This removes everything added or changed here. It cannot be undone.'}
               </span>
               <Button
                 variant="destructive"
@@ -587,7 +598,7 @@ function SavedWorkPanel() {
           ) : (
             <Button size="sm" disabled={!saved} onClick={() => setConfirming(true)}>
               <RotateCcw />
-              Discard saved work and restore the demo
+              {shared ? 'Discard this browser’s older copy' : 'Discard saved work and restore the demo'}
             </Button>
           )}
         </div>

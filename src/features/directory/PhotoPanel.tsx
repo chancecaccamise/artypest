@@ -105,8 +105,8 @@ export function PhotoPanel({ entity }: { entity: Entity }) {
 
           {error === null ? (
             <p className="text-ink-faint text-xs">
-              Stored on the record and kept in this browser until the database is connected.
-              Reduced to {MAX_DIMENSION} pixels so a photograph of everybody still fits.
+              Stored on the record. Reduced to {MAX_DIMENSION} pixels so a photograph of everybody
+              still fits.
             </p>
           ) : (
             <p role="alert" className="text-oxblood text-xs">

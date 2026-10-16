@@ -140,7 +140,7 @@ export function ImagesTab({ entity }: { entity: Entity }) {
         {images.length === 0 ? (
           <EmptyState
             title="No images on this record"
-            description={`Photographs, scanned plans, and site pictures live here. They are reduced to ${String(MAX_DIMENSION)} pixels and kept in this browser until the database is connected.`}
+            description={`Photographs, scanned plans, and site pictures live here. They are reduced to ${String(MAX_DIMENSION)} pixels and stored on the record.`}
           />
         ) : (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

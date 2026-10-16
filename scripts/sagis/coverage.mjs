@@ -36,40 +36,78 @@ export const NEIGHBORHOODS = [
   'Abercorn Heights/Lamara Heights/Ridgewood/Poplar Heights',
   'Ardmore/Gould Estates/Olin Heights',
   'Ardsley Park/Chatham Crescent',
+  'Avondale',
   'Baldwin Park',
+  'Bay Street Viaduct Area',
+  'Beach High School Area',
   'Beach Institute',
+  'Benjamin Van Clark Park',
+  'Bingville',
+  'Blackshear',
+  'Cann Park',
+  'Carver Heights',
+  'Cloverdale',
+  'Cuyler/Brownville',
+  'Dale Terrace/Olympus/Victory Square',
   'Dixon Park',
+  'East Savannah',
   'East Victorian District',
   'Eastside',
   'Edgemere',
   'Fairway Oaks',
+  'Feiler Park/Hussars Terrace/Dittmerville',
+  'Fernwood/Parkwood',
   'Forest Park',
+  'Gordonston',
   'Groveland/Kensington Park',
+  'Habersham Woods',
+  'Hillcrest Area',
   'Hitch Village/Fred Wessels Homes',
+  'Hudson Hill/Bayview',
+  'Hutchinson Island',
+  'Jackson Park',
+  'Kayton/Frazier Area',
   'LaRoche Park/Springhill/Daffin Heights/Wilemere/Shirley Park',
+  'Laurel Grove/Railroad Area',
+  'Liberty City/Summerside/Southover/Richfield',
   'Live Oak',
   'Medical Arts',
   'Memorial Hospital/Fairfield',
   'Metropolitan',
   'Midtown',
   'North Historic District',
+  'Oakland Park/Northgate/Eastgate/Pinehurst',
+  'Ogeecheeton/Dawes Avenue',
   'Parkside',
+  'Poplar Place/University Place',
   'Sackville',
+  'Savannah Gardens',
   'South Garden',
   'South Historic District',
+  'Sunset Park',
+  'Sylvan Terrace',
+  'Tatemville',
   'Thomas Square',
+  'Tremont Park',
+  'Twickenham',
+  'Victory Heights',
+  'Victory Manor/East Hill/Donwood',
+  'West Savannah',
   'West Victorian District',
+  'Winter Gardens/Brightwood',
   'Yamacraw Village',
 ]
 
 /**
- * Measured 2026-08-24 against the live service: the union of the boundaries
- * above holds 16,698 parcels.
+ * Measured 2026-10-16 against the live service: the union of the boundaries
+ * above holds 34,861 parcels. It was 16,698 for the first 27 neighborhoods; the
+ * other 36 are every neighborhood within about 2.7 miles of Thomas Square, the
+ * ring the app was measured to carry without a board member noticing.
  *
  * This gates the run rather than describing it. The per-neighborhood totals are
  * not written down anywhere, because the harvest asks the service for them.
  */
-export const EXPECTED_PARCEL_COUNT = 16698
+export const EXPECTED_PARCEL_COUNT = 34861
 
 /** A count this far from the expectation is reported rather than passed over. */
 export const DRIFT_TOLERANCE = 0.15

@@ -1107,3 +1107,95 @@ phone. Nobody means that by "sign out".
 library. This runs its real error classes, session storage, and query builder,
 so the "wrong password" and "connection down" messages are tested against what
 the library actually returns.
+
+## 2026-10-16, the records are shared through the database
+
+### Reads stay in memory, writes go to the database first
+
+**Chosen.** `SyncedProvider` (`src/lib/data/synced-provider.ts`) loads every row
+the association has in Postgres when someone signs in, lays it over the county
+layer and the supplied contacts, and answers reads from memory as before. Every
+write goes to the database, and only the row the database returns reaches
+memory. History, Activity, and the list of who changed what are read from the
+database. Other people's changes are picked up every 30 seconds and when the tab
+is looked at again (`SharedRecordsGate`).
+
+**Rejected.** Querying Postgres for every read, and Supabase Realtime.
+
+**Why.** Search, the plat, the Connection Map, and the dashboard all walk the
+whole record set, and were built to. Moving every read to the server is a
+rewrite of most of the app; moving the writes is not. Polling needs no change to
+the database's publication and costs one small request per half minute. Realtime
+can replace it later without touching anything else.
+
+**Accepted cost.** Two people saving the same record at the same moment: the
+later save wins, for the whole of `data`. With a handful of admins that is rare,
+and History shows both.
+
+### The county layer stays out of the database until somebody touches a lot
+
+**Chosen.** The 16,656 harvested parcels are still static files. A parcel, or a
+supplied contact, is copied into `entities` the first time somebody edits it or
+connects something to it, by `materialize_records`, which writes no audit row
+and claims no hand mark.
+
+**Why.** The parcels are county reference data rebuilt from SAGIS. Loading them
+all would make every sign-in read 11MB from the database instead of a cached
+file, and would make every re-harvest a database migration. What the association
+records about a lot is what belongs in the table, and that is exactly what gets
+copied in.
+
+### Starting records get ids derived from what they are
+
+**Chosen.** `withStableIds` (`src/lib/data/stable-ids.ts`) gives each county lot
+a uuid derived from its PIN, and each supplied contact one derived from its
+readable id. Connections take one from their kind and their two ends.
+
+**Why.** Postgres keys on uuids, and two browsers copying in the same lot must
+produce the same row. A lot's position in the harvested file changes when the
+county republishes; its PIN does not.
+
+### A bulk job declares itself in request headers
+
+**Chosen.** `x-artypest-batch` and `x-artypest-source` on each PostgREST request,
+read by `current_batch_id()` and `current_audit_source()`.
+
+**Rejected.** Session settings, which is what the triggers read before.
+
+**Why.** Each PostgREST request is its own transaction, so a setting made in one
+request is gone by the next. Any member can send the source header, but it only
+accepts `import` and `system`, so the most it can do is decline the hand mark on
+the sender's own writes. It cannot make a write count as somebody having read a
+record.
+
+### History keeps `data` key by key, and never the photograph
+
+**Chosen.** The audit trigger compares `data` key by key and writes `data.<key>`
+rows, describing a photograph ("a photograph", "3 images") rather than copying
+it.
+
+**Why.** That is the shape History has always rendered from the in-memory log.
+Logging the whole column would have put every photograph on a record into the
+log twice on every edit.
+
+### The schema types are extended, not regenerated
+
+**Chosen.** `SharedDatabase` in `src/lib/data/remote.ts` adds the columns and
+functions from the review and shared-records migrations to the generated
+`Database` type.
+
+**Why.** `src/types/database.ts` was generated before those migrations reached the
+hosted project, and it is never edited by hand. Regenerating needs `pnpm db:push`
+and then `pnpm db:types`, which this machine's Supabase login is not permitted to
+run. Once it has been, `SharedDatabase` can become `Database`.
+
+### Work saved in a browser is copied in once, by the person who saved it
+
+**Chosen.** A notice at the top of every page, while signed in, offers to copy
+this browser's saved work into the shared records. It runs as one batch and then
+forgets the browser's copy. Where somebody else has changed the same record
+since, the copy wins.
+
+**Why.** Each admin's work existed only on their own machine, and neither could
+see the other's. Their earlier History is not carried over: the database's
+audit log is written by triggers, and the copy is recorded as the change it is.

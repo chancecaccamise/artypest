@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 
 import { useAuth } from '@/lib/auth'
+import { SharedRecordsGate } from './SharedRecordsGate'
 import type { SignInLocationState } from './sign-in'
 
 /*
@@ -14,7 +15,14 @@ export function RequireSignIn() {
   const auth = useAuth()
   const location = useLocation()
 
-  if (auth.status === 'demo' || auth.status === 'signed-in') return <Outlet />
+  if (auth.status === 'demo') return <Outlet />
+  if (auth.status === 'signed-in') {
+    return (
+      <SharedRecordsGate>
+        <Outlet />
+      </SharedRecordsGate>
+    )
+  }
 
   if (auth.status === 'loading' || auth.status === 'checking') {
     return (

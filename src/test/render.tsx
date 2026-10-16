@@ -5,6 +5,8 @@ import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 
 import { WorkSessionProvider } from '@/features/review/session'
+import { data, disconnectSharedRecords, setRemoteForTests } from '@/lib/data'
+import { createFakeRemote } from '@/test/fake-remote'
 import { AuthProvider } from '@/lib/auth'
 import { RoleProvider } from '@/lib/role'
 import { ThemeProvider } from '@/lib/theme'
@@ -34,6 +36,23 @@ export function renderWithProviders(
   ui: ReactElement,
   { route = '/', auth = {}, ...options }: RenderWithProvidersOptions = {}
 ): RenderResult & { queryClient: QueryClient } {
+  /*
+    Signed in means the shared records. In a test they are kept in memory by
+    the same fake SyncedProvider is tested against, holding the association's
+    own kinds of connection and nothing else, as a new database would.
+  */
+  // Whatever an earlier test signed in to is not this test's.
+  disconnectSharedRecords()
+  setRemoteForTests(
+    auth.client
+      ? (_client, orgId) =>
+          createFakeRemote({
+            org: { id: orgId, name: 'Ardsley Park Homeowners Association', sagisUrlTemplate: null, createdAt: '2026-01-01T00:00:00.000Z' },
+            relationTypes: data.snapshot().relationTypes.map((type) => ({ ...type, orgId })),
+          })
+      : null
+  )
+
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0, staleTime: 0 },

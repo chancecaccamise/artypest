@@ -236,7 +236,7 @@ export function ConnectionDialog({ open, onClose, entity, relation }: Connection
           </Field>
 
           {query.trim() !== '' ? (
-            <div className="border-rule divide-rule divide-y rounded-[3px] border">
+            <div className="border-rule rounded-[3px] border">
               <ul className="divide-rule max-h-56 divide-y overflow-y-auto">
                 {hits.length === 0 ? (
                   <li className="text-ink-muted px-3 py-2 text-13">
@@ -266,22 +266,24 @@ export function ConnectionDialog({ open, onClose, entity, relation }: Connection
                   ))
                 )}
               </ul>
-
-              {/*
-                Not on file yet is the usual reason a search comes up empty, and
-                leaving to add the record loses everything chosen so far.
-              */}
-              <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
-                <span className="text-ink-muted mr-1 text-xs">Not listed? Add a new</span>
-                {CREATABLE.map((type) => (
-                  <Button key={type} size="sm" onClick={() => setCreating(type)}>
-                    <Plus />
-                    {ENTITY_TYPE_LABELS[type].singular}
-                  </Button>
-                ))}
-              </div>
             </div>
           ) : null}
+
+          {/*
+            Always offered, not only after a search comes up empty: somebody
+            who already knows the record is new should not have to type a name
+            to find the way to add it. Leaving to add it would lose everything
+            chosen here so far.
+          */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-ink-muted mr-1 text-xs">Not in the directory yet? Add a new</span>
+            {CREATABLE.map((type) => (
+              <Button key={type} size="sm" onClick={() => setCreating(type)}>
+                <Plus />
+                {ENTITY_TYPE_LABELS[type].singular}
+              </Button>
+            ))}
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Since" hint="Optional. When this became true.">
@@ -319,6 +321,9 @@ export function ConnectionDialog({ open, onClose, entity, relation }: Connection
           open
           type={creating}
           initialName={query.trim()}
+          title={`New ${ENTITY_TYPE_LABELS[creating].singular.toLowerCase()} to connect to ${entity.name}`}
+          description={`Saved to ${ENTITY_TYPE_LABELS[creating].plural}, then you are back in the connection with it chosen. Cancel to go back without adding it.`}
+          submitLabel={`Add and connect`}
           onClose={() => setCreating(null)}
           onCreated={(created) => {
             pickTarget(created)

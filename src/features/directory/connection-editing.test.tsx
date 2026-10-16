@@ -142,6 +142,16 @@ describe('editing a connection', () => {
 })
 
 describe('adding a record from the connection dialog', () => {
+  it('offers to add a new record before anything is typed', async () => {
+    const user = await openConnections(person.id)
+    await user.click(await screen.findByRole('button', { name: /Add connection/ }))
+
+    const dialog = await screen.findByRole('dialog', { name: /Add a connection/ })
+    for (const kind of ['Person', 'Property', 'Business', 'Association']) {
+      expect(within(dialog).getByRole('button', { name: kind })).toBeInTheDocument()
+    }
+  })
+
   it('creates the record in place and connects to it', async () => {
     const user = await openConnections(person.id)
     await user.click(await screen.findByRole('button', { name: /Add connection/ }))
@@ -151,9 +161,9 @@ describe('adding a record from the connection dialog', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Business' }))
 
     // The record form takes the dialog's place, with the name already typed.
-    const form = await screen.findByRole('dialog', { name: /Add business/ })
+    const form = await screen.findByRole('dialog', { name: /New business to connect to/ })
     expect(within(form).getByLabelText(/Name/)).toHaveValue('Coastal Roofing Co')
-    await user.click(within(form).getByRole('button', { name: /Add business|Save/ }))
+    await user.click(within(form).getByRole('button', { name: 'Add and connect' }))
 
     // And hands back to the connection, with the new record chosen.
     const back = await screen.findByRole('dialog', { name: /Add a connection/ })

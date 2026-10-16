@@ -194,7 +194,8 @@ describe('the audit log, which is triggers and never application code', () => {
       audit trigger sees move like any other. It is one row, and it renders as
       "checked this record" rather than as a diff.
     */
-    expect(rows.rows.map((row) => row.field_name)).toEqual(['data', 'name', 'reviewed_at'])
+    // Inside `data`, key by key: only zoning changed, so only zoning is logged.
+    expect(rows.rows.map((row) => row.field_name)).toEqual(['data.zoning', 'name', 'reviewed_at'])
     expect(rows.rows.find((row) => row.field_name === 'name')).toMatchObject({
       old_value: '1402 E 49th St',
       new_value: '1402 E 49th Street',
@@ -480,5 +481,130 @@ describe('the hand mark', () => {
       `select count(*)::int as n from audit_entries where field_name = 'reviewed_by'`
     )
     expect(row.rows[0]?.n).toBe(0)
+  })
+})
+
+/*
+  Keeping the association's records here rather than in each browser.
+
+  On its own database, because these tests set request headers and the
+  materializing flag, and leaving either set would change every row after.
+*/
+describe('shared records', () => {
+  let shared: PGlite
+
+  beforeAll(async () => {
+    shared = await freshDatabase()
+    await shared.exec(`select set_config('artypest.actor', 'dana@example.org', false)`)
+  }, 60_000)
+
+  const historyOf = async (id: string) =>
+    (
+      await shared.query<{ field_name: string | null; old_value: string | null; new_value: string | null }>(
+        `select field_name, old_value, new_value from audit_entries
+         where record_id = $1 order by changed_at, field_name`,
+        [id]
+      )
+    ).rows
+
+  it('logs a photograph as a description, never as the photograph', async () => {
+    const photo = 'data:image/jpeg;base64,' + 'A'.repeat(500)
+    const created = await shared.query<{ id: string }>(
+      `insert into entities (org_id, type, name, data) values ($1, 'person', 'Greg Goeken', '{}')
+       returning id`,
+      [ORG]
+    )
+    const id = created.rows[0]?.id ?? ''
+    await shared.query(`update entities set data = $2 where id = $1`, [
+      id,
+      JSON.stringify({ photo, images: [photo, photo], phone: '912-555-0100' }),
+    ])
+
+    const rows = await historyOf(id)
+    expect(rows).toContainEqual({ field_name: 'data.photo', old_value: null, new_value: 'a photograph' })
+    expect(rows).toContainEqual({ field_name: 'data.images', old_value: null, new_value: '2 images' })
+    expect(rows).toContainEqual({ field_name: 'data.phone', old_value: null, new_value: '912-555-0100' })
+    for (const row of rows) expect(row.new_value ?? '').not.toContain('base64')
+  })
+
+  it('copies a county parcel in without an edit, a check, or a history entry', async () => {
+    const parcel = {
+      id: '22222222-2222-4222-a222-222222222222',
+      org_id: ORG,
+      type: 'property',
+      name: '104 E 40th St',
+      data: { pin: '20065 38013' },
+      folder_id: null,
+      created_at: '2024-10-12T13:11:00Z',
+      updated_at: '2024-10-12T13:11:00Z',
+      deleted_at: null,
+      archived_at: null,
+      reviewed_at: null,
+      reviewed_by: null,
+    }
+    await shared.query(`select materialize_records($1::jsonb, '[]'::jsonb)`, [JSON.stringify([parcel])])
+    // Twice, as two admins touching the same lot at once would.
+    await shared.query(`select materialize_records($1::jsonb, '[]'::jsonb)`, [JSON.stringify([parcel])])
+
+    const row = await shared.query<{ name: string; reviewed_at: string | null; updated_at: string }>(
+      `select name, reviewed_at, updated_at from entities where id = $1`,
+      [parcel.id]
+    )
+    expect(row.rows).toHaveLength(1)
+    expect(row.rows[0]?.reviewed_at).toBeNull()
+    expect(await historyOf(parcel.id)).toEqual([])
+
+    // The next real edit is audited and claims the mark as usual.
+    await shared.query(`update entities set data = $2 where id = $1`, [
+      parcel.id,
+      JSON.stringify({ pin: '20065 38013', zoning: 'TN-2' }),
+    ])
+    const fields = (await historyOf(parcel.id)).map((entry) => entry.field_name)
+    expect(fields).toContain('data.zoning')
+    expect(fields).toContain('reviewed_at')
+  })
+
+  it('takes the batch and the source from the request, as PostgREST passes them', async () => {
+    const batch = '33333333-3333-4333-a333-333333333333'
+    await shared.exec(
+      `select set_config('request.headers', '{"x-artypest-batch":"${batch}","x-artypest-source":"import"}', false)`
+    )
+    const created = await shared.query<{ id: string; reviewed_at: string | null }>(
+      `insert into entities (org_id, type, name) values ($1, 'property', '1 Import Row')
+       returning id, reviewed_at`,
+      [ORG]
+    )
+    await shared.exec(`select set_config('request.headers', '', false)`)
+
+    // An import is not a person reading the record.
+    expect(created.rows[0]?.reviewed_at).toBeNull()
+    const audit = await shared.query<{ batch_id: string; source: string }>(
+      `select batch_id, source from audit_entries where record_id = $1`,
+      [created.rows[0]?.id]
+    )
+    expect(audit.rows).toEqual([{ batch_id: batch, source: 'import' }])
+  })
+
+  it('ignores a source header it does not know, and a batch that is not a uuid', async () => {
+    await shared.exec(
+      `select set_config('request.headers', '{"x-artypest-batch":"nope","x-artypest-source":"admin"}', false)`
+    )
+    const created = await shared.query<{ id: string }>(
+      `insert into entities (org_id, type, name) values ($1, 'property', '2 Odd Headers')
+       returning id`,
+      [ORG]
+    )
+    await shared.exec(`select set_config('request.headers', '', false)`)
+
+    const audit = await shared.query<{ source: string }>(
+      `select source from audit_entries where record_id = $1`,
+      [created.rows[0]?.id]
+    )
+    expect(audit.rows).toEqual([{ source: 'hand' }])
+  })
+
+  it('lists everyone who has changed anything, for the Activity filter', async () => {
+    const actors = await shared.query<{ audit_actors: string }>(`select * from audit_actors()`)
+    expect(actors.rows.map((row) => row.audit_actors)).toContain('dana@example.org')
   })
 })

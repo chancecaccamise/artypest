@@ -1118,3 +1118,74 @@ harvested layer loaded.
 **Not done.** A board term shows on the person, not on the association the seat
 belongs to, because that is where the dashboard links. The association's page
 could reasonably list its seats that are ending too.
+
+## 2026-10-16: the records are shared
+
+**Did.** Signed in, the app now reads and writes the association's records in
+the database instead of each browser, so every admin sees the same records and
+each other's work within half a minute.
+
+- `SyncedProvider` loads the association's rows on sign-in, answers reads from
+  memory, sends every write to Postgres, and refreshes every 30 seconds and on
+  returning to the tab. History, Activity, and who-changed-what come from the
+  database's audit log.
+- County parcels and the supplied TSNA contacts stay outside the database until
+  somebody edits or connects one, then are copied in without an audit row or a
+  hand mark (`materialize_records`). They are on ids derived from what they are,
+  so every browser copies in the same row.
+- Migration `20261016130000_shared_records.sql`: the audit trigger logs `data`
+  key by key and describes photographs instead of storing them; batch and source
+  come from request headers; `materialize_records` and `audit_actors`.
+- A notice offers to copy each browser's previously saved work in, once.
+- Settings, photos, and images no longer say records are kept in this browser
+  when they are not.
+
+**Verified.** `pnpm verify` passes: typecheck, lint (0 errors), 693 tests, and a
+production build. `pnpm db:verify` passes 30 tests against Postgres in WASM,
+including the new trigger behaviour. `SyncedProvider` is tested against an
+in-memory fake of the database, including two admins sharing one.
+
+**Not done.**
+
+- *Not run against the hosted database.* This machine's Supabase login is
+  refused ("does not have the necessary privileges"), so `pnpm db:push` has not
+  run. The hosted project has only the first two migrations; the review,
+  connection-type, and shared-records migrations all go in on the next push.
+  Until then, signing in on the deployed site will fail to load the records.
+  The thin Supabase layer (`supabase-remote.ts`) has only been typechecked.
+- *`src/types/database.ts` is stale* until `pnpm db:types` runs after the push.
+- *Bulk jobs are one request per record.* The owner reconciliation and parcel
+  import work, but thousands of decisions will take minutes rather than seconds.
+- *The org may still be named Ardsley Park in the database*, as the bootstrap
+  migration created it. If so, rename it in Settings.
+
+## 2026-10-16: the plat covers every neighborhood within 2.7 miles
+
+**Did.** Took the parcel layer from 16,656 lots in 27 neighborhoods to 34,788 in
+63, adding every neighborhood within about 2.7 miles of Thomas Square: the west
+side (Cuyler/Brownville, Carver Heights, West Savannah, Hudson Hill), the east
+(Gordonston, Victory Heights, East Savannah, Avondale), the band south of
+DeRenne (Liberty City, Sunset Park, Cloverdale, Twickenham), and Hutchinson
+Island.
+
+*Why that ring and not the city.* The City of Savannah is 59,120 parcels.
+Start-up work was measured at five sizes by scaling the real harvest: it grows
+in a straight line, about 15ms per thousand lots on a fast machine, with no
+cliff. At 35,000 it is about half a second, an ordinary laptop's second or so;
+past 45,000 an ordinary laptop is heading for two seconds and half a gigabyte.
+The real 34,788 measured 0.50 to 0.56 seconds, as predicted.
+
+*Streets are culled now.* The plat drew every street centreline on every pan
+frame, which was already noted as the uncapped cost at 4,755 streets. The new
+harvest has 8,336, so streets outside the view, and their names, are no longer
+drawn. Lots were already culled and capped at 6,000.
+
+**Verified.** The harvest's own accounting: 34,861 fetched = 34,788 written + 73
+centred outside the selection + 0 duplicate PINs, against 34,861 the service
+reports for the union of the 63 boundaries. All four output files hold the same
+34,788 PINs. `pnpm verify` passes: typecheck, lint (0 errors), 694 tests, and a
+production build.
+
+**Not done.** The plat's frame times were not re-measured in a browser. The 6,000
+lot ceiling now bites at a smaller fraction of the layer when fully zoomed out,
+and the plat says so on screen when it does.
