@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
 import App from './App'
+import { data } from './lib/data'
 import { renderWithProviders } from './test/render'
 
 /*
@@ -185,12 +186,13 @@ describe('settings', () => {
     expect(screen.getByText(/no API key/)).toBeInTheDocument()
   })
 
-  it('lists the ten relation types read only, with both directions', async () => {
+  it('lists the twelve relation types read only, with both directions', async () => {
     renderWithProviders(<App />, { route: '/settings/relations' })
 
     const table = await screen.findByRole('table')
     await waitFor(() => {
-      expect(within(table).getAllByRole('row').length).toBe(11)
+      // Twelve types and the header row.
+      expect(within(table).getAllByRole('row').length).toBe(13)
     })
     expect(screen.getByText('Read only in this phase')).toBeInTheDocument()
     expect(within(table).getByText('is owned by')).toBeInTheDocument()
@@ -209,6 +211,35 @@ describe('connection map', () => {
     await waitFor(() => {
       expect(screen.getAllByRole('button', { name: /Centre the map on/ }).length).toBeGreaterThan(0)
     })
+  })
+
+  it('opens each card\'s record from its name, and re-centres from the rest of the card', async () => {
+    renderWithProviders(<App />, { route: '/map' })
+
+    const centre = await screen.findAllByRole('button', { name: /Centre the map on/ })
+    const card = centre[0]?.parentElement
+    if (!card) throw new Error('No card on the map')
+
+    const name = within(card).getByRole('link')
+    expect(name.getAttribute('href')).toMatch(/^\/(people|properties|businesses|associations|assets|documents|records)\//)
+  })
+
+  it('shows people, businesses, and associations until another type is switched on', async () => {
+    renderWithProviders(<App />, { route: '/map' })
+
+    const properties = await screen.findByRole('button', { name: /^Properties/ })
+    expect(properties).toHaveAttribute('aria-pressed', 'false')
+    for (const button of screen.getAllByRole('button', { pressed: true })) {
+      expect(button.textContent).toMatch(/^(People|Businesses|Associations|Bold lines)/)
+    }
+  })
+
+  it('says a record has no connections, rather than that they are filtered out', async () => {
+    const lonely = await data.createEntity({ type: 'property', name: '1 Nowhere Lane', data: {} })
+    renderWithProviders(<App />, { route: `/map/${lonely.id}` })
+
+    expect(await screen.findByText('1 Nowhere Lane has no connections to draw')).toBeInTheDocument()
+    expect(screen.queryByText(/filtered out/)).not.toBeInTheDocument()
   })
 
   it('offers a type filter chip per connected type', async () => {

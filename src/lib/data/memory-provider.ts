@@ -29,6 +29,7 @@ import type {
   ReferenceList,
   Relation,
   RelationInput,
+  RelationPatch,
   RelationType,
   ResolvedLocation,
   ReviewIndex,
@@ -55,11 +56,15 @@ function clone<T>(value: T): T {
   return structuredClone(value)
 }
 
-let sequence = 0
-
+/*
+  Random, not a counter. A counter restarted at 0001 on every page load while
+  the records saved in this browser kept their numbers, so the first to do made
+  after a reload took the id of the first person made before it, and the
+  owner's connection opened the to do. Postgres hands out uuids for the same
+  reason.
+*/
 function nextId(prefix: string): string {
-  sequence += 1
-  return `${prefix}-${sequence.toString().padStart(4, '0')}`
+  return `${prefix}-${crypto.randomUUID()}`
 }
 
 /**
@@ -71,6 +76,28 @@ function toAuditValue(value: unknown): string | null {
   if (typeof value === 'string') return value === '' ? null : value
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   return JSON.stringify(value)
+}
+
+function isPhotoDataUrl(value: unknown): value is string {
+  return typeof value === 'string' && value.startsWith('data:image/')
+}
+
+/*
+  What the log keeps for a photo: a description, not the photo.
+
+  Photographs live on the record as data URLs until Storage exists, and copying
+  them into the log stored every photo again on each change, twice (before and
+  after), in the same few megabytes of browser storage the photos themselves
+  need. The history also printed them as a wall of characters. Whether a change
+  happened is still decided on the full value, so swapping one photo for
+  another is logged even though both read "1 image".
+*/
+function forAuditLog(value: unknown, rendered: string | null): string | null {
+  if (isPhotoDataUrl(value)) return 'a photograph'
+  if (Array.isArray(value) && value.length > 0 && value.every(isPhotoDataUrl)) {
+    return value.length === 1 ? '1 image' : `${String(value.length)} images`
+  }
+  return rendered
 }
 
 class MemoryProvider implements DataProvider {
@@ -276,7 +303,15 @@ class MemoryProvider implements DataProvider {
         const before = toAuditValue(entity.data[key])
         const after = toAuditValue(patch.data[key])
         if (before !== after) {
-          this.recordAudit('entities', id, 'update', `data.${key}`, before, after, now)
+          this.recordAudit(
+            'entities',
+            id,
+            'update',
+            `data.${key}`,
+            forAuditLog(entity.data[key], before),
+            forAuditLog(patch.data[key], after),
+            now
+          )
           changed = true
         }
       }
@@ -385,6 +420,35 @@ class MemoryProvider implements DataProvider {
 
     this.relations.push(relation)
     this.recordAudit('relations', relation.id, 'insert', null, null, null, now)
+
+    return Promise.resolve(clone(relation))
+  }
+
+  /*
+    One audit row per changed field, as for entities, so "the lease ended in
+    March" reads as an end date going from not set to March rather than as
+    "relation updated".
+  */
+  updateRelation(id: string, patch: RelationPatch): Promise<Relation> {
+    const relation = this.relations.find((candidate) => candidate.id === id)
+    if (!relation) throw new Error(`No relation with id ${id}`)
+
+    const now = new Date().toISOString()
+    const fields = [
+      'relationTypeId',
+      'fromEntityId',
+      'toEntityId',
+      'startDate',
+      'endDate',
+    ] as const satisfies readonly (keyof RelationPatch)[]
+
+    for (const field of fields) {
+      const next = patch[field]
+      if (next === undefined || next === relation[field]) continue
+      this.recordAudit('relations', id, 'update', field, relation[field], next, now)
+      // Each field is typed by its key, which a loop over the union cannot carry.
+      Object.assign(relation, { [field]: next, updatedAt: now })
+    }
 
     return Promise.resolve(clone(relation))
   }

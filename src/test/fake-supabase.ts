@@ -84,17 +84,22 @@ export function createFakeSupabase({ accounts, savedSignIn }: FakeSupabaseOption
 
     if (url.pathname === '/rest/v1/org_users') {
       const userId = url.searchParams.get('user_id')?.replace(/^eq\./, '')
-      const account = accounts.find((candidate) => candidate.id === userId)
-      const rows = account?.member
-        ? [
-            {
-              org_id: ORG_ID,
-              name: account.member.name,
-              email: account.email,
-              role: account.member.role,
-            },
-          ]
-        : []
+      // By user is the sign-in check; without one it is the member name list.
+      const matching = userId
+        ? accounts.filter((candidate) => candidate.id === userId)
+        : accounts
+      const rows = matching.flatMap((account) =>
+        account.member
+          ? [
+              {
+                org_id: ORG_ID,
+                name: account.member.name,
+                email: account.email,
+                role: account.member.role,
+              },
+            ]
+          : []
+      )
       return Promise.resolve(json(200, rows))
     }
 

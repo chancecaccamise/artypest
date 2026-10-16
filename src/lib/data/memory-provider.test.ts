@@ -85,6 +85,19 @@ describe('memory provider', () => {
     expect(deleted.archivedAt).toBeNull()
   })
 
+  it('never hands out an id a previous page load already used', async () => {
+    /*
+      Ids were a counter that restarted on every load, so two to dos made on
+      either side of a reload shared one, and checking off the first completed
+      the second. Two providers stand in for two page loads.
+    */
+    const first = await data.createEntity({ type: 'record', name: 'Call the arborist', data: {} })
+    const reloaded = createMemoryProvider(buildDemoData(REFERENCE))
+    const second = await reloaded.createEntity({ type: 'record', name: 'Order mulch', data: {} })
+
+    expect(second.id).not.toBe(first.id)
+  })
+
   it('writes one audit row per changed field', async () => {
     const created = await data.createEntity({
       type: 'property',
@@ -108,6 +121,29 @@ describe('memory provider', () => {
     const useChange = history.find((entry) => entry.fieldName === 'data.propertyUse')
     expect(useChange?.oldValue).toBe('single_family')
     expect(useChange?.newValue).toBe('commercial')
+  })
+
+  it('logs photo changes as a description rather than a copy of the photo', async () => {
+    const first = 'data:image/jpeg;base64,' + 'A'.repeat(2000)
+    const second = 'data:image/jpeg;base64,' + 'B'.repeat(2000)
+    const created = await data.createEntity({ type: 'person', name: 'Photo Subject', data: {} })
+
+    await data.updateEntity(created.id, { data: { images: [first], photo: first } })
+    // Same count, different photo: still a change, still logged.
+    await data.updateEntity(created.id, { data: { images: [second], photo: first } })
+
+    const history = await data.listAuditEntries(created.id)
+    const imageRows = history.filter((entry) => entry.fieldName === 'data.images')
+    expect(imageRows).toHaveLength(2)
+    expect(imageRows.map((entry) => entry.newValue)).toEqual(['1 image', '1 image'])
+
+    const photoRow = history.find((entry) => entry.fieldName === 'data.photo')
+    expect(photoRow?.newValue).toBe('a photograph')
+
+    for (const entry of history) {
+      expect(entry.oldValue ?? '').not.toContain('base64')
+      expect(entry.newValue ?? '').not.toContain('base64')
+    }
   })
 
   it('returns relations from either end of the stored row', async () => {
@@ -146,11 +182,11 @@ describe('memory provider', () => {
     expect(after.map((row) => row.id)).not.toContain(relation.id)
   })
 
-  it('ships the ten seeded relation types, each with both directions labelled', async () => {
+  it('ships the twelve seeded relation types, each with both directions labelled', async () => {
     const types = await data.listRelationTypes()
-    expect(types).toHaveLength(10)
+    expect(types).toHaveLength(12)
     expect(types.every((type) => type.label !== '' && type.reverseLabel !== '')).toBe(true)
-    expect(new Set(types.map((type) => type.key)).size).toBe(10)
+    expect(new Set(types.map((type) => type.key)).size).toBe(12)
   })
 
   it('resolves the subject entity on the activity feed', async () => {

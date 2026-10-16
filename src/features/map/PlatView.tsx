@@ -157,6 +157,8 @@ export interface PlatViewProps {
   /** Active while the user is placing a record by hand. */
   placingEntity: Entity | null
   onPlace: (point: Point) => void
+  /** Stops placing without moving anything. */
+  onCancelPlace?: () => void
   className?: string
 }
 
@@ -176,6 +178,7 @@ export function PlatView({
   hoverLabelForPin,
   placingEntity,
   onPlace,
+  onCancelPlace,
   className,
 }: PlatViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -949,6 +952,11 @@ export function PlatView({
           <span className="text-13">
             Click the plat to place <span className="font-semibold">{placingEntity.name}</span>
           </span>
+          {onCancelPlace ? (
+            <Button size="sm" variant="ghost" onClick={onCancelPlace}>
+              Cancel
+            </Button>
+          ) : null}
         </div>
       ) : null}
 

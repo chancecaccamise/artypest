@@ -14,6 +14,7 @@ import type {
   ReferenceItemPatch,
   ReferenceList,
   RelationInput,
+  RelationPatch,
 } from '@/lib/data/types'
 import type { Point } from '@/lib/geocoding/types'
 import { resolveGraph, type ResolvedGraph } from '@/lib/insights'
@@ -270,6 +271,15 @@ export function useCreateRelation() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (input: RelationInput) => data.createRelation(input),
+    onSuccess: () => invalidateAll(client),
+  })
+}
+
+export function useUpdateRelation() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: RelationPatch }) =>
+      data.updateRelation(id, patch),
     onSuccess: () => invalidateAll(client),
   })
 }

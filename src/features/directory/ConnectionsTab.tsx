@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Network, Plus, X } from 'lucide-react'
+import { Network, Pencil, Plus, X } from 'lucide-react'
 
 import { entityHref } from '@/components/layout/nav-config'
 import { TypeBadge } from '@/components/ui/badge'
@@ -10,9 +10,9 @@ import { Panel, PanelBody, PanelHeader } from '@/components/ui/panel'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { useDeleteRelation, useGraph } from '@/hooks/use-data'
 import { useRole } from '@/lib/role'
-import { AddConnectionDialog } from './AddConnectionDialog'
+import { ConnectionDialog } from './ConnectionDialog'
 import { Dialog } from '@/components/ui/dialog'
-import { ENTITY_TYPE_LABELS, type Entity } from '@/lib/data/types'
+import { ENTITY_TYPE_LABELS, type Entity, type Relation } from '@/lib/data/types'
 import { formatDate, readString } from '@/lib/format'
 import { isCurrent } from '@/lib/insights'
 import { cn } from '@/lib/utils'
@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils'
 
 interface ConnectionRow {
   relationId: string
+  relation: Relation
   /** The label as read from this entity's end. */
   directionLabel: string
   other: Entity
@@ -58,6 +59,7 @@ export function ConnectionsTab({ entity }: { entity: Entity }) {
 
   const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState<ConnectionRow | null>(null)
+  const [editing, setEditing] = useState<ConnectionRow | null>(null)
 
   const groups = useMemo(() => {
     if (!graph) return []
@@ -80,6 +82,7 @@ export function ConnectionsTab({ entity }: { entity: Entity }) {
       const group = byType.get(groupKey) ?? { label: directionLabel, rows: [] }
       group.rows.push({
         relationId: relation.id,
+        relation,
         directionLabel,
         other,
         startDate: relation.startDate,
@@ -155,6 +158,7 @@ export function ConnectionsTab({ entity }: { entity: Entity }) {
                     <ConnectionLine
                       key={row.relationId}
                       row={row}
+                      onEdit={canEdit ? setEditing : undefined}
                       onRemove={canEdit ? setRemoving : undefined}
                     />
                   ))}
@@ -166,7 +170,12 @@ export function ConnectionsTab({ entity }: { entity: Entity }) {
                   ) : null}
 
                   {historical.map((row) => (
-                    <ConnectionLine key={row.relationId} row={row} historical />
+                    <ConnectionLine
+                      key={row.relationId}
+                      row={row}
+                      historical
+                      onEdit={canEdit ? setEditing : undefined}
+                    />
                   ))}
                 </ul>
               </section>
@@ -175,7 +184,13 @@ export function ConnectionsTab({ entity }: { entity: Entity }) {
         )}
       </PanelBody>
 
-      <AddConnectionDialog open={adding} onClose={() => setAdding(false)} entity={entity} />
+      <ConnectionDialog open={adding} onClose={() => setAdding(false)} entity={entity} />
+      <ConnectionDialog
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        entity={entity}
+        relation={editing?.relation}
+      />
 
       <Dialog
         open={removing !== null}
@@ -205,7 +220,7 @@ export function ConnectionsTab({ entity }: { entity: Entity }) {
           This deletes the connection to{' '}
           <span className="text-ink">{removing?.other.name}</span> and it stops appearing
           anywhere, including the Connection Map. If the connection simply ended,
-          giving it an end date keeps the history instead. The removal is recorded
+          editing it to add an end date keeps the history instead. The removal is recorded
           in this record&rsquo;s history either way.
         </p>
       </Dialog>
@@ -216,10 +231,12 @@ export function ConnectionsTab({ entity }: { entity: Entity }) {
 function ConnectionLine({
   row,
   historical = false,
+  onEdit,
   onRemove,
 }: {
   row: ConnectionRow
   historical?: boolean
+  onEdit?: (row: ConnectionRow) => void
   onRemove?: (row: ConnectionRow) => void
 }) {
   const attributes = formatAttributes(row.attributes)
@@ -244,11 +261,23 @@ function ConnectionLine({
         <span className="text-ink-faint ml-auto font-mono text-xs whitespace-nowrap">{dates}</span>
       ) : null}
 
+      {onEdit ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn('text-ink-faint hover:text-ink', dates ? '' : 'ml-auto')}
+          aria-label={`Edit the connection to ${row.other.name}`}
+          onClick={() => onEdit(row)}
+        >
+          <Pencil className="size-3.5" aria-hidden="true" />
+        </Button>
+      ) : null}
+
       {onRemove ? (
         <Button
           variant="ghost"
           size="sm"
-          className={cn('text-ink-faint hover:text-oxblood', dates ? '' : 'ml-auto')}
+          className={cn('text-ink-faint hover:text-oxblood', dates || onEdit ? '' : 'ml-auto')}
           aria-label={`Remove the connection to ${row.other.name}`}
           onClick={() => onRemove(row)}
         >

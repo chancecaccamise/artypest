@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Panel, PanelBody, PanelFooter, PanelHeader } from '@/components/ui/panel'
 import { Skeleton, SkeletonRows } from '@/components/ui/skeleton'
-import { AuditLine, groupByDay } from '@/features/directory/HistoryTab'
+import { ActorName, AuditLine, groupByDay } from '@/features/directory/HistoryTab'
 import { useActivity } from '@/hooks/use-data'
 import type { ActivityEntry } from '@/lib/data/types'
 import {
@@ -320,7 +320,7 @@ function ActivityLine({ entry }: { entry: ActivityEntry }) {
       <span className="text-ink-faint w-16 shrink-0 font-mono text-xs">
         {formatTime(entry.changedAt)}
       </span>
-      <span className="text-ink font-medium">{entry.changedBy ?? 'System'}</span>
+      <ActorName actor={entry.changedBy} />
       <span className="text-ink-muted">
         {entry.action === 'insert' ? 'created' : entry.action === 'delete' ? 'removed' : 'changed'}
       </span>

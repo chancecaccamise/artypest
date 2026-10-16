@@ -11,6 +11,7 @@ import {
   readNumber,
   readString,
 } from '@/lib/format'
+import { NAICS_SECTORS, naicsSector } from '@/lib/naics'
 
 /*
   One page component drives all seven directory types. Everything that differs
@@ -55,17 +56,45 @@ export type FieldFormat =
   | 'phone'
   | 'reference'
   | 'year'
+  | 'url'
 
 export interface FieldDef {
   key: string
   label: string
   format?: FieldFormat
   referenceList?: ReferenceList
+  /** A fixed list to choose from, for a standard nobody should edit. */
+  options?: readonly FieldOption[]
   /** Notes are internal and never rendered for a resident. */
   internal?: boolean
   /** Rendered by a dedicated card instead of the generic grid. */
   hiddenFromGrid?: boolean
 }
+
+export interface FieldOption {
+  value: string
+  label: string
+}
+
+/**
+ * The label for a stored value of a fixed-option field.
+ *
+ * A value from before the list existed is shown humanized rather than hidden,
+ * so the record still says what it said.
+ */
+export function optionLabel(options: readonly FieldOption[], value: string): string {
+  return options.find((option) => option.value === value)?.label ?? humanize(value)
+}
+
+/** A business category as read: the NAICS sector name, or an older category. */
+function categoryLabel(value: string): string {
+  return naicsSector(value)?.label ?? humanize(value)
+}
+
+const NAICS_OPTIONS: readonly FieldOption[] = NAICS_SECTORS.map((sector) => ({
+  value: sector.value,
+  label: `${sector.value} ${sector.label}`,
+}))
 
 export interface ChipSpec {
   prefix?: string
@@ -366,7 +395,7 @@ const businessConfig: DirectoryConfig = {
     {
       key: 'businessCategory',
       label: 'Category',
-      render: (entity) => orNotSet(text(entity, 'businessCategory'), (value) => humanize(value)),
+      render: (entity) => orNotSet(text(entity, 'businessCategory'), categoryLabel),
     },
     {
       key: 'contactName',
@@ -390,26 +419,17 @@ const businessConfig: DirectoryConfig = {
     {
       key: 'businessCategory',
       label: 'Category',
-      options: [
-        { value: 'grounds_maintenance', label: 'Grounds maintenance' },
-        { value: 'property_management', label: 'Property management' },
-        { value: 'pest_control', label: 'Pest control' },
-        { value: 'arborist', label: 'Arborist' },
-        { value: 'general_contractor', label: 'General contractor' },
-        { value: 'accounting', label: 'Accounting' },
-        { value: 'insurance', label: 'Insurance' },
-        { value: 'property_owner', label: 'Property owner' },
-        { value: 'member_business', label: 'Member business' },
-      ],
+      options: NAICS_SECTORS.map((sector) => ({ value: sector.value, label: sector.label })),
     },
   ],
   fields: [
-    { key: 'businessCategory', label: 'Category' },
+    // The NAICS sector. See src/lib/naics.ts.
+    { key: 'businessCategory', label: 'Category', options: NAICS_OPTIONS },
     { key: 'stateFilingNumber', label: 'State filing number', format: 'mono' },
     { key: 'contactName', label: 'Primary contact' },
     { key: 'phone', label: 'Phone', format: 'phone' },
     { key: 'email', label: 'Email', format: 'email' },
-    { key: 'website', label: 'Website' },
+    { key: 'website', label: 'Website', format: 'url' },
     { key: 'mailingAddress', label: 'Mailing address' },
     { key: 'notes', label: 'Notes', format: 'longtext', internal: true, hiddenFromGrid: true },
   ],
@@ -417,7 +437,9 @@ const businessConfig: DirectoryConfig = {
     const chips: ChipSpec[] = []
     const category = text(entity, 'businessCategory')
     const filing = text(entity, 'stateFilingNumber')
-    if (category !== '') chips.push({ value: humanize(category) })
+    const sector = naicsSector(category)
+    if (sector) chips.push({ prefix: 'NAICS', value: sector.value, title: sector.label })
+    else if (category !== '') chips.push({ value: humanize(category) })
     if (filing !== '') chips.push({ prefix: 'Filing', value: filing })
     return chips
   },

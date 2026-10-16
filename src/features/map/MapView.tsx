@@ -58,12 +58,15 @@ export interface MapViewProps {
   initialEntityId?: string | null
   /** Connections to switch on when the map opens. Null leaves them off. */
   initialConnections?: InitialConnections | null
+  /** Open already placing the initial record, for "Set location" elsewhere. */
+  startPlacing?: boolean
   onSelectionChange?: (entityId: string | null) => void
 }
 
 export function MapView({
   initialEntityId,
   initialConnections = null,
+  startPlacing = false,
   onSelectionChange,
 }: MapViewProps) {
   const { graph, isLoading: graphLoading } = useGraph()
@@ -97,7 +100,15 @@ export function MapView({
   */
   const [boldArcs, setBoldArcs] = useState(true)
   const overlay = useOverlay()
-  const [placing, setPlacing] = useState<Entity | null>(null)
+  /*
+    Held as an id and looked up, so "Set location" from a record page can start
+    placing before the graph has loaded the record it names.
+  */
+  const [placingId, setPlacingId] = useState<string | null>(
+    startPlacing && canEdit ? (initialEntityId ?? null) : null
+  )
+  const placing = placingId && graph ? (graph.byId.get(placingId) ?? null) : null
+  const setPlacing = (entity: Entity | null) => setPlacingId(entity?.id ?? null)
 
   /*
     One piece of selection state, owned here. Neither view owns it, which is
@@ -269,7 +280,7 @@ export function MapView({
       if (!placing) return
       setManualLocation.mutate({ entityId: placing.id, point })
       select(placing.id)
-      setPlacing(null)
+      setPlacingId(null)
     },
     [placing, setManualLocation, select]
   )
@@ -562,6 +573,7 @@ export function MapView({
               labelForPin={labelForPin}
               hoverLabelForPin={hoverLabelForPin}
               placingEntity={placing}
+              onCancelPlace={() => setPlacingId(null)}
               onPlace={handlePlace}
             />
           </div>

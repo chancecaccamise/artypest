@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Archive, ArchiveRestore, ChevronDown, Pencil, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, ChevronDown, Network, Pencil, Trash2 } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TypeBadge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { IdChip } from '@/components/ui/id-chip'
 import { Notice } from '@/components/ui/empty-state'
@@ -36,8 +36,10 @@ import {
 import { ENTITY_TYPE_LABELS, type EntityType } from '@/lib/data/types'
 import { formatDateTime } from '@/lib/format'
 import { stateFor } from '@/lib/review/status'
+import { useMemberName } from '@/lib/auth'
 import { useRole } from '@/lib/role'
 import { todosForSubject } from '@/lib/todos'
+import { cn } from '@/lib/utils'
 
 const TABS: TabDefinition[] = [
   { value: 'details', label: 'Details' },
@@ -55,6 +57,7 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
   const navigate = useNavigate()
   const config = DIRECTORY_CONFIGS[type]
   const { canEdit, canSeeNotes } = useRole()
+  const nameFor = useMemberName()
 
   const entityQuery = useEntity(id)
   /** For the connection count on the tab strip. */
@@ -197,6 +200,17 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
                 {chip.value}
               </IdChip>
             ))}
+            {/*
+              Beside the name rather than only inside the Connections tab, so
+              the map is one click from any record, for every role.
+            */}
+            <Link
+              to={`/map/${entity.id}`}
+              className={cn(buttonVariants({ size: 'sm' }), 'ml-1')}
+            >
+              <Network />
+              Connection Map
+            </Link>
           </span>
         }
         subtitle={
@@ -205,7 +219,7 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
             <span className="text-ink-faint" aria-hidden="true">
               &middot;
             </span>
-            <span>{reviewSentence(reviewState, reviewStatus)}</span>
+            <span>{reviewSentence(reviewState, reviewStatus, nameFor)}</span>
           </span>
         }
         actions={

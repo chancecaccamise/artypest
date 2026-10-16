@@ -42,6 +42,7 @@ import type {
 export type DemoData = DataSnapshot
 
 const ORG_ID = 'org-ardsley'
+const TSNA_ASSOCIATION_ID = 'ent-tsna-association'
 
 /** mulberry32, so the demo data is identical on every reload. */
 function makeRandom(seed: number): () => number {
@@ -144,12 +145,20 @@ export function buildDemoData(
       label: 'resides at',
       reverseLabel: 'is home to',
     },
+    { id: 'rt-rents', orgId: ORG_ID, key: 'rents', label: 'rents', reverseLabel: 'is rented by' },
     {
       id: 'rt-member-of',
       orgId: ORG_ID,
       key: 'member_of',
       label: 'is a member of',
       reverseLabel: 'has member',
+    },
+    {
+      id: 'rt-executive-of',
+      orgId: ORG_ID,
+      key: 'executive_of',
+      label: 'is an executive of',
+      reverseLabel: 'has executive',
     },
     {
       id: 'rt-manages',
@@ -177,7 +186,7 @@ export function buildDemoData(
       orgId: ORG_ID,
       key: 'vendor_for',
       label: 'is a vendor for',
-      reverseLabel: 'uses vendor',
+      reverseLabel: 'purchases from',
     },
     {
       id: 'rt-adjacent-to',
@@ -528,7 +537,8 @@ export function buildDemoData(
         'business',
         displayName,
         {
-          businessCategory: 'property_owner',
+          // The county says who owns a lot, not what industry they are in.
+          businessCategory: null,
           stateFilingNumber: `K${intBetween(100000, 999999)}`,
           mailingAddress: formatMailingAddress(parcel.ownerMailingAddress),
           phone: null,
@@ -685,7 +695,7 @@ export function buildDemoData(
     {
       name: 'Tidewater Landscaping LLC',
       mailingAddress: '2412 Waters Ave, Savannah, GA 31404',
-      category: 'grounds_maintenance',
+      category: '56', // Landscaping services, 561730
       contractEndsInDays: 47,
       insuranceExpiresInDays: 33,
       contractValue: 48000,
@@ -693,7 +703,7 @@ export function buildDemoData(
     {
       name: 'Coastal Empire Pest Control Inc',
       mailingAddress: '118 Skidaway Rd, Savannah, GA 31404',
-      category: 'pest_control',
+      category: '56', // Exterminating and pest control, 561710
       contractEndsInDays: 212,
       insuranceExpiresInDays: 198,
       contractValue: 9600,
@@ -701,7 +711,7 @@ export function buildDemoData(
     {
       name: 'Bull Street Property Management LLC',
       mailingAddress: '1810 Bull St, Savannah, GA 31401',
-      category: 'property_management',
+      category: '53', // Property managers, 531311
       contractEndsInDays: 331,
       insuranceExpiresInDays: 51,
       contractValue: 62400,
@@ -709,7 +719,7 @@ export function buildDemoData(
     {
       name: 'Habersham Tree Surgeons LLC',
       mailingAddress: '3305 Habersham St, Savannah, GA 31405',
-      category: 'arborist',
+      category: '56', // Landscaping services, 561730
       contractEndsInDays: 74,
       insuranceExpiresInDays: 289,
       contractValue: 21500,
@@ -717,7 +727,7 @@ export function buildDemoData(
     {
       name: 'Savannah Gate and Fence Co',
       mailingAddress: '715 W Bay St, Savannah, GA 31401',
-      category: 'general_contractor',
+      category: '23', // Construction
       contractEndsInDays: 605,
       insuranceExpiresInDays: 412,
       contractValue: 15750,
@@ -725,7 +735,7 @@ export function buildDemoData(
     {
       name: 'Lowcountry Accounting Partners LP',
       mailingAddress: '240 E Victory Dr, Savannah, GA 31405',
-      category: 'accounting',
+      category: '54', // Accounting services, 5412
       contractEndsInDays: 19,
       insuranceExpiresInDays: 640,
       contractValue: 11200,
@@ -733,7 +743,7 @@ export function buildDemoData(
     {
       name: 'Marsh View Insurance Group Inc',
       mailingAddress: '6605 Abercorn St, Savannah, GA 31405',
-      category: 'insurance',
+      category: '52', // Insurance agencies, 524210
       contractEndsInDays: 486,
       insuranceExpiresInDays: 486,
       contractValue: 38900,
@@ -1715,7 +1725,12 @@ export function buildDemoData(
         'business',
         contact.business.name,
         {
-          businessCategory: 'member_business',
+          /*
+            The sheet does not say what industry each business is in, so the
+            NAICS sector is left for the board to choose. Membership, which
+            this used to say, is a connection to the association below.
+          */
+          businessCategory: null,
           stateFilingNumber: null,
           contactName: contact.person.name,
           phone: contact.person.phone,
@@ -1733,6 +1748,15 @@ export function buildDemoData(
         attributes: { title: 'Primary contact' },
         createdDaysAgo,
       })
+
+      // The association record only exists in the client's dataset.
+      if (!includeTemporaryData) {
+        relation(nextRelationId(), 'rt-member-of', business.id, TSNA_ASSOCIATION_ID, {
+          startDate: contact.createdAt.slice(0, 10),
+          attributes: { source: 'TSNA business contacts' },
+          createdDaysAgo,
+        })
+      }
     }
 
     for (const link of contact.propertyLinks) {
@@ -1762,7 +1786,7 @@ export function buildDemoData(
 
   if (!includeTemporaryData) {
     const association = entity(
-      'ent-tsna-association',
+      TSNA_ASSOCIATION_ID,
       'association',
       'Thomas Square Neighborhood Association',
       {

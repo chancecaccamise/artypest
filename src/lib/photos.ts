@@ -8,15 +8,17 @@
   in total, and a board with thirty residents would fill it with the first
   handful.
 
-  Reduced to 320 pixels on the long edge a face is about 25KB, which is plenty
-  for the avatar and the record header, and leaves room for a hundred of them.
+  Reduced to 640 pixels on the long edge a photograph is about 90KB as stored,
+  sharp in the Images grid on a high-density screen, with room for roughly fifty
+  in the browser. 320 was tried first and was visibly soft once the grid showed
+  photos at full tile width rather than as avatars.
 
   When Storage arrives, `readPhotoFile` becomes an upload returning a URL and
   nothing else here changes: the record already holds a string.
 */
 
 /** The long edge, in pixels. A face at this size is legible at any size shown. */
-export const MAX_DIMENSION = 320
+export const MAX_DIMENSION = 640
 
 /** JPEG quality. Above this the gain is invisible and the size is not. */
 const QUALITY = 0.8

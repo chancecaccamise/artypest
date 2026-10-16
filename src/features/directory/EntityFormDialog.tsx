@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/field'
 import { Notice } from '@/components/ui/empty-state'
-import { DIRECTORY_CONFIGS, type FieldDef } from '@/features/directory/config'
+import { DIRECTORY_CONFIGS, optionLabel, type FieldDef } from '@/features/directory/config'
 import {
   type PendingPropertyLink,
   PropertyLinkFields,
@@ -32,6 +32,8 @@ export interface EntityFormDialogProps {
   /** Present when editing. Absent when adding. */
   entity?: Entity
   onCreated?: (entity: Entity) => void
+  /** Prefills the name when adding, for "create it from here" elsewhere. */
+  initialName?: string
   /** Field key to focus on open, used by "Add parcel record". */
   focusField?: string
 }
@@ -52,6 +54,7 @@ export function EntityFormDialog({
   type,
   entity,
   onCreated,
+  initialName,
   focusField,
 }: EntityFormDialogProps) {
   const config = DIRECTORY_CONFIGS[type]
@@ -79,7 +82,7 @@ export function EntityFormDialog({
   if (openKey !== lastOpenKey) {
     setLastOpenKey(openKey)
     if (openKey !== null) {
-      setName(entity?.name ?? '')
+      setName(entity?.name ?? initialName ?? '')
       setValues(
         Object.fromEntries(
           fields.map((field) => [field.key, toInputValue(entity?.data[field.key])])
@@ -252,6 +255,29 @@ export function EntityFormDialog({
                     onChange={(event) => setValue(field.key, event.target.value)}
                     data-autofocus={focusField === field.key ? true : undefined}
                   />
+                ) : field.options ? (
+                  <Select
+                    value={values[field.key] ?? ''}
+                    onChange={(event) => setValue(field.key, event.target.value)}
+                    data-autofocus={focusField === field.key ? true : undefined}
+                  >
+                    <option value="">Not set</option>
+                    {/*
+                      A value from before the list existed stays choosable, so
+                      opening the form and saving does not quietly erase it.
+                    */}
+                    {values[field.key] &&
+                    !field.options.some((option) => option.value === values[field.key]) ? (
+                      <option value={values[field.key]}>
+                        {optionLabel(field.options, values[field.key] ?? '')} (no longer on the list)
+                      </option>
+                    ) : null}
+                    {field.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
                 ) : referenceOptions ? (
                   <Select
                     value={values[field.key] ?? ''}

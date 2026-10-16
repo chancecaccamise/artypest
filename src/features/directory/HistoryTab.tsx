@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Panel, PanelBody, PanelHeader } from '@/components/ui/panel'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { useAuditEntries } from '@/hooks/use-data'
+import { useMemberName } from '@/lib/auth'
 import type { AuditEntry, Entity } from '@/lib/data/types'
 import { formatAuditValue, formatDayHeader, formatFieldName, formatTime } from '@/lib/format'
 
@@ -94,6 +95,17 @@ export function isReviewRow(entry: AuditEntry): boolean {
   return entry.action === 'update' && entry.fieldName === 'reviewedAt'
 }
 
+/**
+ * Who made a change, by name.
+ *
+ * The row stores the email the change was made under; the name is looked up
+ * when shown. No actor at all means the system wrote it, a county import say.
+ */
+export function ActorName({ actor }: { actor: string | null }) {
+  const nameFor = useMemberName()
+  return <span className="text-ink font-medium">{actor ? nameFor(actor) : 'System'}</span>
+}
+
 export function AuditLine({ entry }: { entry: AuditEntry }) {
   const isUpdate = entry.action === 'update' && entry.fieldName !== null
 
@@ -103,7 +115,7 @@ export function AuditLine({ entry }: { entry: AuditEntry }) {
         <span className="text-ink-faint w-16 shrink-0 font-mono text-xs">
           {formatTime(entry.changedAt)}
         </span>
-        <span className="text-ink font-medium">{entry.changedBy ?? 'System'}</span>
+        <ActorName actor={entry.changedBy} />
         <span className="text-moss font-medium">
           {entry.newValue === null ? 'cleared the check on this record' : 'checked this record'}
         </span>
@@ -117,7 +129,7 @@ export function AuditLine({ entry }: { entry: AuditEntry }) {
         {formatTime(entry.changedAt)}
       </span>
 
-      <span className="text-ink font-medium">{entry.changedBy ?? 'System'}</span>
+      <ActorName actor={entry.changedBy} />
       <span className="text-ink-muted">{ACTION_VERB[entry.action]}</span>
 
       {isUpdate ? (

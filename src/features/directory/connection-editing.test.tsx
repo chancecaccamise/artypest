@@ -120,3 +120,43 @@ describe('removing a connection', () => {
     expect(dialog).toHaveTextContent(/end date/)
   })
 })
+
+describe('editing a connection', () => {
+  it('gives an existing connection an end date, which keeps it as history', async () => {
+    const user = await openConnections(person.id)
+
+    const edit = await screen.findAllByRole('button', { name: /Edit the connection to/ })
+    await user.click(edit[0] as HTMLElement)
+
+    const dialog = await screen.findByRole('dialog', { name: /Edit connection/ })
+    await user.type(within(dialog).getByLabelText(/Until/), '2026-01-31')
+    await user.click(within(dialog).getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    const relations = await data.listRelations(person.id)
+    expect(relations.some((relation) => relation.endDate === '2026-01-31')).toBe(true)
+  })
+})
+
+describe('adding a record from the connection dialog', () => {
+  it('creates the record in place and connects to it', async () => {
+    const user = await openConnections(person.id)
+    await user.click(await screen.findByRole('button', { name: /Add connection/ }))
+
+    const dialog = await screen.findByRole('dialog', { name: /Add a connection/ })
+    await user.type(within(dialog).getByLabelText(/Connect to/), 'Coastal Roofing Co')
+    await user.click(within(dialog).getByRole('button', { name: 'Business' }))
+
+    // The record form takes the dialog's place, with the name already typed.
+    const form = await screen.findByRole('dialog', { name: /Add business/ })
+    expect(within(form).getByLabelText(/Name/)).toHaveValue('Coastal Roofing Co')
+    await user.click(within(form).getByRole('button', { name: /Add business|Save/ }))
+
+    // And hands back to the connection, with the new record chosen.
+    const back = await screen.findByRole('dialog', { name: /Add a connection/ })
+    expect(await within(back).findByText(/This will read:/)).toHaveTextContent(/Coastal Roofing Co/)
+  })
+})

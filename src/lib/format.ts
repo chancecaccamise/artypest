@@ -179,3 +179,22 @@ export function formatFieldName(fieldName: string | null): string {
   // camelCase to spaced words, then sentence case.
   return humanize(bare.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase())
 }
+
+/**
+ * A typed web address as a link target, or null when it cannot be one.
+ *
+ * People write "bigbonfamily.com" without the scheme, so https is assumed.
+ * Anything with another scheme is refused, which keeps a pasted "javascript:"
+ * from becoming a link a board member clicks.
+ */
+export function websiteHref(value: string): string | null {
+  const trimmed = value.trim()
+  if (trimmed === '' || /\s/.test(trimmed)) return null
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`
+  try {
+    const url = new URL(withScheme)
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null
+  } catch {
+    return null
+  }
+}

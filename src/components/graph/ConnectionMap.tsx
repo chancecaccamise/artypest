@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Building2,
   ClipboardList,
@@ -10,6 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
+import { entityHref } from '@/components/layout/nav-config'
 import { entityTypeColor } from '@/components/ui/badge'
 import {
   ENTITY_TYPES,
@@ -250,19 +252,38 @@ function MapCard({
   const color = entityTypeColor(entity.type)
   const Icon = TYPE_ICON[entity.type]
 
+  /*
+    Read top to bottom as a sentence from the centre card: "is a member of /
+    Thomas Square Neighborhood Association / Association". The centre card has
+    no connection to state, so it keeps the icon in that place instead.
+  */
   const content = (
     <>
-      <span
-        className="flex size-7 shrink-0 items-center justify-center rounded-full"
-        style={{ backgroundColor: `color-mix(in srgb, ${color} 18%, transparent)`, color }}
-        aria-hidden="true"
-      >
-        <Icon className="size-3.5" />
-      </span>
+      {relationLabel ? (
+        <span className="text-ink-faint max-w-full truncate font-mono text-[0.625rem] tracking-[0.06em] uppercase">
+          {relationLabel}
+        </span>
+      ) : (
+        <span
+          className="flex size-7 shrink-0 items-center justify-center rounded-full"
+          style={{ backgroundColor: `color-mix(in srgb, ${color} 18%, transparent)`, color }}
+          aria-hidden="true"
+        >
+          <Icon className="size-3.5" />
+        </span>
+      )}
 
-      <span className="text-ink line-clamp-2 text-center text-xs leading-tight font-semibold">
+      {/*
+        The name opens the record; the rest of the card re-centres the map.
+        Raised above the card's own button, which a link cannot sit inside.
+      */}
+      <Link
+        to={entityHref(entity.type, entity.id)}
+        className="text-ink hover:text-survey pointer-events-auto relative z-10 line-clamp-2 text-center text-xs leading-tight font-semibold hover:underline"
+        title={`Open ${entity.name}`}
+      >
         {entity.name}
-      </span>
+      </Link>
 
       <span
         className="rounded-[3px] px-1 py-px text-[0.625rem] font-semibold"
@@ -273,12 +294,6 @@ function MapCard({
       >
         {ENTITY_TYPE_LABELS[entity.type].singular}
       </span>
-
-      {relationLabel ? (
-        <span className="text-ink-faint truncate font-mono text-[0.625rem] tracking-[0.06em] uppercase">
-          {relationLabel}
-        </span>
-      ) : null}
     </>
   )
 
@@ -309,17 +324,17 @@ function MapCard({
   }
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={className}
-      style={style}
-      aria-label={`Centre the map on ${entity.name}, ${ENTITY_TYPE_LABELS[entity.type].singular}${
-        relationLabel ? `, ${relationLabel}` : ''
-      }`}
-    >
+    <div className={className} style={style}>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="absolute inset-0 cursor-pointer rounded-[6px]"
+        aria-label={`Centre the map on ${entity.name}, ${ENTITY_TYPE_LABELS[entity.type].singular}${
+          relationLabel ? `, ${relationLabel}` : ''
+        }`}
+      />
       {content}
-    </button>
+    </div>
   )
 }
 

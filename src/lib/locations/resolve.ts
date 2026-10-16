@@ -43,6 +43,25 @@ export const LOCATION_SOURCE_LABELS: Record<LocationSource, string> = {
   governed: 'From the lots it governs',
 }
 
+/**
+ * What would give a record a location, in the order the cascade below tries
+ * it. Shown when nothing has, so "no location" comes with a way to fix it.
+ * Kept beside the cascade because the two have to change together.
+ */
+export const LOCATION_HINTS: Record<EntityType, string> = {
+  property: 'A property is placed by its parcel number.',
+  person:
+    'A person is placed by a property they live at, rent, own, or are related to, or by a mailing address on the plat.',
+  business:
+    'A business is placed by a mailing address on the plat, or by a property it owns, rents, manages, or is related to.',
+  association:
+    'An association is placed by a mailing address on the plat, or by the properties it governs.',
+  asset:
+    'An asset is placed by a property it is on or adjacent to, or by the association that owns it.',
+  document: 'A document is placed by a record that references it.',
+  record: 'A record is placed by the property it is filed against.',
+}
+
 export interface ResolveContext {
   graph: ResolvedGraph
   /** Parcel centroid for a PIN, or null when no geometry is on file. */
@@ -178,7 +197,7 @@ export function resolveLocation(
     property: () => resolveProperty(entity, ctx),
 
     person: () => {
-      for (const home of currentlyLinked(entity, ['resides_at'], ctx, 'from')) {
+      for (const home of currentlyLinked(entity, ['resides_at', 'rents'], ctx, 'from')) {
         const found = via(home, 'residence', 'Lives at')
         if (found) return found
       }
@@ -201,6 +220,17 @@ export function resolveLocation(
 
       for (const lot of currentlyLinked(entity, ['owns'], ctx, 'from')) {
         const found = via(lot, 'ownership', 'Owns')
+        if (found) return found
+      }
+      for (const lot of currentlyLinked(entity, ['rents'], ctx, 'from')) {
+        if (lot.type !== 'property') continue
+        const found = via(lot, 'related', 'Rents')
+        if (found) return found
+      }
+      // A management company is found at the buildings it runs.
+      for (const lot of currentlyLinked(entity, ['manages'], ctx, 'from')) {
+        if (lot.type !== 'property') continue
+        const found = via(lot, 'related', 'Manages')
         if (found) return found
       }
       for (const lot of currentlyLinked(entity, ['related_to'], ctx)) {

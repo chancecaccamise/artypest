@@ -9,8 +9,9 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Field, Input, Select } from '@/components/ui/field'
 import { Panel, PanelBody } from '@/components/ui/panel'
 import { SkeletonRows } from '@/components/ui/skeleton'
-import { groupByDay, isReviewRow } from '@/features/directory/HistoryTab'
+import { ActorName, groupByDay, isReviewRow } from '@/features/directory/HistoryTab'
 import { useActivity, useActors } from '@/hooks/use-data'
+import { useMemberName } from '@/lib/auth'
 import {
   ENTITY_TYPES,
   ENTITY_TYPE_LABELS,
@@ -49,6 +50,7 @@ const SOURCES: { value: AuditSource; label: string }[] = [
 export function ActivityPage() {
   const [params, setParams] = useSearchParams()
   const actors = useActors()
+  const nameFor = useMemberName()
 
   const page = Number(params.get('page') ?? '1')
   const entityType = params.get('type') ?? ''
@@ -158,7 +160,7 @@ export function ActivityPage() {
               <option value="">Anyone</option>
               {(actors.data ?? []).map((name) => (
                 <option key={name} value={name}>
-                  {name}
+                  {nameFor(name)}
                 </option>
               ))}
             </Select>
@@ -251,7 +253,7 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
         {formatTime(entry.changedAt)}
       </span>
 
-      <span className="text-ink font-medium">{entry.changedBy ?? 'System'}</span>
+      <ActorName actor={entry.changedBy} />
       <span className={isCheck ? 'text-moss font-medium' : 'text-ink-muted'}>
         {isCheck
           ? entry.newValue === null

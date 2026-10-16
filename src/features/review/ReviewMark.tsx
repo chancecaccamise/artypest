@@ -2,6 +2,7 @@ import { Check, CircleDashed, RotateCcw } from 'lucide-react'
 
 import { Tooltip } from '@/components/ui/tooltip'
 import { useSetReviewed } from '@/hooks/use-data'
+import { useMemberName } from '@/lib/auth'
 import type { ReviewState, ReviewStatus } from '@/lib/data/types'
 import { formatDate } from '@/lib/format'
 import { REVIEW_STATE_LABELS } from '@/lib/review/status'
@@ -47,13 +48,22 @@ const EDGE_COLOR: Record<ReviewState, string | null> = {
   unchecked: null,
 }
 
-/** The full sentence. Shown in tooltips and on the record itself. */
-export function reviewSentence(state: ReviewState, status: ReviewStatus | undefined): string {
+/**
+ * The full sentence. Shown in tooltips and on the record itself.
+ *
+ * `nameFor` turns the stored email into the checker's name; components get it
+ * from `useMemberName`.
+ */
+export function reviewSentence(
+  state: ReviewState,
+  status: ReviewStatus | undefined,
+  nameFor: (actor: string) => string = (actor) => actor
+): string {
   if (state === 'unchecked' || !status?.reviewedAt) {
     return 'Nobody has checked this record yet.'
   }
 
-  const who = status.reviewedBy ?? 'Someone'
+  const who = status.reviewedBy ? nameFor(status.reviewedBy) : 'Someone'
   const when = formatDate(status.reviewedAt)
 
   if (state === 'checked') return `Checked by ${who} on ${when}.`
@@ -97,7 +107,8 @@ export interface ReviewMarkProps {
 export function ReviewMark({ state, status, compact = false, className }: ReviewMarkProps) {
   const Icon = STATE_ICON[state]
 
-  const sentence = reviewSentence(state, status)
+  const nameFor = useMemberName()
+  const sentence = reviewSentence(state, status, nameFor)
 
   return (
     <Tooltip label={sentence}>
@@ -141,6 +152,7 @@ export function ReviewToggle({
 }: ReviewToggleProps) {
   const setReviewed = useSetReviewed()
   const { canEdit } = useRole()
+  const nameFor = useMemberName()
 
   if (!canEdit) return <ReviewMark state={state} status={status} compact={compact} className={className} />
 
@@ -154,7 +166,7 @@ export function ReviewToggle({
     reading this list with a screen reader needs the same thing a sighted
     reader gets from hovering: who checked it, when, and what has changed since.
   */
-  const label = `${reviewSentence(state, status)} ${action}.`
+  const label = `${reviewSentence(state, status, nameFor)} ${action}.`
 
   return (
     <Tooltip label={label}>

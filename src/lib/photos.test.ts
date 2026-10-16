@@ -10,11 +10,11 @@ import {
 
 describe('fitWithin', () => {
   it('scales a phone photograph down to the long edge', () => {
-    expect(fitWithin(4032, 3024)).toEqual({ width: 320, height: 240 })
+    expect(fitWithin(4032, 3024)).toEqual({ width: 640, height: 480 })
   })
 
   it('handles portrait as well as landscape', () => {
-    expect(fitWithin(3024, 4032)).toEqual({ width: 240, height: 320 })
+    expect(fitWithin(3024, 4032)).toEqual({ width: 480, height: 640 })
   })
 
   it('leaves an image that is already small alone', () => {

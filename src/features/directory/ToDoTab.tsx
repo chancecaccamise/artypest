@@ -10,7 +10,9 @@ import { Panel, PanelBody, PanelHeader } from '@/components/ui/panel'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { useCreateEntity, useDeleteEntity, useGraph, useUpdateEntity } from '@/hooks/use-data'
 import type { Entity } from '@/lib/data/types'
-import { daysUntil, formatDate, formatRelativeDays, readString } from '@/lib/format'
+import { getActiveActor } from '@/lib/data/actor'
+import { useMemberName } from '@/lib/auth'
+import { daysUntil, formatDate, formatDateTime, formatRelativeDays, readString } from '@/lib/format'
 import { TODO_RECORD_TYPE, todosForSubject } from '@/lib/todos'
 import { useRole } from '@/lib/role'
 import { cn } from '@/lib/utils'
@@ -19,9 +21,16 @@ interface TaskDraft {
   title: string
   dueDate: string
   details: string
+  /** Only offered once the to do is completed. */
+  outcome: string
 }
 
-const EMPTY_DRAFT: TaskDraft = { title: '', dueDate: '', details: '' }
+const EMPTY_DRAFT: TaskDraft = { title: '', dueDate: '', details: '', outcome: '' }
+
+/** Older to dos stored the day only; newer ones the moment. */
+function formatCompletedAt(value: string): string {
+  return value.length === 10 ? formatDate(value) : formatDateTime(value)
+}
 
 export function ToDoTab({ entity }: { entity: Entity }) {
   const { graph, isLoading } = useGraph()
@@ -34,6 +43,10 @@ export function ToDoTab({ entity }: { entity: Entity }) {
   const [editing, setEditing] = useState<Entity | null>(null)
   const [draft, setDraft] = useState<TaskDraft>(EMPTY_DRAFT)
   const [error, setError] = useState<string | null>(null)
+  /** The to do being ticked off, while the outcome is asked for. */
+  const [completing, setCompleting] = useState<Entity | null>(null)
+  const [outcome, setOutcome] = useState('')
+  const nameFor = useMemberName()
 
   const todos = useMemo(() => (graph ? todosForSubject(graph, entity.id) : []), [entity.id, graph])
   const openCount = todos.filter((todo) => readString(todo.data.status) !== 'closed').length
@@ -58,6 +71,7 @@ export function ToDoTab({ entity }: { entity: Entity }) {
       title: todo.name,
       dueDate: readString(todo.data.followUpDate),
       details: readString(todo.data.summary),
+      outcome: readString(todo.data.completionNote),
     })
     setError(null)
     setDialogOpen(true)
@@ -84,6 +98,9 @@ export function ToDoTab({ entity }: { entity: Entity }) {
               ...editing.data,
               followUpDate: draft.dueDate,
               summary: draft.details.trim() || null,
+              ...(readString(editing.data.status) === 'closed'
+                ? { completionNote: draft.outcome.trim() || null }
+                : {}),
             },
           },
         },
@@ -114,15 +131,43 @@ export function ToDoTab({ entity }: { entity: Entity }) {
     )
   }
 
-  const setCompleted = (todo: Entity, completed: boolean) => {
+  /*
+    Ticking one off asks how it went, because "done" a year later is less
+    useful than "spoke to the owner, fence comes down Friday". The answer is
+    optional so a quick tick stays quick. The moment and the person are kept
+    as well as the day, so the list reads as a log.
+  */
+  const startCompleting = (todo: Entity) => {
+    setCompleting(todo)
+    // A to do reopened and finished again keeps what was written last time.
+    setOutcome(readString(todo.data.completionNote))
+  }
+
+  const complete = () => {
+    if (!completing) return
+    updateEntity.mutate(
+      {
+        id: completing.id,
+        patch: {
+          data: {
+            ...completing.data,
+            status: 'closed',
+            completedAt: new Date().toISOString(),
+            completedBy: getActiveActor(),
+            completionNote: outcome.trim() || null,
+          },
+        },
+      },
+      { onSuccess: () => setCompleting(null) }
+    )
+  }
+
+  /** The note stays, hidden while open, so finishing it again starts from it. */
+  const reopen = (todo: Entity) => {
     updateEntity.mutate({
       id: todo.id,
       patch: {
-        data: {
-          ...todo.data,
-          status: completed ? 'closed' : 'open',
-          completedAt: completed ? new Date().toISOString().slice(0, 10) : null,
-        },
+        data: { ...todo.data, status: 'open', completedAt: null, completedBy: null },
       },
     })
   }
@@ -183,7 +228,7 @@ export function ToDoTab({ entity }: { entity: Entity }) {
                         size="icon-sm"
                         aria-label={completed ? `Reopen ${todo.name}` : `Complete ${todo.name}`}
                         title={completed ? 'Reopen' : 'Mark complete'}
-                        onClick={() => setCompleted(todo, !completed)}
+                        onClick={() => (completed ? reopen(todo) : startCompleting(todo))}
                       >
                         {completed ? <RotateCcw /> : <Check />}
                       </Button>
@@ -208,6 +253,14 @@ export function ToDoTab({ entity }: { entity: Entity }) {
                         )}
                       </div>
                       {details ? <p className="text-ink-muted text-13 mt-1">{details}</p> : null}
+                      {completed ? (
+                        <CompletionNote
+                          completedAt={readString(todo.data.completedAt)}
+                          completedBy={readString(todo.data.completedBy)}
+                          note={readString(todo.data.completionNote)}
+                          nameFor={nameFor}
+                        />
+                      ) : null}
                       <p
                         className={cn(
                           'mt-1 flex items-center gap-1.5 font-mono text-xs',
@@ -299,6 +352,16 @@ export function ToDoTab({ entity }: { entity: Entity }) {
               }
             />
           </Field>
+          {editing && readString(editing.data.status) === 'closed' ? (
+            <Field label="How it was completed">
+              <Textarea
+                value={draft.outcome}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, outcome: event.target.value }))
+                }
+              />
+            </Field>
+          ) : null}
           {error && draft.title.trim() && draft.dueDate ? (
             <p role="alert" className="text-oxblood text-xs">
               {error}
@@ -306,6 +369,59 @@ export function ToDoTab({ entity }: { entity: Entity }) {
           ) : null}
         </div>
       </Dialog>
+
+      <Dialog
+        open={completing !== null}
+        onClose={() => setCompleting(null)}
+        title="Complete this to do"
+        description={completing?.name}
+        size="sm"
+        footer={
+          <>
+            <Button onClick={() => setCompleting(null)}>Cancel</Button>
+            <Button variant="primary" onClick={complete} disabled={updateEntity.isPending}>
+              <Check />
+              Mark complete
+            </Button>
+          </>
+        }
+      >
+        <Field
+          label="How it was completed"
+          hint="Optional. What was done, who was spoken to, what was agreed."
+        >
+          <Textarea
+            data-autofocus
+            value={outcome}
+            onChange={(event) => setOutcome(event.target.value)}
+          />
+        </Field>
+      </Dialog>
     </>
+  )
+}
+
+function CompletionNote({
+  completedAt,
+  completedBy,
+  note,
+  nameFor,
+}: {
+  completedAt: string
+  completedBy: string
+  note: string
+  nameFor: (actor: string) => string
+}) {
+  return (
+    <div className="mt-1 flex flex-col gap-0.5">
+      {completedAt ? (
+        <p className="text-moss flex items-center gap-1.5 font-mono text-xs">
+          <Check className="size-3.5" aria-hidden="true" />
+          Completed {formatCompletedAt(completedAt)}
+          {completedBy ? ` by ${nameFor(completedBy)}` : ''}
+        </p>
+      ) : null}
+      {note ? <p className="text-ink text-13 whitespace-pre-wrap">{note}</p> : null}
+    </div>
   )
 }

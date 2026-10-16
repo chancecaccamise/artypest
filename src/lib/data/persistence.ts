@@ -122,7 +122,71 @@ function mergeById<T extends { id: string }>(
   return [...byId.values()]
 }
 
-export function applyOverlay(baseline: DemoData, overlay: Overlay): DemoData {
+/*
+  Undoing the id collisions saved before ids were random.
+
+  Two records made in different visits could share an id, and both were saved,
+  but restoring keeps one row per id, so the older one (usually a person, made
+  first) vanished and everything connected to it pointed at the newer one
+  (usually a to do). Both rows are still in the saved overlay until the next
+  save after such a load, so they can be told apart here: the oldest keeps the
+  id, as everything recorded before the collision meant it, and each later one
+  takes a new id along with what was recorded about it from its creation on.
+*/
+function separateCollisions(overlay: Overlay): Overlay {
+  const renamed = new Map<string, { id: string; since: string }[]>()
+
+  const separate = <T extends { id: string; createdAt: string }>(rows: readonly T[]): T[] => {
+    const firstSeen = new Map<string, T[]>()
+    for (const row of rows) firstSeen.set(row.id, [...(firstSeen.get(row.id) ?? []), row])
+
+    const result: T[] = []
+    for (const [id, group] of firstSeen) {
+      const ordered = [...group].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      ordered.forEach((row, index) => {
+        if (index === 0) {
+          result.push(row)
+          return
+        }
+        const next = `${id}-${String(index + 1)}`
+        renamed.set(id, [...(renamed.get(id) ?? []), { id: next, since: row.createdAt }])
+        result.push({ ...row, id: next })
+      })
+    }
+    return result
+  }
+
+  const entities = separate(overlay.entities)
+  const relationRows = separate(overlay.relations)
+  if (renamed.size === 0) return overlay
+
+  /** Which of the records sharing an id something written at `at` meant. */
+  const resolve = (id: string, at: string): string => {
+    const later = renamed.get(id)
+    if (!later) return id
+    let chosen = id
+    for (const candidate of later) if (at >= candidate.since) chosen = candidate.id
+    return chosen
+  }
+
+  const relations = relationRows.map((relation) => ({
+    ...relation,
+    fromEntityId: resolve(relation.fromEntityId, relation.createdAt),
+    toEntityId: resolve(relation.toEntityId, relation.createdAt),
+  }))
+
+  const auditEntries = overlay.auditEntries.map((entry, index) => ({
+    ...entry,
+    // The log had colliding ids too; they only need to be distinct.
+    id: `${entry.id}-${String(index)}`,
+    recordId: resolve(entry.recordId, entry.changedAt),
+  }))
+
+  return { ...overlay, entities, relations, auditEntries }
+}
+
+export function applyOverlay(baseline: DemoData, saved: Overlay): DemoData {
+  const overlay = separateCollisions(saved)
   return {
     ...baseline,
     org: overlay.org ?? baseline.org,

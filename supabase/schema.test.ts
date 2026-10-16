@@ -116,14 +116,15 @@ describe('the migrations', () => {
     }
   })
 
-  it('bootstraps the org, the ten relation types, and the reference lists', async () => {
+  it('bootstraps the org, the twelve relation types, and the reference lists', async () => {
     const counts = await db.query<{ orgs: number; types: number; items: number }>(
       `select (select count(*)::int from orgs) as orgs,
               (select count(*)::int from relation_types) as types,
               (select count(*)::int from reference_items) as items`
     )
     expect(counts.rows[0]?.orgs).toBe(1)
-    expect(counts.rows[0]?.types).toBe(10)
+    // Ten from the bootstrap, and rents and executive_of from 20261016120000.
+    expect(counts.rows[0]?.types).toBe(12)
     expect(counts.rows[0]?.items).toBeGreaterThan(20)
   })
 
@@ -140,7 +141,14 @@ describe('the migrations', () => {
     const counts = await db.query<{ types: number }>(
       `select count(*)::int as types from relation_types`
     )
-    expect(counts.rows[0]?.types).toBe(10)
+    expect(counts.rows[0]?.types).toBe(12)
+  })
+
+  it('reads the vendor connection from the customer end as "purchases from"', async () => {
+    const vendor = await db.query<{ reverse_label: string }>(
+      `select reverse_label from relation_types where key = 'vendor_for'`
+    )
+    expect(vendor.rows[0]?.reverse_label).toBe('purchases from')
   })
 })
 

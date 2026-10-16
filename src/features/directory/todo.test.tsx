@@ -54,9 +54,24 @@ describe('person and business reminders', () => {
 
     await user.click(dashboardLine!)
     await user.click(await screen.findByRole('button', { name: `Complete ${TITLE}` }))
+
+    // Ticking it off asks how it went, and keeps the answer with the moment.
+    const completing = await screen.findByRole('dialog', { name: 'Complete this to do' })
+    await user.type(
+      within(completing).getByLabelText(/How it was completed/),
+      'Spoke to them, confirmed for Friday.'
+    )
+    await user.click(within(completing).getByRole('button', { name: 'Mark complete' }))
+
     await waitFor(async () => {
-      expect((await data.getEntity(createdId ?? ''))?.data.status).toBe('closed')
+      const done = await data.getEntity(createdId ?? '')
+      expect(done?.data.status).toBe('closed')
+      expect(done?.data.completionNote).toBe('Spoke to them, confirmed for Friday.')
+      // The moment, not just the day.
+      expect(String(done?.data.completedAt)).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)
     })
+    expect(await screen.findByText('Spoke to them, confirmed for Friday.')).toBeInTheDocument()
+    expect(screen.getByText(/^Completed /)).toBeInTheDocument()
 
     await user.click(screen.getByRole('link', { name: 'Dashboard' }))
     await waitFor(() => {

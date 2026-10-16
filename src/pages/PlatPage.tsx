@@ -29,6 +29,8 @@ export function PlatPage() {
   const requested = searchParams.get('connections')
   const initialConnections: InitialConnections | null =
     requested === 'focus' || requested === 'all' ? requested : null
+  // `?place=1` is "Set location" on a record with none: open ready to click a spot.
+  const startPlacing = searchParams.get('place') === '1'
 
   return (
     <>
@@ -41,6 +43,7 @@ export function PlatPage() {
       <MapView
         initialEntityId={id ?? null}
         initialConnections={initialConnections}
+        startPlacing={startPlacing}
         onSelectionChange={(entityId) => {
           // The selection is in the route, so a view of one lot is a link.
           navigate(entityId ? `/plat/${entityId}` : '/plat', { replace: true })

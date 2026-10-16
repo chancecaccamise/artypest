@@ -64,6 +64,11 @@ interface AuthActions {
   signOut: () => Promise<void>
   /** Repeats the membership lookup after `check-failed`. */
   retryCheck: () => void
+  /**
+   * The member's name for an email stored on an audit row or a check mark.
+   * Anything it does not recognise comes back unchanged.
+   */
+  nameFor: (actor: string) => string
 }
 
 export type AuthContextValue = AuthState & AuthActions
@@ -154,6 +159,34 @@ export function AuthProvider({
     return () => setActiveActor(null)
   }, [account?.email])
 
+  /*
+    Changes are recorded under the email, because that is what Postgres reads
+    from the session and it does not change when someone corrects their name.
+    People are shown by name, so the whole association's names are read once
+    and looked up at display time. Older entries get names too.
+  */
+  const orgId = account?.orgId ?? null
+  const members = useQuery({
+    queryKey: ['auth', 'member-names', orgId],
+    queryFn: () => (client && orgId ? fetchMemberNames(client, orgId) : new Map<string, string>()),
+    enabled: client !== null && orgId !== null,
+    staleTime: 5 * 60 * 1000,
+  })
+  const memberNames = members.data
+
+  const nameFor = useCallback(
+    (actor: string): string => {
+      const key = actor.trim().toLowerCase()
+      const known = memberNames?.get(key)
+      if (known) return known
+      if (account && account.name.trim() !== '' && account.email.toLowerCase() === key) {
+        return account.name
+      }
+      return actor
+    },
+    [memberNames, account]
+  )
+
   const value = useMemo<AuthContextValue>(
     () => ({
       ...deriveState({
@@ -165,6 +198,7 @@ export function AuthProvider({
       signIn,
       signOut,
       retryCheck,
+      nameFor,
     }),
     [
       hasClient,
@@ -178,6 +212,7 @@ export function AuthProvider({
       signIn,
       signOut,
       retryCheck,
+      nameFor,
     ]
   )
 
@@ -188,6 +223,19 @@ export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext)
   if (!context) throw new Error('useAuth must be used inside an AuthProvider')
   return context
+}
+
+const asIs = (actor: string) => actor
+
+/**
+ * Turns the email a change was recorded under into the person's name.
+ *
+ * Tolerates rendering outside an AuthProvider, where it changes nothing, so a
+ * component that shows who did something does not have to know whether
+ * sign-in exists.
+ */
+export function useMemberName(): (actor: string) => string {
+  return useContext(AuthContext)?.nameFor ?? asIs
 }
 
 /* ---------------------------------------------------------------- state -- */
@@ -254,6 +302,31 @@ async function fetchAccount(
   if (!row) return null
 
   return { userId, email: row.email, name: row.name, role: row.role, orgId: row.org_id }
+}
+
+/**
+ * Every member's name in the association, keyed by lowercased email.
+ *
+ * Row level security already limits `org_users` to the caller's own orgs; the
+ * filter is there so a person in two associations sees the right names.
+ */
+async function fetchMemberNames(
+  client: SupabaseClient<Database>,
+  orgId: string
+): Promise<Map<string, string>> {
+  const { data, error } = await client
+    .from('org_users')
+    .select('name, email')
+    .eq('org_id', orgId)
+
+  if (error) throw new Error(describeAccountCheckError(error))
+
+  const names = new Map<string, string>()
+  for (const row of data) {
+    const name = row.name.trim()
+    if (name !== '') names.set(row.email.trim().toLowerCase(), name)
+  }
+  return names
 }
 
 /* ------------------------------------------------------------- messages -- */

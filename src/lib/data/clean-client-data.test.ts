@@ -70,7 +70,15 @@ describe('clean client dataset', () => {
         (relation) => entityIds.has(relation.fromEntityId) && entityIds.has(relation.toEntityId)
       )
     ).toBe(true)
-    expect(clean.relations).toHaveLength(16)
+    // 16 from the contact sheet, and each of its 14 businesses a member of the association.
+    expect(clean.relations).toHaveLength(30)
+    expect(
+      clean.relations.filter(
+        (relation) =>
+          relation.relationTypeId === 'rt-member-of' &&
+          relation.toEntityId === 'ent-tsna-association'
+      )
+    ).toHaveLength(14)
   })
 
   it('starts the activity and work logs empty', async () => {

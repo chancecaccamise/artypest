@@ -103,6 +103,11 @@ export interface Relation {
 export type RelationInput = Pick<Relation, 'relationTypeId' | 'fromEntityId' | 'toEntityId'> &
   Partial<Pick<Relation, 'startDate' | 'endDate' | 'attributes'>>
 
+/** What editing a connection can change. Absent fields are left alone. */
+export type RelationPatch = Partial<
+  Pick<Relation, 'relationTypeId' | 'fromEntityId' | 'toEntityId' | 'startDate' | 'endDate'>
+>
+
 /**
  * Everything the store holds, in one object.
  *
@@ -357,6 +362,7 @@ export interface DataProvider {
   listRelationTypes(): Promise<RelationType[]>
   listRelations(entityId?: string): Promise<Relation[]>
   createRelation(input: RelationInput): Promise<Relation>
+  updateRelation(id: string, patch: RelationPatch): Promise<Relation>
   deleteRelation(id: string): Promise<Relation>
 
   /** Where one record is, and where that answer came from. */

@@ -32,6 +32,15 @@ beforeAll(async () => {
 })
 
 describe('detail view', () => {
+  it('links to the Connection Map beside the title, from whichever tab is open', async () => {
+    renderWithProviders(<App />, { route: `/properties/${property.id}` })
+
+    await screen.findByRole('heading', { level: 1, name: property.name })
+    // The sidebar carries a link of the same name to the whole map; this one opens on the record.
+    const links = screen.getAllByRole('link', { name: 'Connection Map' })
+    expect(links.map((link) => link.getAttribute('href'))).toContain(`/map/${property.id}`)
+  })
+
   it('shows every tab and lands on Details', async () => {
     renderWithProviders(<App />, { route: `/properties/${property.id}` })
 

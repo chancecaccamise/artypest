@@ -9,6 +9,7 @@ import {
   humanize,
   readNumber,
   readString,
+  websiteHref,
 } from './format'
 
 describe('readString', () => {
@@ -136,5 +137,22 @@ describe('formatPercent', () => {
 
   it('does not divide by zero', () => {
     expect(formatPercent(0, 0)).toBe('0%')
+  })
+})
+
+describe('websiteHref', () => {
+  it('assumes https for an address typed without one', () => {
+    expect(websiteHref('bigbonfamily.com')).toBe('https://bigbonfamily.com/')
+  })
+
+  it('keeps an address that already has one', () => {
+    expect(websiteHref('http://thesextonpub.com/menu')).toBe('http://thesextonpub.com/menu')
+  })
+
+  it('refuses anything that is not a web page', () => {
+    expect(websiteHref('javascript:alert(1)')).toBeNull()
+    expect(websiteHref('mailto:office@example.com')).toBeNull()
+    expect(websiteHref('not a website')).toBeNull()
+    expect(websiteHref('')).toBeNull()
   })
 })

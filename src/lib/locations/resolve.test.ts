@@ -28,6 +28,7 @@ const TYPES: RelationType[] = [
     label: 'is related to',
     reverseLabel: 'is related to',
   },
+  { id: 'rt-manages', orgId: 'o', key: 'manages', label: 'manages', reverseLabel: 'is managed by' },
   {
     id: 'rt-governs',
     orgId: 'o',
@@ -269,6 +270,17 @@ describe('business', () => {
 
     expect(resolveLocation(business, ctx)?.source).toBe('related')
     expect(resolveLocation(business, ctx)?.viaEntityId).toBe('lot')
+  })
+
+  it('is found at a property it manages', () => {
+    const lot = entity('lot', 'property', 'A lot', { pin: PLATTED_PIN })
+    const manager = entity('biz', 'business', 'Coastal Property Management')
+    const ctx = context([manager, lot], [relation('r', 'rt-manages', 'biz', 'lot')])
+    const resolved = resolveLocation(manager, ctx)
+
+    expect(resolved?.source).toBe('related')
+    expect(resolved?.explanation).toBe('Manages A lot')
+    expect(resolved?.point).toEqual(centroidForPin(PLATTED_PIN))
   })
 
   it('is unplaced when neither is known', () => {

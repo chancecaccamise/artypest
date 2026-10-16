@@ -134,7 +134,8 @@ export function computeStats(graph: ResolvedGraph, today: Date = new Date()): Da
     if (!isCurrent(relation, today)) continue
     const key = relationKey(relation, graph)
 
-    if (key === 'resides_at' && propertyIds.has(relation.toEntityId)) {
+    // A tenant is a resident; "rents" says so and also who is the landlord's.
+    if ((key === 'resides_at' || key === 'rents') && propertyIds.has(relation.toEntityId)) {
       residentIds.add(relation.fromEntityId)
     }
 
@@ -566,7 +567,8 @@ export function classifyOccupancy(
 
   for (const relation of touching) {
     if (!isCurrent(relation, today)) continue
-    if (relationKey(relation, graph) !== 'resides_at') continue
+    const key = relationKey(relation, graph)
+    if (key !== 'resides_at' && key !== 'rents') continue
     if (relation.toEntityId !== property.id) continue
 
     hasResident = true

@@ -362,7 +362,7 @@ export async function applyImportPlan({
                       jurisdiction: null,
                       meetingCadence: null,
                     }
-                  : { businessCategory: 'property_owner', stateFilingNumber: null }),
+                  : { businessCategory: null, stateFilingNumber: null }),
               notes: '',
             },
           })

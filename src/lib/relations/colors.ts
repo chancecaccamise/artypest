@@ -13,7 +13,9 @@
 export const RELATION_COLORS: Record<string, string> = {
   owns: 'var(--type-property)',
   resides_at: 'var(--type-person)',
+  rents: 'var(--type-person)',
   member_of: 'var(--type-association)',
+  executive_of: 'var(--type-association)',
   vendor_for: 'var(--type-business)',
   employed_by: 'var(--type-business)',
   manages: 'var(--type-asset)',

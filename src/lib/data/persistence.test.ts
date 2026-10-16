@@ -129,6 +129,47 @@ describe('applyOverlay', () => {
     expect(restored.entities.find((row) => row.id === 'd')?.name).toBe('Dave')
   })
 
+  it('separates a person and a later to do that were saved under the same id', () => {
+    /*
+      Ids used to be a counter that restarted on every page load, so a to do
+      made after a reload could take the id of an owner made before it. Both
+      rows were saved; restoring kept only the to do, and the property's owner
+      connection opened it.
+    */
+    const owner = { ...entity('ent-0001', 'Greg Goeken'), createdAt: '2026-10-01T10:00:00.000Z' }
+    const todo: Entity = {
+      ...entity('ent-0001', 'Call about the fence'),
+      type: 'record',
+      data: { recordType: 'todo', subjectId: 'b' },
+      createdAt: '2026-10-02T10:00:00.000Z',
+    }
+    const owns = {
+      id: 'rel-0001',
+      orgId: 'org',
+      relationTypeId: 'rt-owns',
+      fromEntityId: 'ent-0001',
+      toEntityId: 'c',
+      startDate: null,
+      endDate: null,
+      attributes: {},
+      createdAt: '2026-10-01T10:05:00.000Z',
+      updatedAt: '2026-10-01T10:05:00.000Z',
+      deletedAt: null,
+      archivedAt: null,
+    }
+    const current = { ...snapshot([...BASELINE.entities, owner, todo]), relations: [owns] }
+
+    const restored = applyOverlay(BASELINE, buildOverlay(current, BASELINE, NOW))
+
+    const byName = new Map(restored.entities.map((row) => [row.name, row]))
+    const person = byName.get('Greg Goeken')
+    const reminder = byName.get('Call about the fence')
+    expect(person).toBeDefined()
+    expect(reminder).toBeDefined()
+    expect(person?.id).not.toBe(reminder?.id)
+    // The connection was made before the to do existed, so it meant the person.
+    expect(restored.relations[0]?.fromEntityId).toBe(person?.id)
+  })
 })
 
 describe('createLocalOverlayStore', () => {

@@ -189,7 +189,12 @@ export const recordDataSchema = z.object({
   /** Present on reminder records created from a person or business page. */
   subjectId: optionalText.optional(),
   subjectType: optionalText.optional(),
-  completedAt: optionalDate.optional(),
+  /** When it was ticked off: a full timestamp, or a date on older to dos. */
+  completedAt: optionalText.optional(),
+  /** The email it was completed under, shown as the member's name. */
+  completedBy: optionalText.optional(),
+  /** How it was done, in the words of whoever did it. */
+  completionNote: optionalText.optional(),
 })
 
 export const documentDataSchema = z.object({

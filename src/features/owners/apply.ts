@@ -93,7 +93,8 @@ function dataFor(kind: EntityType, mailingAddress: string, raw: string): Record<
       meetingCadence: null,
     }
   }
-  return { ...shared, businessCategory: 'property_owner', stateFilingNumber: null }
+  // The industry is left for a person to choose, for the same reason.
+  return { ...shared, businessCategory: null, stateFilingNumber: null }
 }
 
 export async function applyOwnerPlan({

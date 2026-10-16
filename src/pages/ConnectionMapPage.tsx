@@ -17,7 +17,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Field, Input } from '@/components/ui/field'
 import { Panel, PanelBody, PanelFooter } from '@/components/ui/panel'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useGraph } from '@/hooks/use-data'
+import { useGraph, useOrg } from '@/hooks/use-data'
+import { startingRecord } from '@/lib/map-focus'
 import { ENTITY_TYPES, ENTITY_TYPE_LABELS, type Entity, type EntityType } from '@/lib/data/types'
 import { buildRecencyScale } from '@/lib/relations/recency'
 import { cn } from '@/lib/utils'
@@ -29,12 +30,23 @@ import { cn } from '@/lib/utils'
   re-centres the map on it and pushes a history entry, which makes the browser
   back button the undo for exploring.
 */
+const SHOWN_BY_DEFAULT = new Set<EntityType>(['person', 'business', 'association'])
+
 export function ConnectionMapPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { graph, isLoading } = useGraph()
+  const org = useOrg()
+  const orgName = org.data?.name ?? null
 
-  const [hiddenTypes, setHiddenTypes] = useState<Set<EntityType>>(new Set())
+  /*
+    People, businesses, and associations by default: who is connected to whom
+    is what the board opens this page for. Properties, assets, documents, and
+    records are a chip away. The centre card is drawn whatever its type.
+  */
+  const [hiddenTypes, setHiddenTypes] = useState<Set<EntityType>>(
+    () => new Set(ENTITY_TYPES.filter((type) => !SHOWN_BY_DEFAULT.has(type)))
+  )
   const [gradeByAge, setGradeByAge] = useState(false)
   /*
     On by default. A hairline thread is legible on the laptop it was designed on
@@ -44,16 +56,12 @@ export function ConnectionMapPage() {
   const [boldLines, setBoldLines] = useState(true)
   const [search, setSearch] = useState('')
 
-  /** With no record in the route, start at the association: everything hangs off it. */
+  /** With no record in the route, start at the association. See startingRecord. */
   const focus = useMemo<Entity | null>(() => {
     if (!graph) return null
     if (id) return graph.byId.get(id) ?? null
-
-    const association = graph.entities.find(
-      (entity) => entity.type === 'association' && entity.data.associationType === 'hoa'
-    )
-    return association ?? graph.entities[0] ?? null
-  }, [graph, id])
+    return startingRecord(graph, orgName)
+  }, [graph, id, orgName])
 
   const rings = useMemo(() => {
     if (!graph || !focus) return null
@@ -104,7 +112,8 @@ export function ConnectionMapPage() {
     })
   }, [])
 
-  if (isLoading || !graph) {
+  // Waits for the org too when it picks the starting record, so the map does not open on one and jump.
+  if (isLoading || !graph || (!id && org.isLoading)) {
     return (
       <>
         <PageHeader title="Connection Map" subtitle="Loading the records" />
@@ -251,7 +260,8 @@ export function ConnectionMapPage() {
             <EmptyState
               title={`${focus.name} has no connections to draw`}
               description={
-                hiddenTypes.size > 0
+                // Only filtered out when something is connected; otherwise there is nothing to switch on.
+                Object.values(counts).some((count) => count > 0)
                   ? 'Every connected record is currently filtered out. Switch a type back on above.'
                   : 'Record an ownership, residency, board seat, or vendor contract on this record and it will appear here.'
               }

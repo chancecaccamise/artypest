@@ -1,12 +1,12 @@
 import { useMemo, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { MapPin } from 'lucide-react'
 
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Panel, PanelBody, PanelHeader } from '@/components/ui/panel'
 import { LocationSourceNote } from '@/features/map/LocationSourceNote'
 import { ParcelRecordCard } from '@/features/parcels/ParcelRecordCard'
-import { DIRECTORY_CONFIGS, type FieldDef } from '@/features/directory/config'
+import { DIRECTORY_CONFIGS, optionLabel, type FieldDef } from '@/features/directory/config'
 import { PhotoPanel } from '@/features/directory/PhotoPanel'
 import { HandFieldDot } from '@/features/review/ReviewMark'
 import { useAuditEntries, useLocation, useSetManualLocation } from '@/hooks/use-data'
@@ -19,7 +19,9 @@ import {
   humanize,
   readNumber,
   readString,
+  websiteHref,
 } from '@/lib/format'
+import { LOCATION_HINTS } from '@/lib/locations/resolve'
 import { fieldSources } from '@/lib/review/provenance'
 import { useRole } from '@/lib/role'
 import { cn } from '@/lib/utils'
@@ -45,6 +47,8 @@ function renderValue(
   if (value === '') {
     return <span className="text-ink-faint">Not set</span>
   }
+
+  if (field.options) return optionLabel(field.options, value)
 
   switch (field.format) {
     case 'date':
@@ -72,6 +76,21 @@ function renderValue(
       )
     case 'reference':
       return field.referenceList ? labelFor(field.referenceList, raw) : humanize(value)
+    case 'url': {
+      const href = websiteHref(value)
+      return href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-survey break-all hover:underline"
+        >
+          {value}
+        </a>
+      ) : (
+        value
+      )
+    }
     case 'longtext':
       return <span className="whitespace-pre-wrap">{value}</span>
     default:
@@ -85,6 +104,7 @@ export function DetailsTab({ entity, org, onAddParcelRecord }: DetailsTabProps) 
   const { canSeeNotes, canEdit } = useRole()
   const location = useLocation(entity.id)
   const clearLocation = useSetManualLocation()
+  const navigate = useNavigate()
 
   /*
     Which of these values a person typed, as against which came off the county
@@ -170,9 +190,18 @@ export function DetailsTab({ entity, org, onAddParcelRecord }: DetailsTabProps) 
             <LocationSourceNote
               location={location.data ?? null}
               entity={entity}
-              canEdit={false}
+              // Placing happens on the plat, so the button goes there ready to place.
+              canEdit={canEdit && !location.data}
+              onPlace={() => navigate(`/plat/${entity.id}?place=1`)}
             />
           )}
+
+          {!location.isLoading && !location.data ? (
+            <p className="text-ink-muted text-xs">
+              {LOCATION_HINTS[entity.type]}
+              {canEdit ? ' Or set it by hand on the plat.' : ''}
+            </p>
+          ) : null}
 
           {location.data?.source === 'manual' && canEdit ? (
             <div className="flex justify-end">
