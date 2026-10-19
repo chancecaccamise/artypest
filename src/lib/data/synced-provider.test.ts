@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { createFakeRemote, type FakeRemote } from '@/test/fake-remote'
 import { buildDemoData } from './fixtures'
+import { mergeEntities } from './merge'
 import { withStableIds } from './stable-ids'
 import { createSyncedProvider, type SyncedProvider } from './synced-provider'
+import type { ParcelLayerRecord } from '@/lib/parcels/parcel-layer'
 import type { DataSnapshot, Entity, RelationType } from './types'
 
 /*
@@ -159,5 +161,64 @@ describe('the shared records', () => {
     expect((await provider.getEntity(fresh.id))?.name).toBe('Kept In A Browser')
     expect((await provider.getEntity(person.id))?.data.phone).toBe('912-555-0199')
     expect(remote.auditRows().length).toBe(before)
+  })
+})
+
+const COUNTY_LOT: ParcelLayerRecord = {
+  pin: '20065 38013',
+  situsAddress: '104 E 40TH ST',
+  ownerName: 'GOEKEN CHARLES',
+  ownerName2: null,
+  ownerMailingAddress: { street: '104 E 40TH ST', city: 'SAVANNAH', state: 'GA', zip: '31401' },
+  acreage: 0.21,
+  zoningDistrict: 'TC-1',
+  propertyUseCode: 'C1',
+  fairMarketValue: 544500,
+  totalAssessment: 217800,
+  yearBuilt: 1920,
+  legalDescription: 'MERGE TEST',
+  municipalityCode: '020',
+  dateUpdated: '2026-01-01',
+  lastSaleDate: null,
+  lastSalePrice: null,
+  saleQualityCode: null,
+  neighborhood: 'Thomas Square',
+}
+
+describe('merging a duplicate into a county lot', () => {
+  it('copies the county lot in, moves the connection onto it, and deletes the duplicate', async () => {
+    // One county lot, so there is a lot still only in the county layer.
+    baseline = withStableIds(
+      buildDemoData(new Date('2026-10-16T00:00:00.000Z'), [COUNTY_LOT], {
+        includeTemporaryData: false,
+      })
+    ).data
+    remote = createFakeRemote({ org: ORG, relationTypes: databaseTypes(baseline) })
+    const provider = await signIn('dana@example.org')
+    const county = baseline.entities.find(
+      (entity) => entity.type === 'property' && entity.data.pin === COUNTY_LOT.pin
+    )
+    if (!county) throw new Error('No county lot with a parcel number')
+
+    const duplicate = await provider.createEntity({
+      type: 'property',
+      name: county.name,
+      data: { pin: county.data.pin },
+    })
+    const person = firstOf('person')
+    const relation = await provider.createRelation({
+      relationTypeId: 'db-rents',
+      fromEntityId: person.id,
+      toEntityId: duplicate.id,
+    })
+
+    await mergeEntities(provider, county.id, duplicate.id)
+
+    // The lot had to exist in the database before a connection could point at it.
+    expect(remote.materialized).toContain(county.id)
+    const after = await signIn('dana@example.org')
+    const moved = (await after.listRelations(county.id)).find((row) => row.id === relation.id)
+    expect(moved?.toEntityId).toBe(county.id)
+    expect((await after.getEntity(duplicate.id))?.deletedAt).not.toBeNull()
   })
 })

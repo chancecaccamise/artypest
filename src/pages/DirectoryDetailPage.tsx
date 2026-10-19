@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Archive, ArchiveRestore, ChevronDown, Network, Pencil, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, ChevronDown, Merge, Network, Pencil, Trash2 } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
+import { entityHref } from '@/components/layout/nav-config'
 import { TypeBadge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -14,16 +15,19 @@ import { TabPanel, Tabs, type TabDefinition } from '@/components/ui/tabs'
 import { ConnectionsTab } from '@/features/directory/ConnectionsTab'
 import { DetailsTab } from '@/features/directory/DetailsTab'
 import { EntityFormDialog } from '@/features/directory/EntityFormDialog'
+import { MergeDialog } from '@/features/directory/MergeDialog'
 import { FilesTab } from '@/features/directory/FilesTab'
 import { ImagesTab, imagesOf } from '@/features/directory/ImagesTab'
 import { HistoryTab } from '@/features/directory/HistoryTab'
 import { NeedsAttentionNotice } from '@/features/directory/NeedsAttentionNotice'
 import { NotesTab } from '@/features/directory/NotesTab'
+import { RecordStatusSelect } from '@/features/directory/RecordStatusSelect'
 import { RecordsTab } from '@/features/directory/RecordsTab'
 import { ToDoTab } from '@/features/directory/ToDoTab'
 import { DIRECTORY_CONFIGS } from '@/features/directory/config'
 import { ReviewToggle, reviewSentence } from '@/features/review/ReviewMark'
 import {
+  useAllEntities,
   useArchiveEntity,
   useDeleteEntity,
   useEntity,
@@ -33,7 +37,8 @@ import {
   useRestoreEntity,
   useReviewIndex,
 } from '@/hooks/use-data'
-import { ENTITY_TYPE_LABELS, type EntityType } from '@/lib/data/types'
+import { ENTITY_TYPE_LABELS, type Entity, type EntityType } from '@/lib/data/types'
+import { duplicatesOfProperty } from '@/lib/duplicates'
 import { formatDateTime } from '@/lib/format'
 import { stateFor } from '@/lib/review/status'
 import { useMemberName } from '@/lib/auth'
@@ -65,6 +70,7 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
   const org = useOrg()
   const reviewIndex = useReviewIndex()
   const { graph } = useGraph()
+  const allEntities = useAllEntities()
 
   const archiveEntity = useArchiveEntity()
   const restoreEntity = useRestoreEntity()
@@ -75,6 +81,8 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
   const [focusField, setFocusField] = useState<string | undefined>(undefined)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  /** Open with the other record, or with null to search for it. Undefined is closed. */
+  const [mergeWith, setMergeWith] = useState<Entity | null | undefined>(undefined)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const supportsTodos = type === 'person' || type === 'business'
@@ -178,6 +186,7 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
   }
 
   const chips = config.chips(entity)
+  const duplicates = duplicatesOfProperty(entity, allEntities.data ?? [])
   const archived = entity.archivedAt !== null
   const reviewState = stateFor(reviewIndex.data, entity.id)
   const reviewStatus = reviewIndex.data?.byEntity.get(entity.id)
@@ -231,6 +240,8 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
                 the menu. Everything in the menu is done once per record; this
                 is done to every record.
               */}
+              {/* Beside Checked for the same reason: it is changed on every record, often. */}
+              {type === 'record' ? <RecordStatusSelect entity={entity} /> : null}
               <ReviewToggle
                 entityId={entity.id}
                 state={reviewState}
@@ -290,6 +301,16 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
                     )}
 
                     <MenuItem
+                      onClick={() => {
+                        setMergeWith(null)
+                        setMenuOpen(false)
+                      }}
+                    >
+                      <Merge className="size-3.5" />
+                      Merge duplicate
+                    </MenuItem>
+
+                    <MenuItem
                       tone="destructive"
                       onClick={() => {
                         setConfirmDelete(true)
@@ -322,6 +343,30 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
           </span>
         </Notice>
       ) : null}
+
+      {/*
+        A second record for this lot. Said on both, so whichever one somebody
+        lands on, they find out, and can fold one into the other from here.
+      */}
+      {duplicates.map((duplicate) => (
+        <Notice key={duplicate.id} tone="warning" className="mb-4">
+          <span className="flex flex-wrap items-center gap-3">
+            <span>
+              Another property has the same parcel number:{' '}
+              <Link to={entityHref(duplicate.type, duplicate.id)} className="text-survey underline">
+                {duplicate.name}
+              </Link>
+              . They are the same lot, so their connections are split between two records.
+            </span>
+            {canEdit ? (
+              <Button size="sm" onClick={() => setMergeWith(duplicate)}>
+                <Merge />
+                Merge the two
+              </Button>
+            ) : null}
+          </span>
+        </Notice>
+      ))}
 
       {/* Above the tabs, so the reason somebody came is on whichever tab they land. */}
       <NeedsAttentionNotice
@@ -378,6 +423,13 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
         type={type}
         entity={entity}
         focusField={focusField}
+      />
+
+      <MergeDialog
+        open={mergeWith !== undefined}
+        onClose={() => setMergeWith(undefined)}
+        entity={entity}
+        initialOther={mergeWith ?? null}
       />
 
       <Dialog

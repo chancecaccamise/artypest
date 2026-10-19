@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Panel, PanelHeader } from '@/components/ui/panel'
-import { useGraph } from '@/hooks/use-data'
+import { useGraph, useUpdateEntity } from '@/hooks/use-data'
 import type { Entity } from '@/lib/data/types'
 import { daysUntil, formatDate, formatRelativeDays } from '@/lib/format'
 import { needsAttentionFor, type AttentionItem, type AttentionKind } from '@/lib/insights'
@@ -42,6 +42,7 @@ export function NeedsAttentionNotice({
 }: NeedsAttentionNoticeProps) {
   const { graph } = useGraph()
   const { canEdit } = useRole()
+  const update = useUpdateEntity()
 
   const items = useMemo(
     () => (graph ? needsAttentionFor(graph, entity.id) : []),
@@ -50,23 +51,38 @@ export function NeedsAttentionNotice({
 
   if (items.length === 0) return null
 
-  const fixFor = (kind: AttentionKind): Fix | null => {
+  const fixesFor = (kind: AttentionKind): Fix[] => {
     switch (kind) {
       // Terms, contracts, and insurance are all dated connections.
       case 'term':
       case 'contract':
       case 'insurance':
-        return { label: 'Open connections', run: onOpenConnections }
+        return [{ label: 'Open connections', run: onOpenConnections }]
       case 'no-pin':
-        return canEdit ? { label: 'Add parcel number', run: () => onEditField('pin') } : null
+        return canEdit ? [{ label: 'Add parcel number', run: () => onEditField('pin') }] : []
       case 'no-contact':
-        return canEdit ? { label: 'Add email or phone', run: () => onEditField('email') } : null
+        return canEdit ? [{ label: 'Add email or phone', run: () => onEditField('email') }] : []
       case 'todo':
-        return { label: 'Open to do', run: onOpenTodos }
+        return [{ label: 'Open to do', run: onOpenTodos }]
+      /*
+        Two answers to an overdue follow-up: it needs more time, or it is done.
+        Closing is offered here because it is usually the true one, and it
+        clears the line from this page and from the dashboard at once.
+      */
       case 'follow-up':
         return canEdit
-          ? { label: 'Change follow-up date', run: () => onEditField('followUpDate') }
-          : null
+          ? [
+              { label: 'Change follow-up date', run: () => onEditField('followUpDate') },
+              {
+                label: 'Mark done',
+                run: () =>
+                  update.mutate({
+                    id: entity.id,
+                    patch: { data: { ...entity.data, status: 'closed' } },
+                  }),
+              },
+            ]
+          : []
     }
   }
 
@@ -78,14 +94,14 @@ export function NeedsAttentionNotice({
       />
       <ul className="divide-rule divide-y">
         {items.map((item) => (
-          <AttentionLine key={item.id} item={item} fix={fixFor(item.kind)} />
+          <AttentionLine key={item.id} item={item} fixes={fixesFor(item.kind)} />
         ))}
       </ul>
     </Panel>
   )
 }
 
-function AttentionLine({ item, fix }: { item: AttentionItem; fix: Fix | null }) {
+function AttentionLine({ item, fixes }: { item: AttentionItem; fixes: Fix[] }) {
   const overdue = item.urgency === 'overdue'
 
   return (
@@ -117,11 +133,11 @@ function AttentionLine({ item, fix }: { item: AttentionItem; fix: Fix | null }) 
         </span>
       ) : null}
 
-      {fix ? (
-        <Button size="sm" onClick={fix.run} className="shrink-0">
+      {fixes.map((fix) => (
+        <Button key={fix.label} size="sm" onClick={fix.run} className="shrink-0">
           {fix.label}
         </Button>
-      ) : null}
+      ))}
     </li>
   )
 }

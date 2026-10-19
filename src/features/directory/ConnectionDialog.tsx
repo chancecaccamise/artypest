@@ -329,6 +329,10 @@ export function ConnectionDialog({ open, onClose, entity, relation }: Connection
             pickTarget(created)
             setCreating(null)
           }}
+          onChooseExisting={(existing) => {
+            pickTarget(existing)
+            setCreating(null)
+          }}
         />
       ) : null}
     </>

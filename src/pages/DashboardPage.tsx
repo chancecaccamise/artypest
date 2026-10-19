@@ -1,28 +1,18 @@
-import { useState } from 'react'
-
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Notice } from '@/components/ui/empty-state'
-import {
-  BoardPanel,
-  NeedsAttentionPanel,
-  OccupancyPanel,
-  QuickAddPanel,
-  RecentActivityPanel,
-  StatStrip,
-} from '@/features/dashboard/widgets'
-import { BoardEditorDialog } from '@/features/dashboard/BoardEditorDialog'
-import { EntityFormDialog } from '@/features/directory/EntityFormDialog'
+import { NeedsAttentionPanel, RecentActivityPanel } from '@/features/dashboard/widgets'
 import { useGraph, useOrg } from '@/hooks/use-data'
-import type { EntityType } from '@/lib/data/types'
-import { useRole } from '@/lib/role'
 
 /*
-  The default landing page. Four rows:
+  The default landing page. Two rows, full width:
 
-    1. Stat strip
-    2. Needs attention (two thirds) and Board and committees (one third)
-    3. Recent activity (two thirds) and Occupancy (one third)
-    4. Quick add
+    1. Needs attention
+    2. Recent activity
+
+  The board asked for only these two while they work with the records and
+  decide what else belongs here. The stat strip, Board and committees,
+  Occupancy, and Quick add are still in src/features/dashboard/widgets.tsx,
+  ready to be put back.
 
   Every widget owns its own loading skeleton and empty state, so a slow or
   empty section never blanks the page.
@@ -30,10 +20,6 @@ import { useRole } from '@/lib/role'
 export function DashboardPage() {
   const org = useOrg()
   const { graph, isError } = useGraph()
-  const { canEdit } = useRole()
-
-  const [addType, setAddType] = useState<EntityType | null>(null)
-  const [boardEditorOpen, setBoardEditorOpen] = useState(false)
 
   return (
     <>
@@ -49,33 +35,11 @@ export function DashboardPage() {
         </Notice>
       ) : null}
 
-      <StatStrip graph={graph} />
-
-      <div className="mb-4 grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <NeedsAttentionPanel graph={graph} />
-        </div>
-        <BoardPanel graph={graph} onManage={() => setBoardEditorOpen(true)} />
+      <div className="mb-4">
+        <NeedsAttentionPanel graph={graph} />
       </div>
 
-      <div className="mb-4 grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <RecentActivityPanel />
-        </div>
-        <OccupancyPanel graph={graph} />
-      </div>
-
-      <QuickAddPanel disabled={!canEdit} onAdd={(type) => setAddType(type)} />
-
-      {addType ? <EntityFormDialog open onClose={() => setAddType(null)} type={addType} /> : null}
-
-      {graph ? (
-        <BoardEditorDialog
-          open={boardEditorOpen}
-          onClose={() => setBoardEditorOpen(false)}
-          graph={graph}
-        />
-      ) : null}
+      <RecentActivityPanel />
     </>
   )
 }

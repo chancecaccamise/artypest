@@ -158,12 +158,16 @@ describe('arcs', () => {
     expect(sameLocation).toBeGreaterThan(0)
   })
 
-  it('offers only relation types that have something to draw', () => {
+  it('offers every kind of connection, the ones with something to draw first', () => {
     const keys = arcableKeys(graph, locations)
-    expect(keys.length).toBeGreaterThan(0)
-    for (const key of keys) {
-      expect(buildArcs({ graph, locations, keys: new Set([key]) }).length).toBeGreaterThanOrEqual(0)
-    }
+    expect([...keys].sort()).toEqual(graph.relationTypes.map((type) => type.key).sort())
+
+    const drawable = keys.map(
+      (key) => buildArcs({ graph, locations, keys: new Set([key]) }).length > 0
+    )
+    // Once a kind has nothing to draw, none after it does either.
+    expect(drawable.indexOf(false)).toBeGreaterThan(0)
+    expect(drawable.slice(drawable.indexOf(false)).every((value) => !value)).toBe(true)
   })
 })
 

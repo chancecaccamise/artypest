@@ -172,7 +172,7 @@ describe('computeStats', () => {
     const graph = resolveGraph({
       entities: [
         entity('rec1', 'record', 'Open thing', { status: 'open' }),
-        entity('rec2', 'record', 'In review', { status: 'in_review' }),
+        entity('rec2', 'record', 'On hold', { status: 'on_hold' }),
         entity('rec3', 'record', 'Done', { status: 'closed' }),
       ],
       relations: [],

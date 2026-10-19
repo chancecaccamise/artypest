@@ -116,15 +116,16 @@ describe('the migrations', () => {
     }
   })
 
-  it('bootstraps the org, the twelve relation types, and the reference lists', async () => {
+  it('bootstraps the org, the thirteen relation types, and the reference lists', async () => {
     const counts = await db.query<{ orgs: number; types: number; items: number }>(
       `select (select count(*)::int from orgs) as orgs,
               (select count(*)::int from relation_types) as types,
               (select count(*)::int from reference_items) as items`
     )
     expect(counts.rows[0]?.orgs).toBe(1)
-    // Ten from the bootstrap, and rents and executive_of from 20261016120000.
-    expect(counts.rows[0]?.types).toBe(12)
+    // Ten from the bootstrap, rents and executive_of from 20261016120000, and
+    // rents_from from 20261019120000.
+    expect(counts.rows[0]?.types).toBe(13)
     expect(counts.rows[0]?.items).toBeGreaterThan(20)
   })
 
@@ -141,7 +142,7 @@ describe('the migrations', () => {
     const counts = await db.query<{ types: number }>(
       `select count(*)::int as types from relation_types`
     )
-    expect(counts.rows[0]?.types).toBe(12)
+    expect(counts.rows[0]?.types).toBe(13)
   })
 
   it('reads the vendor connection from the customer end as "purchases from"', async () => {
@@ -149,6 +150,85 @@ describe('the migrations', () => {
       `select reverse_label from relation_types where key = 'vendor_for'`
     )
     expect(vendor.rows[0]?.reverse_label).toBe('purchases from')
+  })
+
+  it('splits "rents" into renting a property and renting from someone', async () => {
+    const labels = await db.query<{ key: string; label: string; reverse_label: string }>(
+      `select key, label, reverse_label from relation_types
+       where key in ('rents', 'rents_from') order by key`
+    )
+    expect(labels.rows).toEqual([
+      { key: 'rents', label: 'rents property', reverse_label: 'is rented by' },
+      { key: 'rents_from', label: 'rents from', reverse_label: 'rents to' },
+    ])
+  })
+
+  it('moves an old "rents" connection to "rents from" only when the other end is not a property', async () => {
+    const made = await db.query<{ id: string; type: string }>(
+      `insert into entities (org_id, type, name) values
+         ($1, 'business', 'Knack Pottery'),
+         ($1, 'business', '40 Space'),
+         ($1, 'property', '104 E 40th St')
+       returning id, type`,
+      [ORG]
+    )
+    const [tenant, landlord, lot] = made.rows
+    const rents = await db.query<{ id: string }>(
+      `select id from relation_types where org_id = $1 and key = 'rents'`,
+      [ORG]
+    )
+    const inserted = await db.query<{ id: string }>(
+      `insert into relations (org_id, relation_type_id, from_entity_id, to_entity_id)
+       values ($1, $2, $3, $4), ($1, $2, $3, $5) returning id`,
+      [ORG, rents.rows[0]?.id, tenant?.id, landlord?.id, lot?.id]
+    )
+
+    const file = readdirSync(MIGRATIONS).find((name) => name.endsWith('_rents_from.sql'))
+    await db.exec(readFileSync(join(MIGRATIONS, file ?? ''), 'utf8'))
+
+    const keys = await db.query<{ to_entity_id: string; key: string }>(
+      `select r.to_entity_id, t.key from relations r
+       join relation_types t on t.id = r.relation_type_id
+       where r.id = any($1::uuid[])`,
+      [inserted.rows.map((row) => row.id)]
+    )
+    const keyFor = (id: string | undefined) =>
+      keys.rows.find((row) => row.to_entity_id === id)?.key
+    expect(keyFor(landlord?.id)).toBe('rents_from')
+    expect(keyFor(lot?.id)).toBe('rents')
+  })
+})
+
+describe('record status typed by hand', () => {
+  it('brings typed statuses onto Open, On hold, and Done, and leaves anything else', async () => {
+    const made = await db.query<{ id: string }>(
+      `insert into entities (org_id, type, name, data) values
+         ($1, 'record', 'a typed closed', '{"status": "Closed"}'),
+         ($1, 'record', 'b typed done', '{"status": "Done"}'),
+         ($1, 'record', 'c old in review', '{"status": "in_review"}'),
+         ($1, 'record', 'd typed on hold', '{"status": " On Hold "}'),
+         ($1, 'record', 'e already right', '{"status": "open"}'),
+         ($1, 'record', 'f something else', '{"status": "Waiting on city"}')
+       returning id`,
+      [ORG]
+    )
+
+    const file = readdirSync(MIGRATIONS).find((name) => name.endsWith('_record_status.sql'))
+    await db.exec(readFileSync(join(MIGRATIONS, file ?? ''), 'utf8'))
+
+    const rows = await db.query<{ status: string }>(
+      `select data ->> 'status' as status from entities where id = any($1::uuid[])
+       order by name`,
+      [made.rows.map((row) => row.id)]
+    )
+    expect(rows.rows.map((row) => row.status)).toEqual([
+      'closed',
+      'closed',
+      'on_hold',
+      'on_hold',
+      'open',
+      'Waiting on city',
+    ])
   })
 })
 
@@ -254,7 +334,7 @@ describe('the audit log, which is triggers and never application code', () => {
 
     const rows = await db.query<{ table_name: string; action: string; field_name: string | null }>(
       `select table_name, action, field_name from audit_entries
-       where record_id = $1 order by changed_at, field_name`,
+       where record_id = $1 order by changed_at, action, field_name`,
       [relation.rows[0]?.id]
     )
     expect(rows.rows).toEqual([

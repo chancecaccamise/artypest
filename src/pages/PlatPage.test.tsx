@@ -165,28 +165,43 @@ describe('thematic modes', () => {
 })
 
 describe('connection arcs', () => {
-  it('draws none until a relation type is switched on', async () => {
+  it('draws every kind of connection when the plat opens', async () => {
     const { container } = renderWithProviders(<App />, { route: '/plat' })
 
     await waitFor(() => {
       expect(container.querySelectorAll('.parcels path').length).toBeGreaterThan(0)
     })
 
-    expect(container.querySelectorAll('.arcs path')).toHaveLength(0)
-    expect(screen.getByText(/Off by default/)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(container.querySelectorAll('.arcs path').length).toBeGreaterThan(0)
+    })
+    expect(screen.getByRole('button', { name: 'Hide connections' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Owns', pressed: true })).toBeInTheDocument()
+    expect(screen.getByLabelText('Only the selected record')).not.toBeChecked()
   })
 
-  it('draws arcs once a type is switched on', async () => {
+  it('lists every kind of connection as a chip, in its own wording', async () => {
+    renderWithProviders(<App />, { route: '/plat' })
+
+    for (const name of ['Rents property', 'Rents from', 'Member of', 'Vendor for', 'Manages']) {
+      expect(await screen.findByRole('button', { name, pressed: true })).toBeInTheDocument()
+    }
+  })
+
+  it('switches one kind off and back on', async () => {
     const user = userEvent.setup()
     const { container } = renderWithProviders(<App />, { route: '/plat' })
 
-    const ownsChip = await screen.findByRole('button', { name: 'Owns', pressed: false })
-    await user.click(ownsChip)
-    // Focused on the selection by default, and nothing is selected, so widen it.
-    await user.click(screen.getByLabelText('Only the selected record'))
-
     await waitFor(() => {
       expect(container.querySelectorAll('.arcs path').length).toBeGreaterThan(0)
+    })
+    const before = container.querySelectorAll('.arcs path').length
+
+    await user.click(screen.getByRole('button', { name: 'Owns', pressed: true }))
+    expect(screen.getByRole('button', { name: 'Owns', pressed: false })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Owns', pressed: false }))
+    await waitFor(() => {
+      expect(container.querySelectorAll('.arcs path')).toHaveLength(before)
     })
   })
 })
@@ -359,12 +374,15 @@ describe('from the Connection Map to the plat', () => {
     }
   })
 
-  it('leaves the connections off when the plat is opened without them', async () => {
+  it('keeps every connection on the drawing when a record is opened directly', async () => {
     const { container } = renderWithProviders(<App />, {
       route: `/plat/${connectedRecord.id}`,
     })
 
-    expect(await screen.findByRole('button', { name: 'Show connections' })).toBeInTheDocument()
-    expect(container.querySelectorAll('.arcs path')).toHaveLength(0)
+    expect(await screen.findByRole('button', { name: 'Hide connections' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Only the selected record')).not.toBeChecked()
+    await waitFor(() => {
+      expect(container.querySelectorAll('.arcs path').length).toBeGreaterThan(0)
+    })
   })
 })

@@ -182,11 +182,11 @@ describe('memory provider', () => {
     expect(after.map((row) => row.id)).not.toContain(relation.id)
   })
 
-  it('ships the twelve seeded relation types, each with both directions labelled', async () => {
+  it('ships the thirteen seeded relation types, each with both directions labelled', async () => {
     const types = await data.listRelationTypes()
-    expect(types).toHaveLength(12)
+    expect(types).toHaveLength(13)
     expect(types.every((type) => type.label !== '' && type.reverseLabel !== '')).toBe(true)
-    expect(new Set(types.map((type) => type.key)).size).toBe(12)
+    expect(new Set(types.map((type) => type.key)).size).toBe(13)
   })
 
   it('resolves the subject entity on the activity feed', async () => {

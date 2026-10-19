@@ -14,7 +14,8 @@ describe('connection readings', () => {
     expect(main).toEqual([
       'Owns',
       'Resides at',
-      'Rents',
+      'Rents property',
+      'Rents from',
       'Is a member of',
       'Is an executive of',
       'Governs',

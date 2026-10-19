@@ -24,6 +24,7 @@ import type { Entity, EntityType } from '@/lib/data/types'
 import type { Point } from '@/lib/geocoding/types'
 import { ENTITY_TYPES, ENTITY_TYPE_LABELS } from '@/lib/data/types'
 import { humanize, readString } from '@/lib/format'
+import { readingLabel } from '@/lib/relations/readings'
 import { useRole } from '@/lib/role'
 import { cn } from '@/lib/utils'
 
@@ -41,9 +42,6 @@ import { cn } from '@/lib/utils'
 
 export type MapMode = 'plat' | 'split'
 
-/** The default when no link asked for connections. Shared, so never mutated. */
-const NO_ARC_KEYS: ReadonlySet<string> = new Set()
-
 /**
  * What a link into the plat asks it to draw.
  *
@@ -56,7 +54,7 @@ export type InitialConnections = 'focus' | 'all'
 export interface MapViewProps {
   /** Record to select on open, from the route. */
   initialEntityId?: string | null
-  /** Connections to switch on when the map opens. Null leaves them off. */
+  /** Connections to draw when the map opens. Null draws every kind, unnarrowed. */
   initialConnections?: InitialConnections | null
   /** Open already placing the initial record, for "Set location" elsewhere. */
   startPlacing?: boolean
@@ -91,7 +89,12 @@ export function MapView({
     already drawn an empty plat.
   */
   const [chosenArcKeys, setChosenArcKeys] = useState<Set<string> | null>(null)
-  const [focusArcsOnSelection, setFocusArcsOnSelection] = useState(initialConnections !== 'all')
+  /*
+    Off unless a link asked for one record's connections. With it on, picking
+    a record on the plat hid every other connection, which the board read as
+    the plat losing its connections.
+  */
+  const [focusArcsOnSelection, setFocusArcsOnSelection] = useState(initialConnections === 'focus')
   const [gradeArcsByAge, setGradeArcsByAge] = useState(false)
   /*
     On by default. A one pixel arc at half opacity, over parcel boundaries drawn
@@ -236,8 +239,8 @@ export function MapView({
   )
 
   const arcKeys = useMemo(
-    () => chosenArcKeys ?? (initialConnections === null ? NO_ARC_KEYS : new Set(availableArcKeys)),
-    [chosenArcKeys, initialConnections, availableArcKeys]
+    () => chosenArcKeys ?? new Set(availableArcKeys),
+    [chosenArcKeys, availableArcKeys]
   )
 
   const arcs = useMemo(() => {
@@ -267,6 +270,16 @@ export function MapView({
   )
 
   const arcsShown = arcKeys.size > 0
+
+  /*
+    The type's own wording, so a chip says "Rents property" and not "Rents".
+    Without the leading "is a", which a row of chips does not need: "Member
+    of", not "Is a member of".
+  */
+  const arcKeyLabel = (key: string) => {
+    const label = graph?.typeByKey.get(key)?.label.replace(/^is (an? )?/, '')
+    return label ? readingLabel(label) : humanize(key)
+  }
 
   const toggleArcKey = (key: string) => {
     const next = new Set(arcKeys)
@@ -438,7 +451,7 @@ export function MapView({
           </div>
         </div>
 
-        {/* Arc filter, off by default */}
+        {/* Arc filter, every kind on by default */}
         <div className="border-rule flex flex-wrap items-center gap-2 border-b px-3 py-2">
           {/*
             One button, not a row of chips to work out.
@@ -483,7 +496,7 @@ export function MapView({
                     : undefined
                 }
               >
-                {humanize(key)}
+                {arcKeyLabel(key)}
               </button>
             )
           })}
@@ -511,7 +524,7 @@ export function MapView({
             <span className="text-ink-faint text-xs">
               {availableArcKeys.length === 0
                 ? 'Nothing to draw yet: a connection needs both records placed on the map.'
-                : 'Off by default. Show connections draws every kind at once, or pick a single kind.'}
+                : 'Show connections draws every kind at once, or pick a single kind.'}
             </span>
           )}
         </div>

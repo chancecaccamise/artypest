@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tan
 import { useMemo } from 'react'
 
 import { data } from '@/lib/data'
+import { mergeEntities } from '@/lib/data/merge'
 import { useAuth } from '@/lib/auth'
 import type {
   Entity,
@@ -263,6 +264,16 @@ export function useDeleteEntity() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => data.deleteEntity(id),
+    onSuccess: () => invalidateAll(client),
+  })
+}
+
+/** Folds one record into another. See src/lib/data/merge.ts. */
+export function useMergeEntities() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ keepId, dropId }: { keepId: string; dropId: string }) =>
+      mergeEntities(data, keepId, dropId),
     onSuccess: () => invalidateAll(client),
   })
 }

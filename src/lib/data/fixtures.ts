@@ -145,7 +145,20 @@ export function buildDemoData(
       label: 'resides at',
       reverseLabel: 'is home to',
     },
-    { id: 'rt-rents', orgId: ORG_ID, key: 'rents', label: 'rents', reverseLabel: 'is rented by' },
+    {
+      id: 'rt-rents',
+      orgId: ORG_ID,
+      key: 'rents',
+      label: 'rents property',
+      reverseLabel: 'is rented by',
+    },
+    {
+      id: 'rt-rents-from',
+      orgId: ORG_ID,
+      key: 'rents_from',
+      label: 'rents from',
+      reverseLabel: 'rents to',
+    },
     {
       id: 'rt-member-of',
       orgId: ORG_ID,
@@ -847,7 +860,7 @@ export function buildDemoData(
   const RECORDS: {
     title: string
     recordType: (typeof RECORD_TYPES)[number]
-    status: 'open' | 'in_review' | 'closed'
+    status: 'open' | 'on_hold' | 'closed'
     openedDaysAgo: number
     followUpInDays: number | null
     propertyIndex: number | null
@@ -863,7 +876,7 @@ export function buildDemoData(
     {
       title: 'Rear addition, architectural review',
       recordType: 'architectural_request',
-      status: 'in_review',
+      status: 'on_hold',
       openedDaysAgo: 41,
       followUpInDays: -6,
       propertyIndex: 3,
@@ -903,7 +916,7 @@ export function buildDemoData(
     {
       title: 'Annual assessment, 2026 cycle',
       recordType: 'assessment',
-      status: 'in_review',
+      status: 'on_hold',
       openedDaysAgo: 78,
       followUpInDays: 21,
       propertyIndex: null,
@@ -943,7 +956,7 @@ export function buildDemoData(
     {
       title: 'Parking obstruction, Chatham Cres',
       recordType: 'complaint',
-      status: 'in_review',
+      status: 'on_hold',
       openedDaysAgo: 33,
       followUpInDays: 12,
       propertyIndex: 27,
@@ -975,7 +988,7 @@ export function buildDemoData(
     {
       title: 'Unpermitted shed, rear lot',
       recordType: 'covenant_violation',
-      status: 'in_review',
+      status: 'on_hold',
       openedDaysAgo: 57,
       followUpInDays: 8,
       propertyIndex: 31,
@@ -1294,7 +1307,7 @@ export function buildDemoData(
       recordId: at(recordEntities, 1).id,
       field: 'data.status',
       from: 'open',
-      to: 'in_review',
+      to: 'on_hold',
       daysAgo: 4,
     },
     {

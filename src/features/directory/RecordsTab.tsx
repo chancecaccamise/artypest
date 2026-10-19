@@ -1,15 +1,16 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 
-import { StatusBadge, type StatusTone } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IdChip } from '@/components/ui/id-chip'
 import { Panel, PanelBody, PanelHeader } from '@/components/ui/panel'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { useGraph } from '@/hooks/use-data'
 import type { Entity } from '@/lib/data/types'
-import { formatDate, humanize, readString } from '@/lib/format'
+import { formatDate, readString } from '@/lib/format'
 import { isTodo } from '@/lib/todos'
+import { RECORD_STATUS_OPTIONS, RECORD_STATUS_TONE, optionLabel } from './config'
 
 /*
   Records linked to this entity, newest first.
@@ -19,12 +20,6 @@ import { isTodo } from '@/lib/todos'
   against a lot shows on the lot, and one referencing a document shows on the
   document.
 */
-
-const STATUS_TONE: Record<string, StatusTone> = {
-  open: 'oxblood',
-  in_review: 'amber',
-  closed: 'moss',
-}
 
 export function RecordsTab({ entity }: { entity: Entity }) {
   const { graph, isLoading } = useGraph()
@@ -94,8 +89,8 @@ export function RecordsTab({ entity }: { entity: Entity }) {
                   </Link>
 
                   {status === '' ? null : (
-                    <StatusBadge tone={STATUS_TONE[status] ?? 'neutral'}>
-                      {humanize(status)}
+                    <StatusBadge tone={RECORD_STATUS_TONE[status] ?? 'neutral'}>
+                      {optionLabel(RECORD_STATUS_OPTIONS, status)}
                     </StatusBadge>
                   )}
 

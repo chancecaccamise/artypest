@@ -204,7 +204,15 @@ export function toggleAllArcKeys(
 export const ARC_COLORS = RELATION_COLORS
 export const arcColor = relationColor
 
-/** Relation type keys worth offering, ordered by how often a board asks. */
+/**
+ * Every kind of connection the association has, to switch on and off.
+ *
+ * Kinds with something to draw come first, ordered by how many, so the busy
+ * ones lead the row. The rest follow in the order the association lists them.
+ * They are offered even with nothing on the drawing yet, because the board
+ * asked to see every kind in the row, and a kind that is missing reads as a
+ * kind the plat cannot show rather than one with no placed records yet.
+ */
 export function arcableKeys(graph: ResolvedGraph, locations: LocationIndex): string[] {
   const counts = new Map<string, number>()
 
@@ -217,10 +225,12 @@ export function arcableKeys(graph: ResolvedGraph, locations: LocationIndex): str
     counts.set(type.key, (counts.get(type.key) ?? 0) + 1)
   }
 
-  return [...counts.entries()]
-    .filter(([, count]) => count > 0)
+  const drawable = [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([key]) => key)
+  const rest = graph.relationTypes.map((type) => type.key).filter((key) => !counts.has(key))
+
+  return [...drawable, ...rest]
 }
 
 export interface UndrawnCounts {

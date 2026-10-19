@@ -17,14 +17,11 @@ import { renderWithProviders } from './test/render'
 */
 
 describe('application shell', () => {
-  it('lands on the dashboard with the stat strip filled in', async () => {
+  it('lands on the dashboard', async () => {
     renderWithProviders(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument()
-
-    // The lots tile resolves to a real figure rather than staying a skeleton.
-    const lots = await screen.findByText('Lots')
-    expect(lots.parentElement?.textContent).toMatch(/\d+/)
+    expect(await screen.findByText('Needs attention')).toBeInTheDocument()
   })
 
   it('renders every navigation group with live counts', async () => {
@@ -186,13 +183,13 @@ describe('settings', () => {
     expect(screen.getByText(/no API key/)).toBeInTheDocument()
   })
 
-  it('lists the twelve relation types read only, with both directions', async () => {
+  it('lists the thirteen relation types read only, with both directions', async () => {
     renderWithProviders(<App />, { route: '/settings/relations' })
 
     const table = await screen.findByRole('table')
     await waitFor(() => {
-      // Twelve types and the header row.
-      expect(within(table).getAllByRole('row').length).toBe(13)
+      // Thirteen types and the header row.
+      expect(within(table).getAllByRole('row').length).toBe(14)
     })
     expect(screen.getByText('Read only in this phase')).toBeInTheDocument()
     expect(within(table).getByText('is owned by')).toBeInTheDocument()

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
-import { Button } from '@/components/ui/button'
+import { entityHref } from '@/components/layout/nav-config'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/field'
 import { Notice } from '@/components/ui/empty-state'
@@ -9,9 +11,15 @@ import {
   type PendingPropertyLink,
   PropertyLinkFields,
 } from '@/features/directory/PropertyLinkFields'
-import { useCreateEntityWithRelations, useRelationTypes, useUpdateEntity } from '@/hooks/use-data'
+import {
+  useAllEntities,
+  useCreateEntityWithRelations,
+  useRelationTypes,
+  useUpdateEntity,
+} from '@/hooks/use-data'
 import { useReferenceLabels } from '@/hooks/use-reference-labels'
 import { ENTITY_TYPE_LABELS, type Entity, type EntityType } from '@/lib/data/types'
+import { findDuplicateProperties, type DuplicateMatch } from '@/lib/duplicates'
 import { readString } from '@/lib/format'
 import { deriveJurisdiction } from '@/lib/parcels/pin'
 import { entityFormSchema } from '@/lib/validation/entities'
@@ -40,6 +48,12 @@ export interface EntityFormDialogProps {
   submitLabel?: string
   /** Field key to focus on open, used by "Add parcel record". */
   focusField?: string
+  /**
+   * Offered when the property being added is already on file, so a step in
+   * something else can carry on with the existing lot instead. Without it the
+   * form links to the existing record.
+   */
+  onChooseExisting?: (entity: Entity) => void
 }
 
 /** Fields the form offers, in config order, notes last. */
@@ -63,6 +77,7 @@ export function EntityFormDialog({
   description,
   submitLabel,
   focusField,
+  onChooseExisting,
 }: EntityFormDialogProps) {
   const config = DIRECTORY_CONFIGS[type]
   const fields = useMemo(() => formFields(type), [type])
@@ -71,6 +86,7 @@ export function EntityFormDialog({
   const createEntity = useCreateEntityWithRelations()
   const relationTypes = useRelationTypes()
   const updateEntity = useUpdateEntity()
+  const allEntities = useAllEntities()
 
   const [name, setName] = useState('')
   const [values, setValues] = useState<Record<string, string>>({})
@@ -92,7 +108,10 @@ export function EntityFormDialog({
       setName(entity?.name ?? initialName ?? '')
       setValues(
         Object.fromEntries(
-          fields.map((field) => [field.key, toInputValue(entity?.data[field.key])])
+          fields.map((field) => [
+            field.key,
+            toInputValue(entity?.data[field.key]) || (field.defaultValue ?? ''),
+          ])
         )
       )
       setErrors({})
@@ -103,6 +122,22 @@ export function EntityFormDialog({
 
   const isEditing = Boolean(entity)
   const pending = createEntity.isPending || updateEntity.isPending
+
+  /*
+    Checked as the reader types, not on submit, so the existing lot is offered
+    before the form is filled in rather than after. A parcel number already on
+    file refuses outright. An address alone is only asked about, and only when
+    adding: condominium units are separate parcels at one address.
+  */
+  const duplicates = useMemo(() => {
+    if (type !== 'property') return []
+    const matches = findDuplicateProperties(
+      { id: entity?.id, name, pin: values.pin ?? '' },
+      allEntities.data ?? []
+    )
+    return isEditing ? matches.filter((match) => match.by === 'pin') : matches
+  }, [type, entity?.id, name, values.pin, allEntities.data, isEditing])
+  const pinDuplicate = duplicates.find((match) => match.by === 'pin') ?? null
 
   const setValue = (key: string, value: string) => {
     setValues((previous) => ({ ...previous, [key]: value }))
@@ -121,6 +156,14 @@ export function EntityFormDialog({
 
   const submit = async () => {
     setSubmitError(null)
+
+    if (pinDuplicate) {
+      setErrors((previous) => ({
+        ...previous,
+        pin: `Already on file as ${pinDuplicate.entity.name}.`,
+      }))
+      return
+    }
 
     const parsed = entityFormSchema(type).safeParse({ name, data: values })
 
@@ -212,11 +255,29 @@ export function EntityFormDialog({
               ? 'Saving'
               : isEditing
                 ? 'Save changes'
-                : (submitLabel ?? `Add ${config.singular.toLowerCase()}`)}
+                : duplicates.length > 0
+                  ? 'Add as a separate property'
+                  : (submitLabel ?? `Add ${config.singular.toLowerCase()}`)}
           </Button>
         </>
       }
     >
+      {duplicates.length > 0 ? (
+        <DuplicateNotice
+          matches={duplicates}
+          editing={isEditing}
+          onLeave={onClose}
+          onChoose={
+            onChooseExisting
+              ? (existing) => {
+                  onChooseExisting(existing)
+                  onClose()
+                }
+              : undefined
+          }
+        />
+      ) : null}
+
       <form id="entity-form" onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
         {submitError ? <Notice tone="error">{submitError}</Notice> : null}
 
@@ -270,7 +331,7 @@ export function EntityFormDialog({
                     onChange={(event) => setValue(field.key, event.target.value)}
                     data-autofocus={focusField === field.key ? true : undefined}
                   >
-                    <option value="">Not set</option>
+                    {field.defaultValue === undefined ? <option value="">Not set</option> : null}
                     {/*
                       A value from before the list existed stays choosable, so
                       opening the form and saving does not quietly erase it.
@@ -334,5 +395,67 @@ export function EntityFormDialog({
         ) : null}
       </form>
     </Dialog>
+  )
+}
+
+/** How many existing lots to offer before the list stops helping. */
+const DUPLICATE_LIMIT = 3
+
+function DuplicateNotice({
+  matches,
+  editing,
+  onLeave,
+  onChoose,
+}: {
+  matches: DuplicateMatch[]
+  editing: boolean
+  /** Closes the form when a link leaves it for the existing record. */
+  onLeave: () => void
+  onChoose?: (entity: Entity) => void
+}) {
+  const [first] = matches
+  if (!first) return null
+  const byPin = first.by === 'pin'
+  const pin = readString(first.entity.data.pin)
+
+  return (
+    <Notice tone={byPin ? 'error' : 'warning'} className="mb-4">
+      <span className="flex flex-col gap-2">
+        <span>
+          {byPin
+            ? `Parcel ${pin} is already on file as ${first.entity.name}. One parcel number is one lot, so it cannot be on two records.`
+            : `${first.entity.name} is already on file at this address. Use it, or add a separate property if this is a different parcel.`}
+          {byPin && editing
+            ? ' To combine the two, open the other record and choose Merge duplicate from Actions.'
+            : null}
+        </span>
+        <span className="flex flex-wrap gap-2">
+          {matches.slice(0, DUPLICATE_LIMIT).map(({ entity: existing }) => {
+            const label = `${existing.name}${
+              readString(existing.data.pin) ? ` (${readString(existing.data.pin)})` : ''
+            }`
+            return onChoose && !editing ? (
+              <Button
+                key={existing.id}
+                size="sm"
+                variant="primary"
+                onClick={() => onChoose(existing)}
+              >
+                Use {label}
+              </Button>
+            ) : (
+              <Link
+                key={existing.id}
+                to={entityHref('property', existing.id)}
+                onClick={onLeave}
+                className={buttonVariants({ size: 'sm' })}
+              >
+                Open {label}
+              </Link>
+            )
+          })}
+        </span>
+      </span>
+    </Notice>
   )
 }

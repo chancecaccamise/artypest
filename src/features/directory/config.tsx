@@ -65,6 +65,11 @@ export interface FieldDef {
   referenceList?: ReferenceList
   /** A fixed list to choose from, for a standard nobody should edit. */
   options?: readonly FieldOption[]
+  /**
+   * What the form fills in when the record has no value. A field with one
+   * offers no "Not set": the list is the whole of what it can be.
+   */
+  defaultValue?: string
   /** Notes are internal and never rendered for a resident. */
   internal?: boolean
   /** Rendered by a dedicated card instead of the generic grid. */
@@ -140,9 +145,23 @@ function orNotSet(value: string, render: (value: string) => ReactNode = (v) => v
   return value === '' ? <NotSet /> : render(value)
 }
 
-const RECORD_STATUS_TONE: Record<string, StatusTone> = {
+/**
+ * A record's status, from a fixed list. Every reader of it compares against
+ * these values, so it is never typed free.
+ *
+ * "Done" is stored as `closed`, the value a to do's checkbox, the dashboard,
+ * and the plat already treat as finished. The board's word is the label; the
+ * stored value did not need to move to change it.
+ */
+export const RECORD_STATUS_OPTIONS: readonly FieldOption[] = [
+  { value: 'open', label: 'Open' },
+  { value: 'on_hold', label: 'On hold' },
+  { value: 'closed', label: 'Done' },
+]
+
+export const RECORD_STATUS_TONE: Record<string, StatusTone> = {
   open: 'oxblood',
-  in_review: 'amber',
+  on_hold: 'amber',
   closed: 'moss',
 }
 
@@ -616,7 +635,9 @@ const recordConfig: DirectoryConfig = {
         const value = text(entity, 'status')
         if (value === '') return <NotSet />
         return (
-          <StatusBadge tone={RECORD_STATUS_TONE[value] ?? 'neutral'}>{humanize(value)}</StatusBadge>
+          <StatusBadge tone={RECORD_STATUS_TONE[value] ?? 'neutral'}>
+            {optionLabel(RECORD_STATUS_OPTIONS, value)}
+          </StatusBadge>
         )
       },
     },
@@ -638,20 +659,12 @@ const recordConfig: DirectoryConfig = {
   ],
   filters: [
     { key: 'recordType', label: 'Record type', referenceList: 'record_type' },
-    {
-      key: 'status',
-      label: 'Status',
-      options: [
-        { value: 'open', label: 'Open' },
-        { value: 'in_review', label: 'In review' },
-        { value: 'closed', label: 'Closed' },
-      ],
-    },
+    { key: 'status', label: 'Status', options: [...RECORD_STATUS_OPTIONS] },
   ],
   fields: [
     { key: 'recordNumber', label: 'Record number', format: 'mono' },
     { key: 'recordType', label: 'Record type', format: 'reference', referenceList: 'record_type' },
-    { key: 'status', label: 'Status' },
+    { key: 'status', label: 'Status', options: RECORD_STATUS_OPTIONS, defaultValue: 'open' },
     { key: 'occurredOn', label: 'Opened', format: 'date' },
     { key: 'followUpDate', label: 'Follow up', format: 'date' },
     { key: 'summary', label: 'Summary', format: 'longtext' },
