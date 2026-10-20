@@ -25,13 +25,23 @@ function graphFromDemo() {
 
 /* A hand-built graph, so the rules are tested against data the test controls. */
 const TYPES: RelationType[] = [
-  { id: 'rt-owns', orgId: 'o', key: 'owns', label: 'owns', reverseLabel: 'is owned by' },
+  {
+    id: 'rt-owns',
+    orgId: 'o',
+    key: 'owns',
+    label: 'owns',
+    reverseLabel: 'is owned by',
+    builtIn: true,
+    deletedAt: null,
+  },
   {
     id: 'rt-resides-at',
     orgId: 'o',
     key: 'resides_at',
     label: 'resides at',
     reverseLabel: 'is home to',
+    builtIn: true,
+    deletedAt: null,
   },
   {
     id: 'rt-member-of',
@@ -39,6 +49,8 @@ const TYPES: RelationType[] = [
     key: 'member_of',
     label: 'is a member of',
     reverseLabel: 'has member',
+    builtIn: true,
+    deletedAt: null,
   },
   {
     id: 'rt-vendor-for',
@@ -46,6 +58,8 @@ const TYPES: RelationType[] = [
     key: 'vendor_for',
     label: 'is a vendor for',
     reverseLabel: 'uses vendor',
+    builtIn: true,
+    deletedAt: null,
   },
 ]
 

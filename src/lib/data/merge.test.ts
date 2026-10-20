@@ -64,7 +64,7 @@ describe('mergeEntities', () => {
 
   it('moves the duplicate\'s connections onto the kept record and deletes it', async () => {
     const relation = await data.createRelation({
-      relationTypeId: typeId('rents'),
+      relationTypeId: typeId('rents_property'),
       fromEntityId: tenant.id,
       toEntityId: drop.id,
     })
@@ -91,7 +91,7 @@ describe('mergeEntities', () => {
   it('drops a connection both records already had, instead of drawing it twice', async () => {
     for (const lot of [keep, drop]) {
       await data.createRelation({
-        relationTypeId: typeId('rents'),
+        relationTypeId: typeId('rents_property'),
         fromEntityId: tenant.id,
         toEntityId: lot.id,
         startDate: lot === drop ? '2024-03-01' : null,
@@ -137,7 +137,7 @@ describe('mergeEntities', () => {
 
   it('runs as one batch, so Activity shows it as one action', async () => {
     await data.createRelation({
-      relationTypeId: typeId('rents'),
+      relationTypeId: typeId('rents_property'),
       fromEntityId: tenant.id,
       toEntityId: drop.id,
     })

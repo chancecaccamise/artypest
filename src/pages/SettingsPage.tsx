@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronDown, ChevronUp, Plug, Plus, RotateCcw } from 'lucide-react'
+import { ChevronDown, ChevronUp, Pencil, Plug, Plus, RotateCcw, Trash2 } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 import { StatusBadge } from '@/components/ui/badge'
 import { DatabasePanel } from '@/features/settings/DatabasePanel'
+import { RecordTypesPanel } from '@/features/settings/RecordTypesPanel'
 import { Button } from '@/components/ui/button'
 import { EmptyState, Notice } from '@/components/ui/empty-state'
 import { Checkbox, Field, Input, Select } from '@/components/ui/field'
@@ -15,11 +16,15 @@ import { Table, TableWrap, Tbody, Td, Th, Thead, Tr } from '@/components/ui/tabl
 import { TabPanel, Tabs, type TabDefinition } from '@/components/ui/tabs'
 import {
   useCreateReferenceItem,
+  useCreateRelationType,
+  useDeleteRelationType,
   useOrg,
   useReferenceItems,
+  useRelations,
   useRelationTypes,
   useUpdateOrg,
   useUpdateReferenceItem,
+  useUpdateRelationType,
   useUsers,
 } from '@/hooks/use-data'
 import {
@@ -32,6 +37,7 @@ import { formatDateTime } from '@/lib/format'
 import { hasLocalWork, isSharedRecords, onPersistenceError, resetLocalWork } from '@/lib/data'
 import { parcelService } from '@/lib/parcels'
 import { buildParcelViewerUrl } from '@/lib/parcels/pin'
+import { removalBlocker, usageByType } from '@/lib/relations/editing'
 import { ROLE_LABELS } from '@/lib/role'
 import { THEMES, useTheme } from '@/lib/theme'
 
@@ -40,6 +46,7 @@ const TABS: TabDefinition[] = [
   { value: 'integrations', label: 'Integrations' },
   { value: 'reference', label: 'Reference data' },
   { value: 'relations', label: 'Relation types' },
+  { value: 'record-types', label: 'Record types' },
   { value: 'appearance', label: 'Appearance' },
   { value: 'users', label: 'Users' },
 ]
@@ -82,6 +89,9 @@ export function SettingsPage() {
       </TabPanel>
       <TabPanel value="relations" active={active === 'relations'}>
         <RelationTypesTab />
+      </TabPanel>
+      <TabPanel value="record-types" active={active === 'record-types'}>
+        <RecordTypesPanel />
       </TabPanel>
       <TabPanel value="appearance" active={active === 'appearance'}>
         <AppearanceTab />
@@ -309,7 +319,8 @@ function ReferenceDataTab() {
         action={
           <Field label="List" hideLabel className="w-52">
             <Select value={list} onChange={(event) => setList(event.target.value as ReferenceList)}>
-              {REFERENCE_LISTS.map((value) => (
+              {/* Record types have a tab of their own. */}
+              {REFERENCE_LISTS.filter((value) => value !== 'record_type').map((value) => (
                 <option key={value} value={value}>
                   {REFERENCE_LIST_LABELS[value]}
                 </option>
@@ -467,16 +478,102 @@ function ReferenceDataTab() {
 
 function RelationTypesTab() {
   const relationTypes = useRelationTypes()
+  const relations = useRelations()
+  const createType = useCreateRelationType()
+  const updateType = useUpdateRelationType()
+  const deleteType = useDeleteRelationType()
+
+  const [label, setLabel] = useState('')
+  const [reverseLabel, setReverseLabel] = useState('')
+  const [editing, setEditing] = useState<{
+    id: string
+    label: string
+    reverseLabel: string
+  } | null>(null)
+  /** The row whose remove button was pressed, waiting on a yes or an explanation. */
+  const [removing, setRemoving] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const rows = useMemo(
+    () => [...(relationTypes.data ?? [])].sort((a, b) => a.key.localeCompare(b.key)),
+    [relationTypes.data]
+  )
+  const usage = useMemo(() => usageByType(relations.data ?? []), [relations.data])
+
+  const report = (cause: unknown) =>
+    setError(cause instanceof Error ? cause.message : 'That change could not be saved.')
+
+  const add = () => {
+    setError(null)
+    createType
+      .mutateAsync({ label, reverseLabel })
+      .then(() => {
+        setLabel('')
+        setReverseLabel('')
+      })
+      .catch(report)
+  }
+
+  const save = () => {
+    if (!editing) return
+    setError(null)
+    updateType
+      .mutateAsync({
+        id: editing.id,
+        patch: { label: editing.label, reverseLabel: editing.reverseLabel },
+      })
+      .then(() => setEditing(null))
+      .catch(report)
+  }
+
+  const remove = (id: string) => {
+    setError(null)
+    deleteType
+      .mutateAsync(id)
+      .then(() => setRemoving(null))
+      .catch(report)
+  }
 
   return (
     <Panel>
-      <PanelHeader
-        title="Relation types"
-        meta={`${relationTypes.data?.length ?? 0}`}
-        action={<span className="text-ink-faint text-xs">Read only in this phase</span>}
-      />
+      <PanelHeader title="Relation types" meta={`${rows.length}`} />
 
-      <PanelBody className="p-0">
+      <PanelBody className="flex flex-col gap-3 p-0">
+        <div className="border-rule flex flex-wrap items-end gap-2 border-b p-3">
+          <Field label="Reads as" className="max-w-xs flex-1">
+            <Input
+              value={label}
+              placeholder="mentors"
+              onChange={(event) => setLabel(event.target.value)}
+            />
+          </Field>
+          <Field label="Reads the other way" className="max-w-xs flex-1">
+            <Input
+              value={reverseLabel}
+              placeholder="is mentored by"
+              onChange={(event) => setReverseLabel(event.target.value)}
+            />
+          </Field>
+          <Button
+            variant="primary"
+            disabled={label.trim() === '' || createType.isPending}
+            onClick={add}
+          >
+            <Plus />
+            Add
+          </Button>
+          <p className="text-ink-faint basis-full text-xs">
+            Leave the second box empty for a connection that reads the same from both ends, like “is
+            related to”.
+          </p>
+        </div>
+
+        {error && (
+          <div className="px-3">
+            <Notice tone="error">{error}</Notice>
+          </div>
+        )}
+
         {relationTypes.isLoading ? (
           <div className="flex flex-col gap-2 p-3">
             {Array.from({ length: 6 }, (_, index) => (
@@ -488,21 +585,134 @@ function RelationTypesTab() {
             <Table>
               <Thead>
                 <tr>
-                  <Th className="w-44">Key</Th>
+                  <Th className="w-60">Key</Th>
                   <Th>Forward label</Th>
                   <Th>Reverse label</Th>
+                  <Th className="w-24">In use</Th>
+                  <Th className="w-56">
+                    <span className="sr-only">Actions</span>
+                  </Th>
                 </tr>
               </Thead>
               <Tbody>
-                {(relationTypes.data ?? []).map((type) => (
-                  <Tr key={type.id}>
-                    <Td>
-                      <IdChip>{type.key}</IdChip>
-                    </Td>
-                    <Td>{type.label}</Td>
-                    <Td className="text-ink-muted">{type.reverseLabel}</Td>
-                  </Tr>
-                ))}
+                {rows.map((type) => {
+                  const inUse = usage.get(type.id) ?? 0
+                  const blocker = removalBlocker(type, inUse)
+                  const isEditing = editing?.id === type.id
+
+                  return (
+                    <Tr key={type.id}>
+                      <Td>
+                        <span className="flex items-center gap-1.5 whitespace-nowrap">
+                          <IdChip>{type.key}</IdChip>
+                          {type.builtIn && <StatusBadge>Built in</StatusBadge>}
+                        </span>
+                      </Td>
+                      <Td>
+                        {isEditing ? (
+                          <Input
+                            value={editing.label}
+                            aria-label={`Forward label for ${type.key}`}
+                            className="h-8"
+                            onChange={(event) =>
+                              setEditing({ ...editing, label: event.target.value })
+                            }
+                          />
+                        ) : (
+                          type.label
+                        )}
+                      </Td>
+                      <Td className="text-ink-muted">
+                        {isEditing ? (
+                          <Input
+                            value={editing.reverseLabel}
+                            aria-label={`Reverse label for ${type.key}`}
+                            className="h-8"
+                            onChange={(event) =>
+                              setEditing({ ...editing, reverseLabel: event.target.value })
+                            }
+                          />
+                        ) : (
+                          type.reverseLabel
+                        )}
+                      </Td>
+                      <Td className="text-ink-muted font-mono text-xs">
+                        {inUse === 0 ? 'unused' : inUse.toLocaleString()}
+                      </Td>
+                      <Td>
+                        {isEditing ? (
+                          <span className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              disabled={updateType.isPending}
+                              onClick={save}
+                            >
+                              Save
+                            </Button>
+                            <Button size="sm" onClick={() => setEditing(null)}>
+                              Cancel
+                            </Button>
+                          </span>
+                        ) : removing === type.id ? (
+                          blocker ? (
+                            <span className="flex items-start gap-2">
+                              <span className="text-ink-muted text-xs">{blocker}</span>
+                              <Button size="sm" onClick={() => setRemoving(null)}>
+                                OK
+                              </Button>
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={deleteType.isPending}
+                                onClick={() => remove(type.id)}
+                              >
+                                Remove
+                              </Button>
+                              <Button size="sm" onClick={() => setRemoving(null)}>
+                                Cancel
+                              </Button>
+                            </span>
+                          )
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              aria-label={`Reword ${type.label}`}
+                              onClick={() => {
+                                setRemoving(null)
+                                setEditing({
+                                  id: type.id,
+                                  label: type.label,
+                                  reverseLabel: type.reverseLabel,
+                                })
+                              }}
+                            >
+                              <Pencil />
+                            </Button>
+                            {!type.builtIn && (
+                              <Button
+                                size="icon-sm"
+                                variant="ghost"
+                                aria-label={`Remove ${type.label}`}
+                                onClick={() => {
+                                  setEditing(null)
+                                  setRemoving(type.id)
+                                }}
+                              >
+                                <Trash2 />
+                              </Button>
+                            )}
+                          </span>
+                        )}
+                      </Td>
+                    </Tr>
+                  )
+                })}
               </Tbody>
             </Table>
           </TableWrap>
@@ -512,7 +722,9 @@ function RelationTypesTab() {
       <PanelFooter>
         <span>
           One row is stored per connection. Both directions are rendered from these two labels,
-          which is why a connection never has to be entered twice.
+          which is why a connection never has to be entered twice. Rewording a type changes how
+          every connection of that type reads. Built in types can be reworded but not removed,
+          because the map and the board roster rely on them.
         </span>
       </PanelFooter>
     </Panel>

@@ -1,5 +1,5 @@
 import type { DemoData } from './fixtures'
-import type { AuditEntry, Entity, Org, ReferenceItem, Relation } from './types'
+import type { AuditEntry, Entity, Org, ReferenceItem, Relation, RelationType } from './types'
 
 /*
   Keeping work between page loads, until Supabase does it properly.
@@ -49,6 +49,14 @@ export interface Overlay {
   /** Only entries about records in this overlay, so the log stays proportionate. */
   auditEntries: AuditEntry[]
   referenceItems: ReferenceItem[]
+  /** List items the board removed. Absent from older overlays, like relationTypes. */
+  removedReferenceItemIds?: string[]
+  /**
+   * Types the board added, reworded, or removed. Absent from overlays saved
+   * before the list could be edited, which is the same as nothing changed, so
+   * it does not need a version of its own.
+   */
+  relationTypes?: RelationType[]
 }
 
 /**
@@ -83,6 +91,7 @@ export function buildOverlay(current: DemoData, baseline: DemoData, now: string)
   const entities = changedById(current.entities, baseline.entities)
   const relations = changedById(current.relations, baseline.relations)
   const referenceItems = changedById(current.referenceItems, baseline.referenceItems)
+  const relationTypes = changedById(current.relationTypes, baseline.relationTypes)
 
   /*
     The audit log is append only, so anything the baseline does not have is
@@ -102,6 +111,8 @@ export function buildOverlay(current: DemoData, baseline: DemoData, now: string)
     removedRelationIds: relations.removedIds,
     auditEntries,
     referenceItems: referenceItems.changed,
+    removedReferenceItemIds: referenceItems.removedIds,
+    relationTypes: relationTypes.changed,
   }
 }
 
@@ -192,7 +203,12 @@ export function applyOverlay(baseline: DemoData, saved: Overlay): DemoData {
     org: overlay.org ?? baseline.org,
     entities: mergeById(baseline.entities, overlay.entities, overlay.removedEntityIds),
     relations: mergeById(baseline.relations, overlay.relations, overlay.removedRelationIds),
-    referenceItems: mergeById(baseline.referenceItems, overlay.referenceItems, []),
+    referenceItems: mergeById(
+      baseline.referenceItems,
+      overlay.referenceItems,
+      overlay.removedReferenceItemIds ?? []
+    ),
+    relationTypes: mergeById(baseline.relationTypes, overlay.relationTypes ?? [], []),
     auditEntries: [...baseline.auditEntries, ...overlay.auditEntries],
   }
 }
@@ -206,7 +222,9 @@ export function isEmptyOverlay(overlay: Overlay): boolean {
     overlay.relations.length === 0 &&
     overlay.removedRelationIds.length === 0 &&
     overlay.auditEntries.length === 0 &&
-    overlay.referenceItems.length === 0
+    overlay.referenceItems.length === 0 &&
+    (overlay.removedReferenceItemIds ?? []).length === 0 &&
+    (overlay.relationTypes ?? []).length === 0
   )
 }
 

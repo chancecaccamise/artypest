@@ -11,6 +11,7 @@ import {
   readNumber,
   readString,
 } from '@/lib/format'
+import { filesOf } from '@/lib/files'
 import { NAICS_SECTORS, naicsSector } from '@/lib/naics'
 
 /*
@@ -147,16 +148,13 @@ function orNotSet(value: string, render: (value: string) => ReactNode = (v) => v
 
 /**
  * A record's status, from a fixed list. Every reader of it compares against
- * these values, so it is never typed free.
- *
- * "Done" is stored as `closed`, the value a to do's checkbox, the dashboard,
- * and the plat already treat as finished. The board's word is the label; the
- * stored value did not need to move to change it.
+ * these values, so it is never typed free. "Closed" is also the word the
+ * activity log shows, since it prints the stored value.
  */
 export const RECORD_STATUS_OPTIONS: readonly FieldOption[] = [
   { value: 'open', label: 'Open' },
   { value: 'on_hold', label: 'On hold' },
-  { value: 'closed', label: 'Done' },
+  { value: 'closed', label: 'Closed' },
 ]
 
 export const RECORD_STATUS_TONE: Record<string, StatusTone> = {
@@ -676,6 +674,11 @@ const recordConfig: DirectoryConfig = {
   },
 }
 
+/*
+  A document is its file. The board asked for Document type and Pages to come
+  out of the form: the file says what it is and how long it is. Values already
+  saved on older documents stay in their data; nothing reads them now.
+*/
 const documentConfig: DirectoryConfig = {
   type: 'document',
   path: '/documents',
@@ -691,9 +694,13 @@ const documentConfig: DirectoryConfig = {
       render: (entity) => entity.name,
     },
     {
-      key: 'documentType',
-      label: 'Type',
-      render: (entity) => orNotSet(text(entity, 'documentType'), (value) => humanize(value)),
+      key: 'files',
+      label: 'File',
+      render: (entity) => {
+        const [first, ...rest] = filesOf(entity)
+        if (!first) return <NotSet />
+        return rest.length === 0 ? first.name : `${first.name} and ${String(rest.length)} more`
+      },
     },
     {
       key: 'effectiveDate',
@@ -702,40 +709,13 @@ const documentConfig: DirectoryConfig = {
       render: (entity) =>
         orNotSet(text(entity, 'effectiveDate'), (value) => <Mono>{formatDate(value)}</Mono>),
     },
-    {
-      key: 'pageCount',
-      label: 'Pages',
-      className: 'w-24 text-right',
-      render: (entity) => {
-        const value = number(entity, 'pageCount')
-        return value === null ? <NotSet /> : <Mono>{value}</Mono>
-      },
-    },
   ],
-  filters: [
-    {
-      key: 'documentType',
-      label: 'Document type',
-      options: [
-        { value: 'covenants', label: 'Covenants' },
-        { value: 'bylaws', label: 'Bylaws' },
-        { value: 'guidelines', label: 'Guidelines' },
-        { value: 'plat', label: 'Plat' },
-        { value: 'policy', label: 'Policy' },
-        { value: 'study', label: 'Study' },
-      ],
-    },
-  ],
+  filters: [],
   fields: [
-    { key: 'documentType', label: 'Document type' },
     { key: 'effectiveDate', label: 'Effective date', format: 'date' },
-    { key: 'pageCount', label: 'Pages', format: 'number' },
     { key: 'notes', label: 'Notes', format: 'longtext', internal: true, hiddenFromGrid: true },
   ],
-  chips: (entity) => {
-    const documentType = text(entity, 'documentType')
-    return documentType === '' ? [] : [{ value: humanize(documentType) }]
-  },
+  chips: () => [],
 }
 
 export const DIRECTORY_CONFIGS: Record<EntityType, DirectoryConfig> = {

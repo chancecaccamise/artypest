@@ -1,13 +1,23 @@
+import {
+  DEMO_MAX_FILE_BYTES,
+  fileSizeProblem,
+  filesOf,
+  isFileList,
+  readFileAsDataUrl,
+} from '../files'
 import { readString } from '../format'
 import { centroidForPin } from '../geo'
 import { geocodeSync } from '../geocoding'
 import { resolveGraph } from '../insights'
 import { resolveAllLocations, resolveLocation, type ResolveContext } from '../locations/resolve'
+import { normalizePatch, planRelationType, removalBlocker, usageByType } from '../relations/editing'
+import { referenceRemovalBlocker, referenceUsage } from '../reference-items'
 import { buildReviewIndex, reviewStateOf } from '../review/status'
 import { buildDemoData, type DemoData } from './fixtures'
 import { getActiveActor } from './actor'
 import { ENTITY_TYPES } from './types'
 import type {
+  Attachment,
   ActivityEntry,
   AuditEntry,
   AuditSource,
@@ -31,6 +41,8 @@ import type {
   RelationInput,
   RelationPatch,
   RelationType,
+  RelationTypeInput,
+  RelationTypePatch,
   ResolvedLocation,
   ReviewIndex,
 } from './types'
@@ -95,6 +107,10 @@ function isPhotoDataUrl(value: unknown): value is string {
 */
 function forAuditLog(value: unknown, rendered: string | null): string | null {
   if (isPhotoDataUrl(value)) return 'a photograph'
+  // An emptied list, of images or files, reads as not set rather than as "[]".
+  if (Array.isArray(value) && value.length === 0) return null
+  // Files by name: the stored path is a data URL in the demo, and not for reading.
+  if (isFileList(value)) return value.map((file) => file.name).join(', ')
   if (Array.isArray(value) && value.length > 0 && value.every(isPhotoDataUrl)) {
     return value.length === 1 ? '1 image' : `${String(value.length)} images`
   }
@@ -112,6 +128,8 @@ export interface MemoryStore extends DataProvider {
   upsertRelations(rows: readonly Relation[]): void
   setOrg(org: Org): void
   setRelationTypes(types: readonly RelationType[]): void
+  /** Every type, removed ones included, which is what adding one checks against. */
+  getRelationTypes(): RelationType[]
   setReferenceItems(items: readonly ReferenceItem[]): void
   setUsers(users: readonly OrgUser[]): void
   /** Replaces the log the hand mark reads. See SyncedProvider. */
@@ -187,6 +205,10 @@ class MemoryProvider implements MemoryStore {
 
   setRelationTypes(types: readonly RelationType[]): void {
     this.relationTypes = clone([...types])
+  }
+
+  getRelationTypes(): RelationType[] {
+    return clone(this.relationTypes)
   }
 
   setReferenceItems(items: readonly ReferenceItem[]): void {
@@ -448,6 +470,51 @@ class MemoryProvider implements MemoryStore {
     return Promise.resolve(buildReviewIndex(this.entities, this.auditEntries))
   }
 
+  /* --------------------------------------------------------------- files -- */
+
+  readonly maxFileBytes = DEMO_MAX_FILE_BYTES
+
+  async attachFile(entityId: string, file: File): Promise<Entity> {
+    const problem = fileSizeProblem(file, this.maxFileBytes)
+    if (problem) throw new Error(problem)
+    const path = await readFileAsDataUrl(file)
+
+    // Read after the file, so an edit made while it was reading is kept.
+    const entity = this.entities.find((candidate) => candidate.id === entityId)
+    if (!entity) throw new Error(`No entity with id ${entityId}`)
+    const attachment: Attachment = {
+      id: nextId(),
+      name: file.name,
+      size: file.size,
+      contentType: file.type || 'application/octet-stream',
+      path,
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: getActiveActor(),
+    }
+    return this.updateEntity(entityId, {
+      data: { ...entity.data, files: [...filesOf(entity), attachment] },
+    })
+  }
+
+  removeFile(entityId: string, fileId: string): Promise<Entity> {
+    const entity = this.entities.find((candidate) => candidate.id === entityId)
+    if (!entity) throw new Error(`No entity with id ${entityId}`)
+    // The bytes are the data URL on the record, so taking it off deletes them.
+    return this.updateEntity(entityId, {
+      data: { ...entity.data, files: filesOf(entity).filter((file) => file.id !== fileId) },
+    })
+  }
+
+  /*
+    A data URL cannot be opened in a new tab: browsers refuse top-level
+    navigation to them. A blob URL can, where the browser offers one.
+  */
+  async getFileUrl(file: Attachment): Promise<string> {
+    if (typeof URL.createObjectURL !== 'function') return file.path
+    const blob = await (await fetch(file.path)).blob()
+    return URL.createObjectURL(blob)
+  }
+
   getActor(): Promise<string> {
     return Promise.resolve(getActiveActor())
   }
@@ -475,7 +542,55 @@ class MemoryProvider implements MemoryStore {
   /* ----------------------------------------------------------- relations -- */
 
   listRelationTypes(): Promise<RelationType[]> {
-    return Promise.resolve(clone(this.relationTypes))
+    // Falsy rather than null: a database the migration has not reached yet sends no column.
+    return Promise.resolve(clone(this.relationTypes.filter((type) => !type.deletedAt)))
+  }
+
+  /*
+    Refusals here are the board's to read, so they arrive as a rejected promise
+    as they do from the shared records, never as a throw before one exists.
+  */
+  createRelationType(input: RelationTypeInput): Promise<RelationType> {
+    return Promise.resolve().then(() => {
+      const plan = planRelationType(input, this.relationTypes)
+      if (plan.kind === 'revive') {
+        const type = this.relationTypes.find((candidate) => candidate.id === plan.id)
+        if (!type) throw new Error(`No relation type with id ${plan.id}`)
+        Object.assign(type, { label: plan.label, reverseLabel: plan.reverseLabel, deletedAt: null })
+        return clone(type)
+      }
+      const type: RelationType = {
+        id: nextId(),
+        orgId: this.org.id,
+        key: plan.key,
+        label: plan.label,
+        reverseLabel: plan.reverseLabel,
+        builtIn: false,
+        deletedAt: null,
+      }
+      this.relationTypes.push(type)
+      return clone(type)
+    })
+  }
+
+  updateRelationType(id: string, patch: RelationTypePatch): Promise<RelationType> {
+    return Promise.resolve().then(() => {
+      const type = this.relationTypes.find((candidate) => candidate.id === id)
+      if (!type) throw new Error(`No relation type with id ${id}`)
+      Object.assign(type, normalizePatch(patch))
+      return clone(type)
+    })
+  }
+
+  deleteRelationType(id: string): Promise<RelationType> {
+    return Promise.resolve().then(() => {
+      const type = this.relationTypes.find((candidate) => candidate.id === id)
+      if (!type) throw new Error(`No relation type with id ${id}`)
+      const blocker = removalBlocker(type, usageByType(this.relations).get(id) ?? 0)
+      if (blocker) throw new Error(blocker)
+      type.deletedAt = new Date().toISOString()
+      return clone(type)
+    })
   }
 
   listRelations(entityId?: string): Promise<Relation[]> {
@@ -693,6 +808,18 @@ class MemoryProvider implements MemoryStore {
     if (patch.active !== undefined) item.active = patch.active
 
     return Promise.resolve(clone(item))
+  }
+
+  deleteReferenceItem(id: string): Promise<ReferenceItem> {
+    return Promise.resolve().then(() => {
+      const item = this.referenceItems.find((candidate) => candidate.id === id)
+      if (!item) throw new Error(`No reference item with id ${id}`)
+      const inUse = referenceUsage(this.entities, item.list).get(item.value) ?? 0
+      const blocker = referenceRemovalBlocker(item, inUse)
+      if (blocker) throw new Error(blocker)
+      this.referenceItems = this.referenceItems.filter((candidate) => candidate.id !== id)
+      return clone(item)
+    })
   }
 
   /* --------------------------------------------------------------- users -- */

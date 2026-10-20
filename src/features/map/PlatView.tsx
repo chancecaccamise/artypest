@@ -10,7 +10,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { Crosshair, LocateFixed, Maximize2, Minus, Plus } from 'lucide-react'
+import { Crosshair, ExternalLink, LocateFixed, Maximize2, Minus, Plus } from 'lucide-react'
 
 import { arcColor, arcPath, arcStroke, type MapArc } from './arcs'
 import { buildRecencyScale } from '@/lib/relations/recency'
@@ -26,9 +26,10 @@ import {
 import type { OverlayCollection } from '@/lib/overlays'
 import { useHarvestedParcels } from './use-harvested-parcels'
 import type { Theming } from './theming'
+import { entityHref } from '@/components/layout/nav-config'
 import { Button } from '@/components/ui/button'
-import { entityTypeColor } from '@/components/ui/badge'
-import type { Entity, ResolvedLocation } from '@/lib/data/types'
+import { entityTypeColor, TypeBadge } from '@/components/ui/badge'
+import { ENTITY_TYPE_LABELS, type Entity, type ResolvedLocation } from '@/lib/data/types'
 import type { Point } from '@/lib/geocoding/types'
 import { readString } from '@/lib/format'
 import { normalizePin } from '@/lib/parcels/pin'
@@ -112,6 +113,19 @@ const MAX_DRAWN_PARCELS = 6000
 
 /** Below this the plat draws every lot and never consults the viewport. */
 const CULL_THRESHOLD = 500
+
+/*
+  How long a record's preview stays after the pointer leaves its dot. Long
+  enough to travel from the dot into the card, which is where the link is;
+  short enough that sweeping across a cluster does not leave a trail of cards.
+*/
+const PREVIEW_CLOSE_MS = 250
+
+/** The card's width in pixels, for keeping it inside the plat. Matches w-72. */
+const PREVIEW_WIDTH = 288
+
+/** Connections listed on the card before it says how many more there are. */
+const PREVIEW_CONNECTIONS = 4
 
 export interface PlatMarker {
   entity: Entity
@@ -203,6 +217,34 @@ export function PlatView({
     transformRef.current = transform
   }, [transform])
   const [hoveredPin, setHoveredPin] = useState<string | null>(null)
+
+  /*
+    The record whose dot is under the pointer, previewed in a card that holds a
+    link to it. Closing waits a moment, so the pointer can leave the dot for the
+    card without the card vanishing on the way.
+  */
+  const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const holdPreview = useCallback(() => {
+    if (closeTimer.current === null) return
+    clearTimeout(closeTimer.current)
+    closeTimer.current = null
+  }, [])
+  const hoverMarker = useCallback(
+    (entityId: string | null) => {
+      holdPreview()
+      if (entityId !== null) {
+        setHoveredEntityId(entityId)
+        return
+      }
+      closeTimer.current = setTimeout(() => {
+        closeTimer.current = null
+        setHoveredEntityId(null)
+      }, PREVIEW_CLOSE_MS)
+    },
+    [holdPreview]
+  )
+  useEffect(() => holdPreview, [holdPreview])
 
   useLayoutEffect(() => {
     const element = containerRef.current
@@ -731,6 +773,25 @@ export function PlatView({
     return scales
   }, [arcs])
 
+  /*
+    Records at either end of a drawn connection. Their dots take the pointer
+    even where they sit on a lot: following a connection to the dot at its end
+    is the reason to be looking at it, and a click there that selected the lot
+    underneath was the commonest way to lose one's place.
+  */
+  const arcEnds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const arc of arcs) {
+      ids.add(arc.fromEntityId)
+      ids.add(arc.toEntityId)
+    }
+    return ids
+  }, [arcs])
+
+  const hoveredMarker = hoveredEntityId
+    ? (projectedMarkers.find((marker) => marker.entity.id === hoveredEntityId) ?? null)
+    : null
+
   const projectedArcs = useMemo(() => {
     return arcs
       .map((arc) => {
@@ -836,6 +897,10 @@ export function PlatView({
                 ? (arcScales.get(arc.relationKey)?.strengthOf(arc.relationId) ?? 1)
                 : 1
               const stroke = arcStroke({ current: arc.current, strength, bold: boldArcs })
+              // The previewed record's own connections stand out from the rest.
+              const lit =
+                hoveredEntityId !== null &&
+                (arc.fromEntityId === hoveredEntityId || arc.toEntityId === hoveredEntityId)
 
               return (
                 <path
@@ -843,10 +908,10 @@ export function PlatView({
                   d={d}
                   fill="none"
                   stroke={arcColor(arc.relationKey)}
-                  strokeWidth={stroke.strokeWidth / zoomLevel}
+                  strokeWidth={(stroke.strokeWidth * (lit ? 2 : 1)) / zoomLevel}
                   strokeLinecap="round"
                   strokeDasharray={scaleDash(stroke.strokeDasharray, zoomLevel)}
-                  opacity={stroke.opacity}
+                  opacity={lit ? 1 : stroke.opacity}
                 />
               )
             })}
@@ -858,8 +923,15 @@ export function PlatView({
                 key={marker.entity.id}
                 marker={marker}
                 selected={marker.entity.id === selectedEntityId}
+                hovered={marker.entity.id === hoveredEntityId}
+                interactive={
+                  !marker.onDrawnLot ||
+                  arcEnds.has(marker.entity.id) ||
+                  marker.entity.id === selectedEntityId
+                }
                 zoom={zoomLevel}
                 onSelect={onSelectEntity}
+                onHover={hoverMarker}
               />
             ))}
           </g>
@@ -978,7 +1050,23 @@ export function PlatView({
         </div>
       ) : null}
 
-      {hoveredPin && !placingEntity ? (
+      {hoveredMarker && !placingEntity ? (
+        <MarkerPreview
+          marker={hoveredMarker}
+          arcs={arcs}
+          selected={hoveredMarker.entity.id === selectedEntityId}
+          anchor={[
+            hoveredMarker.screen[0] * transform.k + transform.x,
+            hoveredMarker.screen[1] * transform.k + transform.y,
+          ]}
+          bounds={size}
+          onSelect={onSelectEntity}
+          onHold={holdPreview}
+          onRelease={() => hoverMarker(null)}
+        />
+      ) : null}
+
+      {hoveredPin && !hoveredMarker && !placingEntity ? (
         <div
           role="tooltip"
           className="panel pointer-events-none absolute right-2 bottom-8 max-w-72 px-2.5 py-2"
@@ -1073,24 +1161,50 @@ const Parcel = memo(function Parcel({
 interface MarkerProps {
   marker: PlatMarker & { screen: [number, number] }
   selected: boolean
+  hovered: boolean
+  /** False for a dot on a drawn lot that nothing points at: the lot takes the click. */
+  interactive: boolean
   zoom: number
   onSelect: (entityId: string) => void
+  onHover: (entityId: string | null) => void
 }
 
-const Marker = memo(function Marker({ marker, selected, zoom, onSelect }: MarkerProps) {
+/** The radius, in screen pixels, a dot answers to. Larger than it is drawn. */
+const MARKER_HIT_RADIUS = 10
+
+const Marker = memo(function Marker({
+  marker,
+  selected,
+  hovered,
+  interactive,
+  zoom,
+  onSelect,
+  onHover,
+}: MarkerProps) {
   const [x, y] = marker.screen
   const color = entityTypeColor(marker.entity.type)
-  const radius = (selected ? 6 : marker.onDrawnLot ? 3.5 : 4.5) / zoom
+  const radius = (selected || hovered ? 6 : marker.onDrawnLot ? 3.5 : 4.5) / zoom
 
   return (
     <g
-      className={marker.onDrawnLot ? undefined : 'cursor-pointer'}
-      pointerEvents={marker.onDrawnLot ? 'none' : undefined}
+      data-entity-id={marker.entity.id}
+      className={interactive ? 'cursor-pointer' : undefined}
+      pointerEvents={interactive ? undefined : 'none'}
       onClick={(event) => {
         event.stopPropagation()
         onSelect(marker.entity.id)
       }}
+      onPointerEnter={() => onHover(marker.entity.id)}
+      onPointerLeave={() => onHover(null)}
     >
+      {/*
+        The target, invisible and a good deal larger than the dot: a four
+        pixel circle is a hard thing to land a pointer on, and missing it by a
+        pixel selected the lot underneath.
+      */}
+      {interactive ? (
+        <circle cx={x} cy={y} r={MARKER_HIT_RADIUS / zoom} fill="transparent" />
+      ) : null}
       <circle
         cx={x}
         cy={y}
@@ -1099,24 +1213,115 @@ const Marker = memo(function Marker({ marker, selected, zoom, onSelect }: Marker
         stroke="var(--paper-raised)"
         strokeWidth={1.5 / zoom}
       />
-      {selected ? (
+      {selected || hovered ? (
         <circle
           cx={x}
           cy={y}
           r={radius * 2.2}
           fill="none"
           stroke={color}
-          strokeWidth={1 / zoom}
-          opacity={0.6}
+          strokeWidth={(hovered ? 2 : 1) / zoom}
+          opacity={hovered ? 0.9 : 0.6}
         />
       ) : null}
-      <title>
-        {marker.entity.name}
-        {marker.location.precision === 'derived' ? ` (${marker.location.explanation})` : ''}
-      </title>
     </g>
   )
 })
+
+/* --------------------------------------------------------------- preview -- */
+
+interface MarkerPreviewProps {
+  marker: PlatMarker
+  arcs: readonly MapArc[]
+  selected: boolean
+  /** The dot, in pixels from the plat's top left. */
+  anchor: [number, number]
+  bounds: { width: number; height: number }
+  onSelect: (entityId: string) => void
+  /** The pointer is on the card: keep it open. */
+  onHold: () => void
+  /** The pointer has left the card: let it close. */
+  onRelease: () => void
+}
+
+/*
+  What a dot is, without leaving the plat.
+
+  The link opens the record in a new tab, so the plat stays as it was: the
+  selection, the connections switched on, the zoom. Selecting is still offered,
+  for when moving the plat's attention to this record is what the reader wants.
+*/
+function MarkerPreview({
+  marker,
+  arcs,
+  selected,
+  anchor,
+  bounds,
+  onSelect,
+  onHold,
+  onRelease,
+}: MarkerPreviewProps) {
+  const { entity, location } = marker
+  const connections = arcs.filter(
+    (arc) => arc.fromEntityId === entity.id || arc.toEntityId === entity.id
+  )
+  const shown = connections.slice(0, PREVIEW_CONNECTIONS)
+
+  // Beside the dot, on whichever side has room, and never off the plat.
+  const gap = 14
+  const fitsRight = anchor[0] + gap + PREVIEW_WIDTH <= bounds.width - 8
+  const left = fitsRight ? anchor[0] + gap : Math.max(8, anchor[0] - gap - PREVIEW_WIDTH)
+  const top = Math.min(Math.max(8, anchor[1] - 16), Math.max(8, bounds.height - 220))
+
+  return (
+    <div
+      role="dialog"
+      aria-label={`Preview of ${entity.name}`}
+      className="panel panel-enter absolute z-20 flex w-72 flex-col gap-2 px-3 py-2.5"
+      style={{ left, top }}
+      onPointerEnter={onHold}
+      onPointerLeave={onRelease}
+    >
+      <div className="flex items-start gap-2">
+        <TypeBadge type={entity.type}>{ENTITY_TYPE_LABELS[entity.type].singular}</TypeBadge>
+        <p className="text-ink text-13 min-w-0 flex-1 font-semibold">{entity.name}</p>
+      </div>
+
+      {connections.length > 0 ? (
+        <ul className="flex flex-col gap-1">
+          {shown.map((arc) => (
+            <li key={arc.relationId} className="text-ink-muted text-xs">
+              {arc.fromName} <span className="text-ink">{arc.relationLabel}</span> {arc.toName}
+              {arc.current ? '' : ' (ended)'}
+            </li>
+          ))}
+          {connections.length > shown.length ? (
+            <li className="text-ink-faint text-xs">and {connections.length - shown.length} more</li>
+          ) : null}
+        </ul>
+      ) : null}
+
+      <p className="text-ink-faint text-[0.6875rem]">{location.explanation}</p>
+
+      <div className="border-rule flex items-center justify-between gap-2 border-t pt-2">
+        <a
+          href={entityHref(entity.type, entity.id)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-survey inline-flex items-center gap-1 text-xs font-medium hover:underline"
+        >
+          Open in a new tab
+          <ExternalLink className="size-3" aria-hidden="true" />
+        </a>
+        {selected ? null : (
+          <Button size="sm" variant="ghost" onClick={() => onSelect(entity.id)}>
+            Select on the plat
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
 
 /** Exported for the panel, which shows the same short form beside the full PIN. */
 export { shortPin }

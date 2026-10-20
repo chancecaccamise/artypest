@@ -11,8 +11,12 @@ import {
   type PendingPropertyLink,
   PropertyLinkFields,
 } from '@/features/directory/PropertyLinkFields'
+import { LinkedItemsField } from '@/features/directory/LinkedItemsField'
+import { PendingFilesField } from '@/features/directory/PendingFilesField'
 import {
+  maxFileBytes,
   useAllEntities,
+  useAttachFile,
   useCreateEntityWithRelations,
   useRelationTypes,
   useUpdateEntity,
@@ -86,6 +90,7 @@ export function EntityFormDialog({
   const createEntity = useCreateEntityWithRelations()
   const relationTypes = useRelationTypes()
   const updateEntity = useUpdateEntity()
+  const attachFile = useAttachFile()
   const allEntities = useAllEntities()
 
   const [name, setName] = useState('')
@@ -93,6 +98,14 @@ export function EntityFormDialog({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [propertyLinks, setPropertyLinks] = useState<PendingPropertyLink[]>([])
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  /** What a new record is about, each saved as a "references" connection. */
+  const [linkedIds, setLinkedIds] = useState<string[]>([])
+  /**
+   * Set when the record was saved but a file was not attached. The record
+   * exists, so the form must not offer to save it a second time.
+   */
+  const [savedWithProblems, setSavedWithProblems] = useState<Entity | null>(null)
 
   /*
     Reset whenever the dialog opens, so a cancelled edit does not leak into the
@@ -117,11 +130,19 @@ export function EntityFormDialog({
       setErrors({})
       setSubmitError(null)
       setPropertyLinks([])
+      setPendingFiles([])
+      setLinkedIds([])
+      setSavedWithProblems(null)
     }
   }
 
   const isEditing = Boolean(entity)
-  const pending = createEntity.isPending || updateEntity.isPending
+  const pending = createEntity.isPending || updateEntity.isPending || attachFile.isPending
+
+  const finish = (created: Entity) => {
+    onCreated?.(created)
+    onClose()
+  }
 
   /*
     Checked as the reader types, not on submit, so the existing lot is offered
@@ -155,6 +176,8 @@ export function EntityFormDialog({
   }
 
   const submit = async () => {
+    // Already saved; only its files went wrong. Saving again would make a second record.
+    if (savedWithProblems) return
     setSubmitError(null)
 
     if (pinDuplicate) {
@@ -200,6 +223,11 @@ export function EntityFormDialog({
         )
         const unresolved = propertyLinks.find((link) => !relationTypeByKey.has(link.relationKey))
         if (unresolved) throw new Error('A selected property relationship is not available.')
+        // A record points at what it is about; the other end reads "is referenced by".
+        const references = relationTypeByKey.get('references')
+        if (linkedIds.length > 0 && !references) {
+          throw new Error('Records cannot be linked until the "references" connection type exists.')
+        }
 
         const created = await createEntity.mutateAsync({
           entity: {
@@ -207,16 +235,41 @@ export function EntityFormDialog({
             name: parsed.data.name,
             data: parsed.data.data,
           },
-          relations: propertyLinks.map((link) => {
-            const relationType = relationTypeByKey.get(link.relationKey)
-            if (!relationType) throw new Error('A selected property relationship is not available.')
-            return {
-              relationTypeId: relationType.id,
-              toEntityId: link.propertyId,
-            }
-          }),
+          relations: [
+            ...propertyLinks.map((link) => {
+              const relationType = relationTypeByKey.get(link.relationKey)
+              if (!relationType) {
+                throw new Error('A selected property relationship is not available.')
+              }
+              return {
+                relationTypeId: relationType.id,
+                toEntityId: link.propertyId,
+              }
+            }),
+            ...linkedIds.map((toEntityId) => ({
+              relationTypeId: references?.id ?? '',
+              toEntityId,
+            })),
+          ],
         })
-        onCreated?.(created)
+
+        const failed: string[] = []
+        for (const file of pendingFiles) {
+          try {
+            await attachFile.mutateAsync({ entityId: created.id, file })
+          } catch (caught) {
+            failed.push(caught instanceof Error ? caught.message : `${file.name} was not attached.`)
+          }
+        }
+        if (failed.length > 0) {
+          setSavedWithProblems(created)
+          setSubmitError(
+            `${config.singular} added, but not every file was attached. ${failed.join(' ')} Attach the rest from its Files tab.`
+          )
+          return
+        }
+        finish(created)
+        return
       }
       onClose()
     } catch (error) {
@@ -246,20 +299,26 @@ export function EntityFormDialog({
           : `A new ${config.singular.toLowerCase()} in ${ENTITY_TYPE_LABELS[type].plural.toLowerCase()}.`)
       }
       footer={
-        <>
-          <Button onClick={onClose} disabled={pending}>
-            Cancel
+        savedWithProblems ? (
+          <Button variant="primary" onClick={() => finish(savedWithProblems)}>
+            Done
           </Button>
-          <Button variant="primary" type="submit" form="entity-form" disabled={pending}>
-            {pending
-              ? 'Saving'
-              : isEditing
-                ? 'Save changes'
-                : duplicates.length > 0
-                  ? 'Add as a separate property'
-                  : (submitLabel ?? `Add ${config.singular.toLowerCase()}`)}
-          </Button>
-        </>
+        ) : (
+          <>
+            <Button onClick={onClose} disabled={pending}>
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit" form="entity-form" disabled={pending}>
+              {pending
+                ? 'Saving'
+                : isEditing
+                  ? 'Save changes'
+                  : duplicates.length > 0
+                    ? 'Add as a separate property'
+                    : (submitLabel ?? `Add ${config.singular.toLowerCase()}`)}
+            </Button>
+          </>
+        )
       }
     >
       {duplicates.length > 0 ? (
@@ -392,6 +451,18 @@ export function EntityFormDialog({
 
         {!isEditing && (type === 'person' || type === 'business') ? (
           <PropertyLinkFields type={type} value={propertyLinks} onChange={setPropertyLinks} />
+        ) : null}
+
+        {!isEditing && type === 'record' && !savedWithProblems ? (
+          <LinkedItemsField value={linkedIds} onChange={setLinkedIds} />
+        ) : null}
+
+        {!isEditing && !savedWithProblems ? (
+          <PendingFilesField
+            value={pendingFiles}
+            onChange={setPendingFiles}
+            maxBytes={maxFileBytes()}
+          />
         ) : null}
       </form>
     </Dialog>

@@ -5,7 +5,7 @@
   "Closed" or "Done", and every list, the dashboard, and the overdue check
   compare against "closed". Those records stayed open everywhere that counted.
 
-  The form now offers three: Open, On hold, and Done, stored as `open`,
+  The form now offers three: Open, On hold, and Closed, stored as `open`,
   `on_hold`, and `closed`. This brings what was already typed onto them, once
   case, spacing, and punctuation are set aside. "In review", the old middle
   status, becomes On hold. Anything else is left as typed, and the form keeps

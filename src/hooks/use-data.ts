@@ -5,6 +5,7 @@ import { data } from '@/lib/data'
 import { mergeEntities } from '@/lib/data/merge'
 import { useAuth } from '@/lib/auth'
 import type {
+  Attachment,
   Entity,
   EntityInput,
   EntityPatch,
@@ -16,6 +17,8 @@ import type {
   ReferenceList,
   RelationInput,
   RelationPatch,
+  RelationTypeInput,
+  RelationTypePatch,
 } from '@/lib/data/types'
 import type { Point } from '@/lib/geocoding/types'
 import { resolveGraph, type ResolvedGraph } from '@/lib/insights'
@@ -316,6 +319,78 @@ export function useUpdateReferenceItem() {
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: ReferenceItemPatch }) =>
       data.updateReferenceItem(id, patch),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['reference'] }),
+  })
+}
+
+/* ---------------------------------------------------------------- files -- */
+
+/** Stores a file and adds it to the record, which audits it like any other edit. */
+export function useAttachFile() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ entityId, file }: { entityId: string; file: File }) =>
+      data.attachFile(entityId, file),
+    onSuccess: () => invalidateAll(client),
+  })
+}
+
+export function useRemoveFile() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ entityId, fileId }: { entityId: string; fileId: string }) =>
+      data.removeFile(entityId, fileId),
+    onSuccess: () => invalidateAll(client),
+  })
+}
+
+/**
+ * Asks for a link when it is about to be used, not when the list renders: in
+ * the shared records a link expires within a minute.
+ */
+export function fileUrl(file: Attachment, download: boolean): Promise<string> {
+  return data.getFileUrl(file, { download })
+}
+
+/** The largest file the current store accepts, which differs in the demo. */
+export function maxFileBytes(): number {
+  return data.maxFileBytes
+}
+
+/*
+  Relation types change how every connection reads, on every page and in the
+  map, so they invalidate the types and leave the rest to the graph hooks that
+  are built from them.
+*/
+export function useCreateRelationType() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: RelationTypeInput) => data.createRelationType(input),
+    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.relationTypes }),
+  })
+}
+
+export function useUpdateRelationType() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: RelationTypePatch }) =>
+      data.updateRelationType(id, patch),
+    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.relationTypes }),
+  })
+}
+
+export function useDeleteRelationType() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => data.deleteRelationType(id),
+    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.relationTypes }),
+  })
+}
+
+export function useDeleteReferenceItem() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => data.deleteReferenceItem(id),
     onSuccess: () => client.invalidateQueries({ queryKey: ['reference'] }),
   })
 }

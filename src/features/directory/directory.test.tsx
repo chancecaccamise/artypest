@@ -41,6 +41,16 @@ describe('detail view', () => {
     expect(links.map((link) => link.getAttribute('href'))).toContain(`/map/${property.id}`)
   })
 
+  it('links to the Plat View beside it, for every kind of record', async () => {
+    const association = await data.createEntity({ type: 'association', name: 'Garden Club' })
+    renderWithProviders(<App />, { route: `/associations/${association.id}` })
+
+    await screen.findByRole('heading', { level: 1, name: 'Garden Club' })
+    // As with the Connection Map, the sidebar's link opens the whole plat; this one, the record.
+    const links = screen.getAllByRole('link', { name: 'Plat View' })
+    expect(links.map((link) => link.getAttribute('href'))).toContain(`/plat/${association.id}`)
+  })
+
   it('shows every tab and lands on Details', async () => {
     renderWithProviders(<App />, { route: `/properties/${property.id}` })
 
@@ -176,14 +186,14 @@ describe('detail view', () => {
     )
   })
 
-  it('labels the files tab as arriving in Phase 2 instead of accepting a file', async () => {
+  it('accepts files on every kind of record, not only assets', async () => {
     const user = userEvent.setup()
     renderWithProviders(<App />, { route: `/properties/${property.id}` })
 
     const tablist = await screen.findByRole('tablist')
-    await user.click(within(tablist).getByRole('tab', { name: 'Files' }))
+    await user.click(within(tablist).getByRole('tab', { name: /^Files/ }))
 
-    expect(await screen.findByRole('button', { name: /Upload/ })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Attach files' })).toBeEnabled()
   })
 })
 

@@ -197,7 +197,7 @@ export function resolveLocation(
     property: () => resolveProperty(entity, ctx),
 
     person: () => {
-      for (const home of currentlyLinked(entity, ['resides_at', 'rents'], ctx, 'from')) {
+      for (const home of currentlyLinked(entity, ['resides_at', 'rents_property'], ctx, 'from')) {
         const found = via(home, 'residence', 'Lives at')
         if (found) return found
       }
@@ -222,7 +222,7 @@ export function resolveLocation(
         const found = via(lot, 'ownership', 'Owns')
         if (found) return found
       }
-      for (const lot of currentlyLinked(entity, ['rents'], ctx, 'from')) {
+      for (const lot of currentlyLinked(entity, ['rents_property'], ctx, 'from')) {
         if (lot.type !== 'property') continue
         const found = via(lot, 'related', 'Rents')
         if (found) return found

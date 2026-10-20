@@ -136,7 +136,11 @@ export function buildDemoData(
     createdAt: stamp(-1460, 14),
   }
 
-  const relationTypes: RelationType[] = [
+  /*
+    Every one of these is read by key somewhere in the application, so all of
+    them are built in: the same thirteen 20261020120000 marks in the database.
+  */
+  const seededTypes: Omit<RelationType, 'builtIn' | 'deletedAt'>[] = [
     { id: 'rt-owns', orgId: ORG_ID, key: 'owns', label: 'owns', reverseLabel: 'is owned by' },
     {
       id: 'rt-resides-at',
@@ -146,9 +150,9 @@ export function buildDemoData(
       reverseLabel: 'is home to',
     },
     {
-      id: 'rt-rents',
+      id: 'rt-rents-property',
       orgId: ORG_ID,
-      key: 'rents',
+      key: 'rents_property',
       label: 'rents property',
       reverseLabel: 'is rented by',
     },
@@ -223,6 +227,11 @@ export function buildDemoData(
       reverseLabel: 'is referenced by',
     },
   ]
+  const relationTypes: RelationType[] = seededTypes.map((type) => ({
+    ...type,
+    builtIn: true,
+    deletedAt: null,
+  }))
 
   const entities: Entity[] = []
   const relations: Relation[] = []

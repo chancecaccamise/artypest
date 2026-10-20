@@ -71,6 +71,24 @@ export interface Entity {
   reviewedBy: string | null
 }
 
+/**
+ * A file on a record, as the record describes it in `data.files`.
+ *
+ * The bytes are elsewhere: in the shared records, a private Storage object at
+ * `path`; in the demo, which has nowhere else to put them, a data URL in
+ * `path` itself, which is why the demo's limit is so much smaller.
+ */
+export interface Attachment {
+  id: string
+  /** As it was on the computer it came from, extension and all. */
+  name: string
+  size: number
+  contentType: string
+  path: string
+  uploadedAt: string
+  uploadedBy: string | null
+}
+
 export interface RelationType {
   id: string
   orgId: string
@@ -79,7 +97,23 @@ export interface RelationType {
   label: string
   /** Rendered on the reverse edge, for example "is owned by". */
   reverseLabel: string
+  /**
+   * Read by key somewhere in the application: the plat, the location cascade,
+   * the roster. Can be reworded, never removed. The board's own types are not.
+   */
+  builtIn: boolean
+  /**
+   * Soft delete. Only possible once no current connection uses the type, so
+   * the only connections still pointing at a removed type are removed ones.
+   */
+  deletedAt: string | null
 }
+
+/** A type the board adds. The key is derived from the label. */
+export type RelationTypeInput = Pick<RelationType, 'label' | 'reverseLabel'>
+
+/** Wording only. Keys are what stored connections and the code hold on to. */
+export type RelationTypePatch = Partial<Pick<RelationType, 'label' | 'reverseLabel'>>
 
 /*
   Bidirectionality is a read concern. One stored row, rendered both directions
@@ -183,6 +217,17 @@ export const REFERENCE_LIST_LABELS: Record<ReferenceList, string> = {
   property_use: 'Property use',
   association_type: 'Association type',
   record_type: 'Record type',
+}
+
+/**
+ * Where each list's value is stored on a record. A list item in use is one
+ * some record holds in this field, which is what decides whether it can go.
+ */
+export const REFERENCE_LIST_FIELDS: Record<ReferenceList, { type: EntityType; field: string }> = {
+  zoning: { type: 'property', field: 'zoning' },
+  property_use: { type: 'property', field: 'propertyUse' },
+  association_type: { type: 'association', field: 'associationType' },
+  record_type: { type: 'record', field: 'recordType' },
 }
 
 export interface ReferenceItem {
@@ -359,7 +404,16 @@ export interface DataProvider {
   restoreEntity(id: string): Promise<Entity>
   deleteEntity(id: string): Promise<Entity>
 
+  /** Current types only. A removed type is used by nothing that is still shown. */
   listRelationTypes(): Promise<RelationType[]>
+  /**
+   * Adds a type, or brings back a removed one with the same key. Refuses a
+   * name a current type already has.
+   */
+  createRelationType(input: RelationTypeInput): Promise<RelationType>
+  updateRelationType(id: string, patch: RelationTypePatch): Promise<RelationType>
+  /** Refuses a built in type, and any type a current connection still uses. */
+  deleteRelationType(id: string): Promise<RelationType>
   listRelations(entityId?: string): Promise<Relation[]>
   createRelation(input: RelationInput): Promise<Relation>
   updateRelation(id: string, patch: RelationPatch): Promise<Relation>
@@ -386,6 +440,21 @@ export interface DataProvider {
   /** Hand-mark state for every record that has one. */
   listReviewIndex(): Promise<ReviewIndex>
 
+  /**
+   * Stores a file and adds it to the record's `data.files`, which is what
+   * audits it. Refuses a file over the limit for where it is being kept.
+   */
+  attachFile(entityId: string, file: File): Promise<Entity>
+  /** Takes the file off the record and deletes what was stored. */
+  removeFile(entityId: string, fileId: string): Promise<Entity>
+  /**
+   * A link that opens the file, or with `download` saves it under its own
+   * name. In the shared records it expires, so it is asked for when needed.
+   */
+  getFileUrl(file: Attachment, options?: { download?: boolean }): Promise<string>
+  /** The largest file this store accepts, in bytes. */
+  readonly maxFileBytes: number
+
   /** The signed-in person, as the audit log records them. */
   getActor(): Promise<string>
 
@@ -399,6 +468,11 @@ export interface DataProvider {
   listReferenceItems(list?: ReferenceList): Promise<ReferenceItem[]>
   createReferenceItem(input: ReferenceItemInput): Promise<ReferenceItem>
   updateReferenceItem(id: string, patch: ReferenceItemPatch): Promise<ReferenceItem>
+  /**
+   * Removes an item outright. Refuses one any record still holds: deactivating
+   * is the way to retire a value that is in use.
+   */
+  deleteReferenceItem(id: string): Promise<ReferenceItem>
 
   listUsers(): Promise<OrgUser[]>
 

@@ -206,7 +206,15 @@ describe('buildImportPlan', () => {
       parcels: [parcel()],
       entities: [stored, owner],
       relationTypes: [
-        { id: 'rt-owns', orgId: 'org', key: 'owns', label: 'owns', reverseLabel: 'is owned by' },
+        {
+          id: 'rt-owns',
+          orgId: 'org',
+          key: 'owns',
+          label: 'owns',
+          reverseLabel: 'is owned by',
+          builtIn: true,
+          deletedAt: null,
+        },
       ],
       relations: [
         {

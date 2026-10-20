@@ -61,6 +61,8 @@ const TYPES: RelationType[] = [
     key: 'member_of',
     label: 'is a member of',
     reverseLabel: 'has member',
+    builtIn: true,
+    deletedAt: null,
   },
 ]
 

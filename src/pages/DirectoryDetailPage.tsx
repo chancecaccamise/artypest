@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Archive, ArchiveRestore, ChevronDown, Merge, Network, Pencil, Trash2 } from 'lucide-react'
+import {
+  Archive,
+  ArchiveRestore,
+  ChevronDown,
+  Map as MapIcon,
+  Merge,
+  Network,
+  Pencil,
+  Trash2,
+} from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 import { entityHref } from '@/components/layout/nav-config'
@@ -39,6 +48,7 @@ import {
 } from '@/hooks/use-data'
 import { ENTITY_TYPE_LABELS, type Entity, type EntityType } from '@/lib/data/types'
 import { duplicatesOfProperty } from '@/lib/duplicates'
+import { filesOf } from '@/lib/files'
 import { formatDateTime } from '@/lib/format'
 import { stateFor } from '@/lib/review/status'
 import { useMemberName } from '@/lib/auth'
@@ -108,6 +118,9 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
     const withCounts = availableTabs.map((definition) => {
       if (definition.value === 'images') {
         return { ...definition, count: current ? imagesOf(current).length : undefined }
+      }
+      if (definition.value === 'files') {
+        return { ...definition, count: current ? filesOf(current).length : undefined }
       }
       if (definition.value === 'connections') {
         return { ...definition, count: relationsQuery.data ? connections : undefined }
@@ -211,7 +224,9 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
             ))}
             {/*
               Beside the name rather than only inside the Connections tab, so
-              the map is one click from any record, for every role.
+              the map is one click from any record, for every role. The plat
+              likewise: it opens on this record, or, for one with no location
+              yet, says so and offers to place it.
             */}
             <Link
               to={`/map/${entity.id}`}
@@ -219,6 +234,10 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
             >
               <Network />
               Connection Map
+            </Link>
+            <Link to={`/plat/${entity.id}`} className={buttonVariants({ size: 'sm' })}>
+              <MapIcon />
+              Plat View
             </Link>
           </span>
         }
@@ -408,7 +427,7 @@ export function DirectoryDetailPage({ type }: { type: EntityType }) {
         <RecordsTab entity={entity} />
       </TabPanel>
       <TabPanel value="files" active={tab === 'files'}>
-        <FilesTab />
+        {entity ? <FilesTab entity={entity} /> : null}
       </TabPanel>
       <TabPanel value="notes" active={tab === 'notes'}>
         <NotesTab entity={entity} />

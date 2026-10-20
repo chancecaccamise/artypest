@@ -22,7 +22,7 @@ async function overdueRecord() {
 }
 
 describe('record status', () => {
-  it('offers only Open, On hold, and Done', async () => {
+  it('offers only Open, On hold, and Closed', async () => {
     const record = await overdueRecord()
     renderWithProviders(<App />, { route: `/records/${record.id}` })
 
@@ -31,7 +31,7 @@ describe('record status', () => {
       within(status)
         .getAllByRole('option')
         .map((option) => option.textContent)
-    ).toEqual(['Open', 'On hold', 'Done'])
+    ).toEqual(['Open', 'On hold', 'Closed'])
   })
 
   it('changes from the record page header', async () => {
@@ -48,13 +48,13 @@ describe('record status', () => {
     })
   })
 
-  it('marks an overdue record done from the Needs attention line, which clears it', async () => {
+  it('closes an overdue record from the Needs attention line, which clears it', async () => {
     const record = await overdueRecord()
     const user = userEvent.setup()
     renderWithProviders(<App />, { route: `/records/${record.id}` })
 
     const attention = await screen.findByRole('region', { name: 'Needs attention' })
-    await user.click(within(attention).getByRole('button', { name: 'Mark done' }))
+    await user.click(within(attention).getByRole('button', { name: 'Mark closed' }))
 
     await waitFor(() => {
       expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument()
@@ -76,6 +76,6 @@ describe('record status', () => {
       within(status)
         .getAllByRole('option')
         .map((option) => option.textContent)
-    ).toEqual(['Open', 'On hold', 'Done'])
+    ).toEqual(['Open', 'On hold', 'Closed'])
   })
 })

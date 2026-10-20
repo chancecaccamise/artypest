@@ -1199,3 +1199,84 @@ since, the copy wins.
 **Why.** Each admin's work existed only on their own machine, and neither could
 see the other's. Their earlier History is not carried over: the database's
 audit log is written by triggers, and the copy is recorded as the change it is.
+
+### The board maintains its own relation types, within two limits
+
+**Chosen.** Settings, Relation types, lets the board add a type, reword any
+type, and remove a type it added (20261020120000_editable_relation_types.sql).
+The thirteen types that existed before are marked `built_in`: they can be
+reworded but never removed or re-keyed. A type a current connection uses cannot
+be removed until those connections are changed or removed. Removal is a soft
+delete, and adding the same name again brings the old row back.
+
+**Why.** The client asked to add and remove relation types without waiting on a
+release. The built in thirteen are read by key in the plat, the location
+cascade, the board roster, and the insights, so removing one would break a
+feature rather than shorten a list. Refusing removal while in use, rather than
+removing the connections with it, means nothing disappears from the Connection
+Map without someone deleting it. Both rules are enforced by triggers as well as
+in the app, because RLS lets any signed in board member write to the table.
+
+### Files on a record live in Storage, described on the record
+
+**Chosen.** The Files tab on every record, and an Attach files section in the
+Add form, store files in a private Supabase Storage bucket, `record-files`
+(20261020130000_record_files.sql), at `<org_id>/<record_id>/<file_id>/<name>`.
+The record keeps a description of each in `data.files`, so attaching or
+removing a file is an ordinary audited edit and History names the file. Files
+are read through links that expire after a minute. Any file type is accepted,
+up to 25 MB. Removing a file deletes the stored object.
+
+**Why.** The client asked for PDFs and JSON files on assets. Every record type
+already had a Files tab waiting on Storage, so all of them get it at no extra
+cost. A separate attachments table would have been one more thing to keep in
+step with `entities`; `data.files` rides on the audit trigger that already
+exists. The policies filter on the first folder, which is how `org_id` reaches
+a table this schema does not own.
+
+**The demo** has no Storage, so it keeps a file inside the record as a data URL
+in this browser, with a 1 MB limit so a couple of PDFs cannot fill local
+storage. The page states the limit.
+
+### Record types get their own Settings tab, and list items can be removed
+
+**Chosen.** Settings has a Record types tab, beside Relation types, for the
+same `record_type` reference list that Reference data used to hold (it is no
+longer offered there). The board can add, rename, reorder, turn off, and
+remove types, and sees how many records use each. Removing works for any
+list item no record holds; one in use can only be turned off. The database
+refuses the same removal (20261020140000_removable_list_items.sql).
+
+**Why.** The client does not yet know which record types the board will use
+and asked to manage them like relation types. Records store the value, not the
+label, so renaming never rewrites a record, and refusing removal while a record
+holds the value means no record is left with a type its list cannot name.
+Turning a type off already covered retiring one that is in use.
+
+To dos are records with the type `todo`, which the To do tab sets. It is not on
+this list and cannot be removed here.
+
+### A new record links to what it is about through "references"
+
+**Chosen.** The Add record form has a Linked to section that searches the whole
+directory. Each item chosen becomes a `references` connection from the record,
+created with it.
+
+**Why.** The client asked to link a record (a letter to draft, say) to the
+organization it concerns. A connection already does everything that needs:
+the Records tab on every item lists records connected to it, the Connection
+Map draws it, and History audits it. A new field on the record would have done
+none of that without more code. `references` is built in, so it cannot be
+removed out from under the form. Existing records are linked the same way,
+from their Connections tab.
+
+### Documents ask for the file, not its type and length
+
+**Chosen.** Document type and Pages are gone from the Add and Edit forms, the
+Documents list, and its filter. The list shows the attached file instead.
+Values already saved on older documents stay in their data and are not shown.
+
+**Why.** The client struck both out once a document could carry its file: the
+file says what it is and how long it is. Document type was also free text in
+the form against fixed values in the filter, so a typed "Covenant" never
+matched "Covenants".

@@ -207,7 +207,7 @@ describe('merging a duplicate into a county lot', () => {
     })
     const person = firstOf('person')
     const relation = await provider.createRelation({
-      relationTypeId: 'db-rents',
+      relationTypeId: 'db-rents_property',
       fromEntityId: person.id,
       toEntityId: duplicate.id,
     })

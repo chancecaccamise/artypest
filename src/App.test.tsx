@@ -183,7 +183,7 @@ describe('settings', () => {
     expect(screen.getByText(/no API key/)).toBeInTheDocument()
   })
 
-  it('lists the thirteen relation types read only, with both directions', async () => {
+  it('lists the thirteen built in relation types, with both directions', async () => {
     renderWithProviders(<App />, { route: '/settings/relations' })
 
     const table = await screen.findByRole('table')
@@ -191,8 +191,49 @@ describe('settings', () => {
       // Thirteen types and the header row.
       expect(within(table).getAllByRole('row').length).toBe(14)
     })
-    expect(screen.getByText('Read only in this phase')).toBeInTheDocument()
     expect(within(table).getByText('is owned by')).toBeInTheDocument()
+    expect(within(table).getAllByText('Built in')).toHaveLength(13)
+    // The map and the roster read these by key, so they can be reworded but not removed.
+    expect(within(table).getByRole('button', { name: 'Reword owns' })).toBeInTheDocument()
+    expect(within(table).queryByRole('button', { name: 'Remove owns' })).not.toBeInTheDocument()
+  })
+
+  it('lets the board add a relation type, reword it, and remove it', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<App />, { route: '/settings/relations' })
+
+    await user.type(await screen.findByLabelText('Reads as'), 'Mentors')
+    await user.type(screen.getByLabelText('Reads the other way'), 'is mentored by')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+
+    const table = screen.getByRole('table')
+    expect(await within(table).findByText('is mentored by')).toBeInTheDocument()
+    // Stored lower case, so it reads naturally mid-sentence: the key and the label.
+    expect(within(table).getAllByText('mentors')).toHaveLength(2)
+
+    await user.click(within(table).getByRole('button', { name: 'Reword mentors' }))
+    const forward = within(table).getByLabelText('Forward label for mentors')
+    await user.clear(forward)
+    await user.type(forward, 'coaches')
+    await user.click(within(table).getByRole('button', { name: 'Save' }))
+    expect(await within(table).findByText('coaches')).toBeInTheDocument()
+
+    await user.click(within(table).getByRole('button', { name: 'Remove coaches' }))
+    await user.click(within(table).getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(within(table).queryByText('coaches')).not.toBeInTheDocument())
+    expect(await data.listRelationTypes()).toHaveLength(13)
+  })
+
+  it('refuses a name a relation type already has', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<App />, { route: '/settings/relations' })
+
+    await user.type(await screen.findByLabelText('Reads as'), 'Owns')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+
+    expect(
+      await screen.findByText('There is already a connection type called "owns".')
+    ).toBeInTheDocument()
   })
 })
 

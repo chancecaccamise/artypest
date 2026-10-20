@@ -72,7 +72,7 @@ describe('merging a duplicate that already exists', () => {
       data: { pin: lot.data.pin },
     })
     const types = await data.listRelationTypes()
-    const rents = types.find((type) => type.key === 'rents')
+    const rents = types.find((type) => type.key === 'rents_property')
     await data.createRelation({
       relationTypeId: rents?.id ?? '',
       fromEntityId: person.id,

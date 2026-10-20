@@ -34,6 +34,8 @@ export interface FakeRemote extends RemoteStore {
   materialized: string[]
   entityRows(): Entity[]
   auditRows(): AuditEntry[]
+  /** Paths in the fake bucket, so a test can see a file come and go. */
+  storedPaths(): string[]
 }
 
 export interface FakeRemoteSeed {
@@ -53,6 +55,8 @@ export function createFakeRemote(seed: FakeRemoteSeed): FakeRemote {
   const audit: AuditEntry[] = []
   let org = clone(seed.org)
   let referenceItems = clone(seed.referenceItems ?? [])
+  let relationTypes = clone(seed.relationTypes)
+  const storedFiles = new Map<string, File>()
   /** Null follows the signed-in account, as the database's session would. */
   let explicitActor: string | null = null
   const who = () => explicitActor ?? getActiveActor()
@@ -102,11 +106,12 @@ export function createFakeRemote(seed: FakeRemoteSeed): FakeRemote {
     materialized,
     entityRows: () => [...entities.values()].map(clone),
     auditRows: () => clone(audit),
+    storedPaths: () => [...storedFiles.keys()],
 
     loadAll(): Promise<RemoteSnapshot> {
       return Promise.resolve({
         org: clone(org),
-        relationTypes: clone(seed.relationTypes),
+        relationTypes: clone(relationTypes),
         referenceItems: clone(referenceItems),
         users: clone(seed.users ?? []),
         entities: [...entities.values()].map(clone),
@@ -245,6 +250,38 @@ export function createFakeRemote(seed: FakeRemoteSeed): FakeRemote {
       referenceItems = referenceItems.map((item) => (item.id === id ? { ...item, ...changes } : item))
       const found = referenceItems.find((item) => item.id === id)
       return found ? Promise.resolve(clone(found)) : Promise.reject(new Error(`No item ${id}`))
+    },
+
+    deleteReferenceItem(id) {
+      referenceItems = referenceItems.filter((item) => item.id !== id)
+      return Promise.resolve()
+    },
+
+    insertRelationType(type) {
+      relationTypes = [...relationTypes, clone(type)]
+      return Promise.resolve(clone(type))
+    },
+
+    updateRelationType(id, changes) {
+      relationTypes = relationTypes.map((type) => (type.id === id ? { ...type, ...changes } : type))
+      const found = relationTypes.find((type) => type.id === id)
+      return found ? Promise.resolve(clone(found)) : Promise.reject(new Error(`No type ${id}`))
+    },
+
+    uploadFile(path, file) {
+      if (storedFiles.has(path)) return Promise.reject(new Error(`${path} already exists`))
+      storedFiles.set(path, file)
+      return Promise.resolve()
+    },
+
+    removeStoredFile(path) {
+      storedFiles.delete(path)
+      return Promise.resolve()
+    },
+
+    storedFileUrl(path, downloadAs) {
+      if (!storedFiles.has(path)) return Promise.reject(new Error(`No file at ${path}`))
+      return Promise.resolve(`https://storage.test/${path}${downloadAs ? `?download=${downloadAs}` : ''}`)
     },
 
     listAuditEntries(recordId) {

@@ -198,9 +198,7 @@ export const recordDataSchema = z.object({
 })
 
 export const documentDataSchema = z.object({
-  documentType: optionalText,
   effectiveDate: optionalDate,
-  pageCount: optionalNumber,
   notes: optionalText,
 })
 

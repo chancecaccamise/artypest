@@ -74,7 +74,7 @@ export function NeedsAttentionNotice({
           ? [
               { label: 'Change follow-up date', run: () => onEditField('followUpDate') },
               {
-                label: 'Mark done',
+                label: 'Mark closed',
                 run: () =>
                   update.mutate({
                     id: entity.id,

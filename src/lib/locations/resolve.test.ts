@@ -13,13 +13,23 @@ const TODAY = new Date('2026-08-01T00:00:00.000Z')
 const PLATTED_PIN = PARCELS.features[0]?.properties.pin ?? ''
 
 const TYPES: RelationType[] = [
-  { id: 'rt-owns', orgId: 'o', key: 'owns', label: 'owns', reverseLabel: 'is owned by' },
+  {
+    id: 'rt-owns',
+    orgId: 'o',
+    key: 'owns',
+    label: 'owns',
+    reverseLabel: 'is owned by',
+    builtIn: true,
+    deletedAt: null,
+  },
   {
     id: 'rt-resides-at',
     orgId: 'o',
     key: 'resides_at',
     label: 'resides at',
     reverseLabel: 'is home to',
+    builtIn: true,
+    deletedAt: null,
   },
   {
     id: 'rt-related-to',
@@ -27,14 +37,26 @@ const TYPES: RelationType[] = [
     key: 'related_to',
     label: 'is related to',
     reverseLabel: 'is related to',
+    builtIn: true,
+    deletedAt: null,
   },
-  { id: 'rt-manages', orgId: 'o', key: 'manages', label: 'manages', reverseLabel: 'is managed by' },
+  {
+    id: 'rt-manages',
+    orgId: 'o',
+    key: 'manages',
+    label: 'manages',
+    reverseLabel: 'is managed by',
+    builtIn: true,
+    deletedAt: null,
+  },
   {
     id: 'rt-governs',
     orgId: 'o',
     key: 'governs',
     label: 'governs',
     reverseLabel: 'is governed by',
+    builtIn: true,
+    deletedAt: null,
   },
   {
     id: 'rt-adjacent-to',
@@ -42,6 +64,8 @@ const TYPES: RelationType[] = [
     key: 'adjacent_to',
     label: 'is adjacent to',
     reverseLabel: 'is adjacent to',
+    builtIn: true,
+    deletedAt: null,
   },
   {
     id: 'rt-references',
@@ -49,6 +73,8 @@ const TYPES: RelationType[] = [
     key: 'references',
     label: 'references',
     reverseLabel: 'is referenced by',
+    builtIn: true,
+    deletedAt: null,
   },
 ]
 

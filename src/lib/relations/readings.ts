@@ -28,7 +28,7 @@ export interface ConnectionReading {
 const MAIN: readonly [string, ReadingDirection][] = [
   ['owns', 'out'],
   ['resides_at', 'out'],
-  ['rents', 'out'],
+  ['rents_property', 'out'],
   ['rents_from', 'out'],
   ['member_of', 'out'],
   ['executive_of', 'out'],

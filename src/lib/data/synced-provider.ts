@@ -1,7 +1,11 @@
+import { fileSizeProblem, filesOf, SHARED_MAX_FILE_BYTES, storagePath } from '../files'
+import { referenceRemovalBlocker, referenceUsage } from '../reference-items'
+import { normalizePatch, planRelationType, removalBlocker, usageByType } from '../relations/editing'
 import { createMemoryStore, type MemoryStore } from './memory-provider'
 import type { RemoteSnapshot, RemoteStore, WriteContext } from './remote'
 import type {
   ActivityEntry,
+  Attachment,
   AuditEntry,
   AuditSource,
   DataProvider,
@@ -21,6 +25,9 @@ import type {
   Relation,
   RelationInput,
   RelationPatch,
+  RelationType,
+  RelationTypeInput,
+  RelationTypePatch,
 } from './types'
 
 /*
@@ -374,6 +381,109 @@ class Synced implements SyncedProvider {
     return saved
   }
 
+  /* --------------------------------------------------------------- files -- */
+
+  readonly maxFileBytes = SHARED_MAX_FILE_BYTES
+
+  /*
+    Stored first, then described on the record. The other order would leave a
+    record naming a file that is not there if the upload failed; this one at
+    worst leaves an object nothing names, which costs a few bytes.
+  */
+  async attachFile(entityId: string, file: File): Promise<Entity> {
+    const problem = fileSizeProblem(file, this.maxFileBytes)
+    if (problem) throw new Error(problem)
+
+    const id = crypto.randomUUID()
+    const path = storagePath(this.orgId, entityId, id, file.name)
+    await this.remote.uploadFile(path, file)
+
+    const entity = await this.memory.getEntity(entityId)
+    if (!entity) throw new Error(`No entity with id ${entityId}`)
+    const attachment: Attachment = {
+      id,
+      name: file.name,
+      size: file.size,
+      contentType: file.type || 'application/octet-stream',
+      path,
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: await this.getActor(),
+    }
+    return this.updateEntity(entityId, {
+      data: { ...entity.data, files: [...filesOf(entity), attachment] },
+    })
+  }
+
+  /* Off the record first, so a failed delete leaves an unnamed object, not a dead link. */
+  async removeFile(entityId: string, fileId: string): Promise<Entity> {
+    const entity = await this.memory.getEntity(entityId)
+    if (!entity) throw new Error(`No entity with id ${entityId}`)
+    const files = filesOf(entity)
+    const file = files.find((candidate) => candidate.id === fileId)
+    const saved = await this.updateEntity(entityId, {
+      data: { ...entity.data, files: files.filter((candidate) => candidate.id !== fileId) },
+    })
+    if (file) await this.remote.removeStoredFile(file.path)
+    return saved
+  }
+
+  getFileUrl(file: Attachment, options?: { download?: boolean }): Promise<string> {
+    return this.remote.storedFileUrl(file.path, options?.download ? file.name : null)
+  }
+
+  /* ------------------------------------------------------ relation types -- */
+
+  async createRelationType(input: RelationTypeInput): Promise<RelationType> {
+    const all = this.memory.getRelationTypes()
+    const plan = planRelationType(input, all)
+    const saved =
+      plan.kind === 'revive'
+        ? await this.remote.updateRelationType(plan.id, {
+            label: plan.label,
+            reverseLabel: plan.reverseLabel,
+            deletedAt: null,
+          })
+        : await this.remote.insertRelationType({
+            id: crypto.randomUUID(),
+            orgId: this.orgId,
+            key: plan.key,
+            label: plan.label,
+            reverseLabel: plan.reverseLabel,
+            builtIn: false,
+            deletedAt: null,
+          })
+    this.memory.setRelationTypes([...all.filter((type) => type.id !== saved.id), saved])
+    return saved
+  }
+
+  async updateRelationType(id: string, patch: RelationTypePatch): Promise<RelationType> {
+    const saved = await this.remote.updateRelationType(id, normalizePatch(patch))
+    this.replaceRelationType(saved)
+    return saved
+  }
+
+  async deleteRelationType(id: string): Promise<RelationType> {
+    const type = this.memory.getRelationTypes().find((candidate) => candidate.id === id)
+    if (!type) throw new Error(`No relation type with id ${id}`)
+    const blocker = removalBlocker(
+      type,
+      usageByType(await this.memory.listRelations()).get(id) ?? 0
+    )
+    if (blocker) throw new Error(blocker)
+    // The database checks again, against connections this browser has not seen yet.
+    const saved = await this.remote.updateRelationType(id, {
+      deletedAt: new Date().toISOString(),
+    })
+    this.replaceRelationType(saved)
+    return saved
+  }
+
+  private replaceRelationType(saved: RelationType): void {
+    this.memory.setRelationTypes(
+      this.memory.getRelationTypes().map((type) => (type.id === saved.id ? saved : type))
+    )
+  }
+
   async createReferenceItem(input: ReferenceItemInput): Promise<ReferenceItem> {
     const siblings = await this.memory.listReferenceItems(input.list)
     const saved = await this.remote.insertReferenceItem({
@@ -401,6 +511,20 @@ class Synced implements SyncedProvider {
     const all = await this.memory.listReferenceItems()
     this.memory.setReferenceItems(all.map((item) => (item.id === id ? saved : item)))
     return saved
+  }
+
+  async deleteReferenceItem(id: string): Promise<ReferenceItem> {
+    const all = await this.memory.listReferenceItems()
+    const item = all.find((candidate) => candidate.id === id)
+    if (!item) throw new Error(`No reference item with id ${id}`)
+    const entities = await this.memory.listAllEntities()
+    const inUse = referenceUsage(entities, item.list).get(item.value) ?? 0
+    const blocker = referenceRemovalBlocker(item, inUse)
+    if (blocker) throw new Error(blocker)
+    // The database checks again, against records this browser has not seen yet.
+    await this.remote.deleteReferenceItem(id)
+    this.memory.setReferenceItems(all.filter((candidate) => candidate.id !== id))
+    return item
   }
 
   /* ----------------------------------------------------------------- batch -- */

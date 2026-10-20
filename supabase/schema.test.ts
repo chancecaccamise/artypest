@@ -25,6 +25,7 @@ const ORG = '00000000-0000-4000-a000-000000000001'
 /*
   Enough of Supabase for the migration to compile. `auth.uid()` reads the same
   setting PostgREST populates, so policies can be exercised by setting it.
+  Storage is the two tables and one helper the file policies touch.
 */
 const AUTH_STUB = `
   create schema if not exists auth;
@@ -34,21 +35,50 @@ const AUTH_STUB = `
     $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   create or replace function auth.jwt() returns jsonb language sql stable as
     $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
+
+  create schema if not exists storage;
+  create table storage.buckets (
+    id text primary key, name text not null, public boolean default false, file_size_limit bigint
+  );
+  create table storage.objects (
+    id uuid primary key default gen_random_uuid(),
+    bucket_id text references storage.buckets (id),
+    name text not null
+  );
+  alter table storage.objects enable row level security;
+  grant usage on schema storage to authenticated;
+  grant all on storage.objects to authenticated;
+  create or replace function storage.foldername(name text) returns text[] language sql immutable as
+    $$ select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1] $$;
 `
 
-async function freshDatabase(): Promise<PGlite> {
-  const db = new PGlite()
-  await db.exec(AUTH_STUB)
-
-  // In filename order, which is the order Supabase applies them in.
-  const files = readdirSync(MIGRATIONS)
+/** Migration files in filename order, which is the order Supabase applies them in. */
+function migrationFiles(): string[] {
+  return readdirSync(MIGRATIONS)
     .filter((name) => name.endsWith('.sql'))
     .sort()
+}
 
-  expect(files.length).toBeGreaterThan(0)
+async function runMigrations(db: PGlite, files: readonly string[]): Promise<void> {
   for (const file of files) {
     await db.exec(readFileSync(join(MIGRATIONS, file), 'utf8'))
   }
+}
+
+/**
+ * A database with every migration applied, or only those before `stopBefore`,
+ * for testing what a migration does to rows that existed before it.
+ */
+async function freshDatabase(stopBefore?: string): Promise<PGlite> {
+  const db = new PGlite()
+  await db.exec(AUTH_STUB)
+
+  const files = migrationFiles()
+  expect(files.length).toBeGreaterThan(0)
+  await runMigrations(
+    db,
+    stopBefore === undefined ? files : files.filter((file) => file < stopBefore)
+  )
   return db
 }
 
@@ -155,52 +185,57 @@ describe('the migrations', () => {
   it('splits "rents" into renting a property and renting from someone', async () => {
     const labels = await db.query<{ key: string; label: string; reverse_label: string }>(
       `select key, label, reverse_label from relation_types
-       where key in ('rents', 'rents_from') order by key`
+       where key like 'rents%' order by key`
     )
+    // No plain `rents` is left, as a key or as a label.
     expect(labels.rows).toEqual([
-      { key: 'rents', label: 'rents property', reverse_label: 'is rented by' },
       { key: 'rents_from', label: 'rents from', reverse_label: 'rents to' },
+      { key: 'rents_property', label: 'rents property', reverse_label: 'is rented by' },
     ])
   })
 
   it('moves an old "rents" connection to "rents from" only when the other end is not a property', async () => {
-    const made = await db.query<{ id: string; type: string }>(
+    // As the hosted database was: everything before the split, with connections already made.
+    const before = await freshDatabase('20261019120000')
+    const made = await before.query<{ id: string }>(
       `insert into entities (org_id, type, name) values
          ($1, 'business', 'Knack Pottery'),
          ($1, 'business', '40 Space'),
          ($1, 'property', '104 E 40th St')
-       returning id, type`,
+       returning id`,
       [ORG]
     )
     const [tenant, landlord, lot] = made.rows
-    const rents = await db.query<{ id: string }>(
+    const rents = await before.query<{ id: string }>(
       `select id from relation_types where org_id = $1 and key = 'rents'`,
       [ORG]
     )
-    const inserted = await db.query<{ id: string }>(
+    const inserted = await before.query<{ id: string }>(
       `insert into relations (org_id, relation_type_id, from_entity_id, to_entity_id)
        values ($1, $2, $3, $4), ($1, $2, $3, $5) returning id`,
       [ORG, rents.rows[0]?.id, tenant?.id, landlord?.id, lot?.id]
     )
 
-    const file = readdirSync(MIGRATIONS).find((name) => name.endsWith('_rents_from.sql'))
-    await db.exec(readFileSync(join(MIGRATIONS, file ?? ''), 'utf8'))
+    const rest = migrationFiles().filter((file) => file >= '20261019120000')
+    await runMigrations(before, rest)
+    // Applied by hand once already, then again by `db push`: nothing moves twice.
+    await runMigrations(before, rest)
 
-    const keys = await db.query<{ to_entity_id: string; key: string }>(
+    const keys = await before.query<{ to_entity_id: string; key: string }>(
       `select r.to_entity_id, t.key from relations r
        join relation_types t on t.id = r.relation_type_id
        where r.id = any($1::uuid[])`,
       [inserted.rows.map((row) => row.id)]
     )
-    const keyFor = (id: string | undefined) =>
-      keys.rows.find((row) => row.to_entity_id === id)?.key
+    const keyFor = (id: string | undefined) => keys.rows.find((row) => row.to_entity_id === id)?.key
     expect(keyFor(landlord?.id)).toBe('rents_from')
-    expect(keyFor(lot?.id)).toBe('rents')
-  })
+    expect(keyFor(lot?.id)).toBe('rents_property')
+    await before.close()
+  }, 60_000)
 })
 
 describe('record status typed by hand', () => {
-  it('brings typed statuses onto Open, On hold, and Done, and leaves anything else', async () => {
+  it('brings typed statuses onto Open, On hold, and Closed, and leaves anything else', async () => {
     const made = await db.query<{ id: string }>(
       `insert into entities (org_id, type, name, data) values
          ($1, 'record', 'a typed closed', '{"status": "Closed"}'),
@@ -237,9 +272,16 @@ describe('the audit log, which is triggers and never application code', () => {
 
   beforeAll(async () => {
     await db.exec(`select set_config('artypest.actor', 'marguerite@example.org', false)`)
+    /*
+      Checked a minute ago rather than now. The edit below checks it again at
+      now(), and PGlite's clock ticks in milliseconds: when the insert and the
+      edit landed in the same one, reviewed_at did not move, was not logged,
+      and the diff test failed about one run in five.
+    */
     const inserted = await db.query<{ id: string }>(
-      `insert into entities (org_id, type, name, data)
-       values ($1, 'property', '1402 E 49th St', '{"pin":"20003 15001"}'::jsonb)
+      `insert into entities (org_id, type, name, data, reviewed_at)
+       values ($1, 'property', '1402 E 49th St', '{"pin":"20003 15001"}'::jsonb,
+               now() - interval '1 minute')
        returning id`,
       [ORG]
     )
@@ -686,5 +728,257 @@ describe('shared records', () => {
   it('lists everyone who has changed anything, for the Activity filter', async () => {
     const actors = await shared.query<{ audit_actors: string }>(`select * from audit_actors()`)
     expect(actors.rows.map((row) => row.audit_actors)).toContain('dana@example.org')
+  })
+})
+
+/*
+  Connection types the board maintains.
+
+  The app refuses these same things before it ever writes, but RLS lets any
+  signed-in board member write to `relation_types`, so the rules that keep the
+  plat and the roster working are the database's to hold.
+*/
+describe('connection types the board maintains', () => {
+  let types: PGlite
+
+  beforeAll(async () => {
+    types = await freshDatabase()
+  }, 60_000)
+
+  const refuses = async (sql: string, params: unknown[]) => {
+    await expect(types.query(sql, params)).rejects.toThrow()
+  }
+
+  async function typeId(key: string): Promise<string> {
+    const rows = await types.query<{ id: string }>(
+      `select id from relation_types where org_id = $1 and key = $2`,
+      [ORG, key]
+    )
+    return rows.rows[0]?.id ?? ''
+  }
+
+  async function connect(type: string): Promise<string> {
+    const made = await types.query<{ id: string }>(
+      `insert into entities (org_id, type, name) values ($1, 'person', 'A'), ($1, 'person', 'B')
+       returning id`,
+      [ORG]
+    )
+    const [a, b] = made.rows
+    const relation = await types.query<{ id: string }>(
+      `insert into relations (org_id, relation_type_id, from_entity_id, to_entity_id)
+       values ($1, $2, $3, $4) returning id`,
+      [ORG, type, a?.id, b?.id]
+    )
+    return relation.rows[0]?.id ?? ''
+  }
+
+  it('marks the thirteen types the application reads by key as built in', async () => {
+    const rows = await types.query<{ built_in: number }>(
+      `select count(*)::int as built_in from relation_types where built_in`
+    )
+    expect(rows.rows[0]?.built_in).toBe(13)
+  })
+
+  it('lets a built in type be reworded, and nothing else', async () => {
+    const owns = await typeId('owns')
+    await types.query(`update relation_types set label = 'holds title to' where id = $1`, [owns])
+    await refuses(`update relation_types set key = 'holds' where id = $1`, [owns])
+    await refuses(`update relation_types set deleted_at = now() where id = $1`, [owns])
+    await refuses(`update relation_types set built_in = false where id = $1`, [owns])
+    await refuses(`delete from relation_types where id = $1`, [owns])
+    await types.query(`update relation_types set label = 'owns' where id = $1`, [owns])
+  })
+
+  it('removes a type the board added once no current connection uses it', async () => {
+    await types.query(
+      `insert into relation_types (org_id, key, label, reverse_label)
+       values ($1, 'mentors', 'mentors', 'is mentored by')`,
+      [ORG]
+    )
+    const mentors = await typeId('mentors')
+    const relation = await connect(mentors)
+
+    await refuses(`update relation_types set deleted_at = now() where id = $1`, [mentors])
+
+    await types.query(`update relations set deleted_at = now() where id = $1`, [relation])
+    await types.query(`update relation_types set deleted_at = now() where id = $1`, [mentors])
+
+    // The removed connection still names its type, so its history reads in its own words.
+    const kept = await types.query<{ label: string }>(
+      `select t.label from relations r join relation_types t on t.id = r.relation_type_id
+       where r.id = $1`,
+      [relation]
+    )
+    expect(kept.rows[0]?.label).toBe('mentors')
+  })
+
+  it('refuses a new connection under a removed type', async () => {
+    await types.query(
+      `insert into relation_types (org_id, key, label, reverse_label, deleted_at)
+       values ($1, 'retired', 'retired', 'retired', now())`,
+      [ORG]
+    )
+    await expect(connect(await typeId('retired'))).rejects.toThrow()
+  })
+
+  it('still lets an association be removed with everything in it', async () => {
+    const other = '00000000-0000-4000-a000-000000000099'
+    await types.query(`insert into orgs (id, name) values ($1, 'Elsewhere')`, [other])
+    await types.query(
+      `insert into relation_types (org_id, key, label, reverse_label, built_in)
+       values ($1, 'owns', 'owns', 'is owned by', true)`,
+      [other]
+    )
+    await types.query(`delete from orgs where id = $1`, [other])
+    const left = await types.query<{ count: number }>(
+      `select count(*)::int as count from relation_types where org_id = $1`,
+      [other]
+    )
+    expect(left.rows[0]?.count).toBe(0)
+  })
+})
+
+/*
+  Files on a record: bytes in Storage under the association's id, a description
+  of each on the record itself.
+*/
+describe('files on a record', () => {
+  let files: PGlite
+  const OTHER = '00000000-0000-4000-a000-000000000077'
+  const member = '00000000-0000-4000-b000-000000000001'
+
+  beforeAll(async () => {
+    files = await freshDatabase()
+    await files.query(`insert into auth.users (id, email) values ($1, 'dana@example.org')`, [
+      member,
+    ])
+    await files.query(
+      `insert into org_users (org_id, user_id, name, email, role)
+       values ($1, $2, 'Dana', 'dana@example.org', 'board')`,
+      [ORG, member]
+    )
+    await files.query(`insert into orgs (id, name) values ($1, 'Elsewhere')`, [OTHER])
+  }, 60_000)
+
+  /** Runs `sql` as the signed-in board member, under row level security. */
+  async function asMember(sql: string, params: unknown[]) {
+    await files.exec(`select set_config('request.jwt.claim.sub', '${member}', false)`)
+    await files.exec('set role authenticated')
+    try {
+      return await files.query(sql, params)
+    } finally {
+      await files.exec('reset role')
+      await files.exec(`select set_config('request.jwt.claim.sub', '', false)`)
+    }
+  }
+
+  it('keeps them in a private bucket', async () => {
+    const bucket = await files.query<{ public: boolean; file_size_limit: number }>(
+      `select public, file_size_limit::int from storage.buckets where id = 'record-files'`
+    )
+    expect(bucket.rows).toEqual([{ public: false, file_size_limit: 26214400 }])
+  })
+
+  it('lets a member store a file under their own association, and nowhere else', async () => {
+    await asMember(`insert into storage.objects (bucket_id, name) values ('record-files', $1)`, [
+      `${ORG}/record/file/warranty.pdf`,
+    ])
+    await expect(
+      asMember(`insert into storage.objects (bucket_id, name) values ('record-files', $1)`, [
+        `${OTHER}/record/file/theirs.pdf`,
+      ])
+    ).rejects.toThrow()
+  })
+
+  it("shows a member only their own association's files", async () => {
+    await files.query(`insert into storage.objects (bucket_id, name) values ('record-files', $1)`, [
+      `${OTHER}/record/file/private.pdf`,
+    ])
+    const seen = await asMember(`select name from storage.objects order by name`, [])
+    expect(seen.rows).toEqual([{ name: `${ORG}/record/file/warranty.pdf` }])
+  })
+
+  it('logs files by name, and an emptied list as not set', async () => {
+    const file = (name: string) => ({ id: name, name, path: `${ORG}/x/${name}`, size: 10 })
+    const created = await files.query<{ id: string }>(
+      `insert into entities (org_id, type, name, data) values ($1, 'asset', 'Pool pump', $2)
+       returning id`,
+      [ORG, JSON.stringify({ files: [file('warranty.pdf')] })]
+    )
+    const id = created.rows[0]?.id
+    await files.query(`update entities set data = $2 where id = $1`, [
+      id,
+      JSON.stringify({ files: [file('warranty.pdf'), file('specs.json')] }),
+    ])
+    await files.query(`update entities set data = $2 where id = $1`, [
+      id,
+      JSON.stringify({ files: [] }),
+    ])
+
+    const rows = await files.query<{ old_value: string | null; new_value: string | null }>(
+      `select old_value, new_value from audit_entries
+       where record_id = $1 and field_name = 'data.files' order by changed_at`,
+      [id]
+    )
+    expect(rows.rows).toEqual([
+      { old_value: 'warranty.pdf', new_value: 'warranty.pdf, specs.json' },
+      { old_value: 'warranty.pdf, specs.json', new_value: null },
+    ])
+  })
+})
+
+/*
+  Removing an item from one of the association's own lists, which the board
+  asked for so it can settle on its record types.
+*/
+describe('list items the board removes', () => {
+  let lists: PGlite
+
+  beforeAll(async () => {
+    lists = await freshDatabase()
+  }, 60_000)
+
+  async function addType(value: string): Promise<string> {
+    const rows = await lists.query<{ id: string }>(
+      `insert into reference_items (org_id, list, value, label) values ($1, 'record_type', $2, $2)
+       returning id`,
+      [ORG, value]
+    )
+    return rows.rows[0]?.id ?? ''
+  }
+
+  it('removes a record type no record holds', async () => {
+    const id = await addType('noise_complaint')
+    await lists.query(`delete from reference_items where id = $1`, [id])
+    const left = await lists.query(`select 1 from reference_items where id = $1`, [id])
+    expect(left.rows).toHaveLength(0)
+  })
+
+  it('refuses one a record still holds, until that record is deleted', async () => {
+    const id = await addType('parking')
+    const record = await lists.query<{ id: string }>(
+      `insert into entities (org_id, type, name, data)
+       values ($1, 'record', 'Boat in driveway', '{"recordType": "parking"}') returning id`,
+      [ORG]
+    )
+    await expect(lists.query(`delete from reference_items where id = $1`, [id])).rejects.toThrow(
+      /still used by records/
+    )
+
+    await lists.query(`update entities set deleted_at = now() where id = $1`, [
+      record.rows[0]?.id,
+    ])
+    await lists.query(`delete from reference_items where id = $1`, [id])
+  })
+
+  it('only counts the field its list is stored in', async () => {
+    // A property zoned "parking" says nothing about the record type "parking".
+    const id = await addType('parking')
+    await lists.query(
+      `insert into entities (org_id, type, name, data)
+       values ($1, 'property', '1 Lot St', '{"zoning": "parking"}')`,
+      [ORG]
+    )
+    await lists.query(`delete from reference_items where id = $1`, [id])
   })
 })

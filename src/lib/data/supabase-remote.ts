@@ -20,7 +20,7 @@ import {
   type SharedDatabase,
   type WriteContext,
 } from './remote'
-import type { AuditEntry, Entity, Org, ReferenceItem, Relation } from './types'
+import type { AuditEntry, Entity, Org, ReferenceItem, Relation, RelationType } from './types'
 
 /*
   The shared records, in Supabase.
@@ -41,6 +41,12 @@ function headersFor(context: WriteContext): Record<string, string> {
   if (context.source !== 'hand') headers['x-artypest-source'] = context.source
   return headers
 }
+
+/** 20261020130000_record_files.sql. Private: files are read through expiring links. */
+const FILE_BUCKET = 'record-files'
+
+/** Long enough to open a large PDF on a slow connection, short enough not to be shared. */
+const FILE_LINK_SECONDS = 60
 
 function fail(what: string, error: PostgrestError): never {
   throw new Error(`${what} could not be saved to the shared records: ${error.message}`)
@@ -265,6 +271,63 @@ export function createSupabaseRemote(
         .single()
       if (error) fail('The list item', error)
       return referenceItemFromRow(data)
+    },
+
+    async deleteReferenceItem(id: string): Promise<void> {
+      const { error } = await client.from('reference_items').delete().eq('id', id)
+      if (error) fail('The list item', error)
+    },
+
+    async insertRelationType(type: RelationType): Promise<RelationType> {
+      const { data, error } = await client
+        .from('relation_types')
+        .insert({
+          id: type.id,
+          org_id: type.orgId,
+          key: type.key,
+          label: type.label,
+          reverse_label: type.reverseLabel,
+        })
+        .select('*')
+        .single()
+      if (error) fail(`"${type.label}"`, error)
+      return relationTypeFromRow(data)
+    },
+
+    async updateRelationType(id, changes): Promise<RelationType> {
+      const update: SharedDatabase['public']['Tables']['relation_types']['Update'] = {}
+      if (changes.label !== undefined) update.label = changes.label
+      if (changes.reverseLabel !== undefined) update.reverse_label = changes.reverseLabel
+      if (changes.deletedAt !== undefined) update.deleted_at = changes.deletedAt
+      const { data, error } = await client
+        .from('relation_types')
+        .update(update)
+        .eq('id', id)
+        .select('*')
+        .single()
+      if (error) fail('The connection type', error)
+      return relationTypeFromRow(data)
+    },
+
+    async uploadFile(path: string, file: File): Promise<void> {
+      const { error } = await client.storage.from(FILE_BUCKET).upload(path, file, {
+        contentType: file.type || 'application/octet-stream',
+        upsert: false,
+      })
+      if (error) throw new Error(`${file.name} could not be uploaded: ${error.message}`)
+    },
+
+    async removeStoredFile(path: string): Promise<void> {
+      const { error } = await client.storage.from(FILE_BUCKET).remove([path])
+      if (error) throw new Error(`The file could not be deleted: ${error.message}`)
+    },
+
+    async storedFileUrl(path: string, downloadAs: string | null): Promise<string> {
+      const { data, error } = await client.storage
+        .from(FILE_BUCKET)
+        .createSignedUrl(path, FILE_LINK_SECONDS, downloadAs ? { download: downloadAs } : undefined)
+      if (error) throw new Error(`The file could not be opened: ${error.message}`)
+      return data.signedUrl
     },
 
     async listAuditEntries(recordId: string): Promise<AuditEntry[]> {

@@ -58,6 +58,11 @@ export type RelationChanges = Partial<
   >
 >
 
+/** Wording and removal. Keys and `builtIn` are never written by the app. */
+export type RelationTypeChanges = Partial<
+  Pick<RelationType, 'label' | 'reverseLabel' | 'deletedAt'>
+>
+
 export interface AuditQuery {
   action?: AuditAction
   actor?: string
@@ -91,6 +96,16 @@ export interface RemoteStore {
     id: string,
     changes: Partial<Pick<ReferenceItem, 'label' | 'sortOrder' | 'active'>>
   ): Promise<ReferenceItem>
+  deleteReferenceItem(id: string): Promise<void>
+  insertRelationType(type: RelationType): Promise<RelationType>
+  /** Reviving a removed type sets `deletedAt` back to null in the same write. */
+  updateRelationType(id: string, changes: RelationTypeChanges): Promise<RelationType>
+
+  /** Files on records. `path` starts with the org id, which the bucket's policies read. */
+  uploadFile(path: string, file: File): Promise<void>
+  removeStoredFile(path: string): Promise<void>
+  /** A link that expires. With `downloadAs`, the browser saves it under that name. */
+  storedFileUrl(path: string, downloadAs: string | null): Promise<string>
 
   listAuditEntries(recordId: string): Promise<AuditEntry[]>
   /** Newest first, with the total that matched. */
@@ -106,8 +121,9 @@ export interface RemoteStore {
   src/types/database.ts is generated from the hosted project and never edited
   by hand. It was last generated before 20260902120000_review.sql reached the
   hosted database, so it does not know about `reviewed_at`, `source`, or the
-  functions in 20261016130000_shared_records.sql. This states exactly those
-  additions on top of it. Once `pnpm db:push` has run and `pnpm db:types` has
+  functions in 20261016130000_shared_records.sql, nor `built_in` and
+  `deleted_at` on relation_types from 20261020120000_editable_relation_types.sql.
+  This states exactly those additions on top of it. Once `pnpm db:push` has run and `pnpm db:types` has
   regenerated the file, every addition here is already in the base type and
   this can be reduced to `Database`.
 */
@@ -116,10 +132,11 @@ type Tables = Public['Tables']
 
 type ReviewColumns = { reviewed_at: string | null; reviewed_by: string | null }
 type SourceColumn = { source: string }
+type RelationTypeColumns = { built_in: boolean; deleted_at: string | null }
 
 export type SharedDatabase = Omit<Database, 'public'> & {
   public: Omit<Public, 'Tables' | 'Functions'> & {
-    Tables: Omit<Tables, 'entities' | 'audit_entries'> & {
+    Tables: Omit<Tables, 'entities' | 'audit_entries' | 'relation_types'> & {
       entities: {
         Row: Tables['entities']['Row'] & ReviewColumns
         Insert: Tables['entities']['Insert'] & Partial<ReviewColumns>
@@ -131,6 +148,12 @@ export type SharedDatabase = Omit<Database, 'public'> & {
         Insert: Tables['audit_entries']['Insert'] & Partial<SourceColumn>
         Update: Tables['audit_entries']['Update'] & Partial<SourceColumn>
         Relationships: Tables['audit_entries']['Relationships']
+      }
+      relation_types: {
+        Row: Tables['relation_types']['Row'] & RelationTypeColumns
+        Insert: Tables['relation_types']['Insert'] & Partial<RelationTypeColumns>
+        Update: Tables['relation_types']['Update'] & Partial<RelationTypeColumns>
+        Relationships: Tables['relation_types']['Relationships']
       }
     }
     Functions: Public['Functions'] & {
@@ -149,7 +172,7 @@ export type AuditRow = SharedDatabase['public']['Tables']['audit_entries']['Row'
 export type OrgRow = Tables['orgs']['Row']
 export type OrgUserRow = Tables['org_users']['Row']
 export type ReferenceItemRow = Tables['reference_items']['Row']
-export type RelationTypeRow = Tables['relation_types']['Row']
+export type RelationTypeRow = SharedDatabase['public']['Tables']['relation_types']['Row']
 
 /* ------------------------------------------------------------- mapping -- */
 
@@ -316,5 +339,7 @@ export function relationTypeFromRow(row: RelationTypeRow): RelationType {
     key: row.key,
     label: row.label,
     reverseLabel: row.reverse_label,
+    builtIn: row.built_in,
+    deletedAt: row.deleted_at,
   }
 }
